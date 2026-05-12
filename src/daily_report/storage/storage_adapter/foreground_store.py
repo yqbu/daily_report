@@ -32,11 +32,12 @@ class RepositoryForegroundSessionStore:
 
     def __init__(self, connection_factory: SqliteConnectionFactory):
         self.connection_factory = connection_factory
-        self._conn: sqlite3.Connection | None = None
-        self._repository: AppSessionRepository | None = None
+        self._conn: Optional[sqlite3.Connection] = None
+        self._repository: Optional[AppSessionRepository] = None
 
     def _get_repository(self) -> AppSessionRepository:
         if self._repository is None:
+            # print('Opening SQLite connection for foreground store: %s', self.connection_factory.db_path)
             self._conn = self.connection_factory.open()
             self._repository = AppSessionRepository(self._conn)
 

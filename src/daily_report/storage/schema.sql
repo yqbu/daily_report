@@ -31,3 +31,42 @@ ON app_sessions(start_time);
 
 CREATE INDEX IF NOT EXISTS idx_app_sessions_process_name
 ON app_sessions(process_name);
+
+CREATE TABLE IF NOT EXISTS clipboard_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    date TEXT NOT NULL,
+
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+
+    content TEXT NOT NULL,
+    content_preview TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    char_count INTEGER NOT NULL DEFAULT 0,
+
+    is_sensitive INTEGER NOT NULL DEFAULT 0,
+    sensitivity_reason TEXT,
+
+    is_selected INTEGER NOT NULL DEFAULT 1,
+    is_deleted INTEGER NOT NULL DEFAULT 0,
+
+    seen_count INTEGER NOT NULL DEFAULT 1,
+
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+
+    UNIQUE(date, content_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_clipboard_entries_date
+ON clipboard_entries(date);
+
+CREATE INDEX IF NOT EXISTS idx_clipboard_entries_last_seen_at
+ON clipboard_entries(last_seen_at);
+
+CREATE INDEX IF NOT EXISTS idx_clipboard_entries_hash
+ON clipboard_entries(content_hash);
+
+CREATE INDEX IF NOT EXISTS idx_clipboard_entries_selected
+ON clipboard_entries(date, is_selected, is_deleted);

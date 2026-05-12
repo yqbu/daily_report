@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import ctypes
 import logging
-import os
-import sqlite3
 import threading
 import time
 from ctypes import wintypes
@@ -18,7 +16,6 @@ import win32process
 
 from daily_report.storage.database import create_connection, default_db_path, init_database, SqliteConnectionFactory
 from daily_report.storage.storage_adapter.foreground_store import RepositoryForegroundSessionStore
-from daily_report.storage.repositories import AppSessionRepository
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +107,7 @@ _APP_NAME_OVERRIDES = {
     'chrome.exe': 'Google Chrome',
     'firefox.exe': 'Firefox',
     'pycharm64.exe': 'PyCharm',
-    'idea64.exe': 'IntelliJ IDEA',
+    'idea64.exe': 'IDEA',
     'wechat.exe': '微信',
     'weixin.exe': '微信',
     'wxwork.exe': '企业微信',
@@ -120,6 +117,7 @@ _APP_NAME_OVERRIDES = {
     'cmd.exe': 'Command Prompt',
     'powershell.exe': 'PowerShell',
     'windowsterminal.exe': 'Windows Terminal',
+    'uSmartView_VDI_Client.exe': '云桌面'
 }
 
 
@@ -287,6 +285,11 @@ class ForegroundCollector:
         snapshot = read_foreground_snapshot(
             idle_threshold_sec=self.idle_threshold_sec,
         )
+        # logger.info(
+        #     'snapshot: %s | %s',
+        #     snapshot.app_name,
+        #     snapshot.window_title,
+        # )
 
         # 当前没有有效窗口
         if snapshot is None:
@@ -351,6 +354,14 @@ class ForegroundCollector:
             duration_sec=0.0,
             active_duration_sec=0.0,
             is_active=snapshot.is_active,
+        )
+
+        logger.info(
+            'Opening foreground session: app=%s pid=%s hwnd=%s title=%s',
+            session.app_name,
+            session.pid,
+            session.hwnd,
+            session.window_title,
         )
 
         session.id = self.store.open_session(session)
@@ -463,6 +474,13 @@ def debug_main() -> None:
     db_path = default_db_path()
     logger.info('SQLite database path: %s', db_path)
 
+    # 关键：先初始化数据库
+    conn = create_connection(db_path)
+    try:
+        init_database(conn)
+    finally:
+        conn.close()
+
     connection_factory = SqliteConnectionFactory(db_path)
     store = RepositoryForegroundSessionStore(connection_factory)
 
@@ -479,9 +497,6 @@ def debug_main() -> None:
         collector.run_forever()
     except KeyboardInterrupt:
         collector.stop()
-    finally:
-        store.close()
-
 
 if __name__ == '__main__':
     debug_main()

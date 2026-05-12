@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import logging
 
-from daily_report.collector.foreground_collector import ForegroundCollector
 from daily_report.service.collector_manager import CollectorManager
 from daily_report.storage.database import create_connection, default_db_path, init_database, SqliteConnectionFactory
+
+from daily_report.collector.foreground_collector import ForegroundCollector
 from daily_report.storage.storage_adapter.foreground_store import RepositoryForegroundSessionStore
-from daily_report.storage.repositories import AppSessionRepository
+
+from daily_report.collector.clipboard_collector import ClipboardCollector
+from daily_report.storage.storage_adapter.clipboard_store import RepositoryClipboardEntryStore
+
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +24,8 @@ class DailyReportService:
         # self._connections = []
 
     def setup_database(self) -> None:
+        logger.info('SQLite database path: %s', self.db_path)
+
         conn = create_connection(self.db_path)
         try:
             init_database(conn)
@@ -42,10 +48,21 @@ class DailyReportService:
 
         self.manager.add('foreground', foreground_collector)
 
+        clipboard_store = RepositoryClipboardEntryStore(
+            connection_factory=self.connection_factory
+        )
+
+        clipboard_collector = ClipboardCollector(
+            store=clipboard_store,
+            poll_interval_sec=1.0,
+            min_text_chars=2,
+            max_text_chars=10_000,
+            preview_chars=160,
+        )
+
+        self.manager.add('clipboard', clipboard_collector)
+
         # 后续继续加：
-        # clipboard_collector = ClipboardCollector(...)
-        # self.manager.add('clipboard', clipboard_collector)
-        #
         # edge_history_collector = EdgeHistoryCollector(...)
         # self.manager.add('edge_history', edge_history_collector)
         #
