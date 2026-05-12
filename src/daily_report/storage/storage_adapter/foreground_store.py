@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime
 from typing import Optional, Protocol
 
+from daily_report.storage.database import SqliteConnectionFactory
 from daily_report.storage.repositories import AppSessionRepository
 
 
@@ -28,11 +30,22 @@ class RepositoryForegroundSessionStore:
     它不直接写 SQL, 而是把 AppSessionState 转换成 AppSessionRepository 所需的字段
     """
 
-    def __init__(self, repository: AppSessionRepository):
-        self.repository = repository
+    def __init__(self, connection_factory: SqliteConnectionFactory):
+        self.connection_factory = connection_factory
+        self._conn: sqlite3.Connection | None = None
+        self._repository: AppSessionRepository | None = None
+
+    def _get_repository(self) -> AppSessionRepository:
+        if self._repository is None:
+            self._conn = self.connection_factory.open()
+            self._repository = AppSessionRepository(self._conn)
+
+        return self._repository
 
     def open_session(self, session: AppSessionStateLike) -> int:
-        return self.repository.open_session(
+        repository = self._get_repository()
+
+        return repository.open_session(
             date=session.date,
             app_name=session.app_name,
             process_name=session.process_name,
@@ -51,7 +64,9 @@ class RepositoryForegroundSessionStore:
         if session.id is None:
             return
 
-        self.repository.update_session(
+        repository = self._get_repository()
+
+        repository.update_session(
             session_id=session.id,
             end_time=session.end_time,
             duration_sec=session.duration_sec,
@@ -61,3 +76,9 @@ class RepositoryForegroundSessionStore:
 
     def close_session(self, session: AppSessionStateLike) -> None:
         self.update_session(session)
+
+    def close(self) -> None:
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
+            self._repository = None

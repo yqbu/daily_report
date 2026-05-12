@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 
 class LASTINPUTINFO(ctypes.Structure):
     _fields_ = [
-        ("cbSize", wintypes.UINT),
-        ("dwTime", wintypes.DWORD),
+        ('cbSize', wintypes.UINT),
+        ('dwTime', wintypes.DWORD),
     ]
 
 
@@ -104,22 +104,22 @@ class ForegroundSessionStore(Protocol):
 # =========================
 
 _APP_NAME_OVERRIDES = {
-    "code.exe": "Visual Studio Code",
-    "cursor.exe": "Cursor",
-    "msedge.exe": "Microsoft Edge",
-    "chrome.exe": "Google Chrome",
-    "firefox.exe": "Firefox",
-    "pycharm64.exe": "PyCharm",
-    "idea64.exe": "IntelliJ IDEA",
-    "wechat.exe": "微信",
-    "weixin.exe": "微信",
-    "wxwork.exe": "企业微信",
-    "dingtalk.exe": "钉钉",
-    "feishu.exe": "飞书",
-    "explorer.exe": "File Explorer",
-    "cmd.exe": "Command Prompt",
-    "powershell.exe": "PowerShell",
-    "windowsterminal.exe": "Windows Terminal",
+    'code.exe': 'Visual Studio Code',
+    'cursor.exe': 'Cursor',
+    'msedge.exe': 'Microsoft Edge',
+    'chrome.exe': 'Google Chrome',
+    'firefox.exe': 'Firefox',
+    'pycharm64.exe': 'PyCharm',
+    'idea64.exe': 'IntelliJ IDEA',
+    'wechat.exe': '微信',
+    'weixin.exe': '微信',
+    'wxwork.exe': '企业微信',
+    'dingtalk.exe': '钉钉',
+    'feishu.exe': '飞书',
+    'explorer.exe': 'File Explorer',
+    'cmd.exe': 'Command Prompt',
+    'powershell.exe': 'PowerShell',
+    'windowsterminal.exe': 'Windows Terminal',
 }
 
 
@@ -156,7 +156,7 @@ def read_foreground_snapshot(
     try:
         title = win32gui.GetWindowText(hwnd).strip()
     except Exception:
-        title = ""
+        title = ''
 
     try:
         _, pid = win32process.GetWindowThreadProcessId(hwnd)
@@ -202,11 +202,12 @@ class ForegroundCollector:
     """
     前台应用采集器
 
-    设计目标: 
+    设计目标:
     1. 不依赖 GUI
     2. 只负责采集并写入 store
     3. 通过 stop_event 安全停止
     """
+    name: str = 'foreground'
 
     def __init__(
         self,
@@ -229,7 +230,7 @@ class ForegroundCollector:
         self._last_monotonic: Optional[float] = None
         self._last_flush_monotonic: Optional[float] = None
 
-    def start(self, blocking: bool = True) -> Optional[threading.Thread]:
+    def start(self, blocking: bool = False) -> Optional[threading.Thread]:
         """
         blocking=True: 当前线程持续运行
         blocking=False: 启动后台线程并返回
@@ -240,7 +241,7 @@ class ForegroundCollector:
 
         thread = threading.Thread(
             target=self.run_forever,
-            name="ForegroundCollector",
+            name='ForegroundCollector',
             daemon=True,
         )
         thread.start()
@@ -251,7 +252,7 @@ class ForegroundCollector:
         self._close_current_session()
 
     def run_forever(self) -> None:
-        logger.info("ForegroundCollector started.")
+        logger.info('ForegroundCollector started.')
 
         self._last_monotonic = time.monotonic()
         self._last_flush_monotonic = self._last_monotonic
@@ -260,12 +261,12 @@ class ForegroundCollector:
             try:
                 self.poll_once()
             except Exception:
-                logger.exception("ForegroundCollector poll failed.")
+                logger.exception('ForegroundCollector poll failed.')
 
             time.sleep(self.poll_interval_sec)
 
         self._close_current_session()
-        logger.info("ForegroundCollector stopped.")
+        logger.info('ForegroundCollector stopped.')
 
     def poll_once(self) -> None:
         now_wall = datetime.now()
@@ -350,7 +351,7 @@ class ForegroundCollector:
         self._last_flush_monotonic = time.monotonic()
 
         logger.debug(
-            "Open session: %s | %s",
+            'Open session: %s | %s',
             session.app_name,
             session.window_title,
         )
@@ -362,7 +363,7 @@ class ForegroundCollector:
         try:
             self.store.close_session(self._current)
             logger.debug(
-                "Close session: %s | %.1fs active %.1fs | %s",
+                'Close session: %s | %.1fs active %.1fs | %s',
                 self._current.app_name,
                 self._current.duration_sec,
                 self._current.active_duration_sec,
@@ -446,14 +447,14 @@ class ForegroundCollector:
 # =========================
 # Minimal runnable entry
 # =========================
-def main() -> None:
+def debug_main() -> None:
     logging.basicConfig(
         level=logging.INFO,
-        format="[%(asctime)s] %(levelname)s %(name)s: %(message)s",
+        format='[%(asctime)s] %(levelname)s %(name)s: %(message)s',
     )
 
     db_path = default_db_path()
-    logger.info("SQLite database path: %s", db_path)
+    logger.info('SQLite database path: %s', db_path)
 
     conn = create_connection(db_path)
     init_database(conn)
@@ -478,5 +479,5 @@ def main() -> None:
         conn.close()
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    debug_main()
