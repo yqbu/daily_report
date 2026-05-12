@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
-from daily_report.collector.base import Collector
+from daily_report.collector.base_collector import Collector
 
 logger = logging.getLogger(__name__)
 

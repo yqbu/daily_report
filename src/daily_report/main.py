@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import argparse
 import logging
 
@@ -44,7 +45,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     parser = build_parser()
-    args = parser.parse_args()
+
+    # 如果没有任何参数，默认执行 run 命令
+    if len(sys.argv) == 1:
+        args = parser.parse_args(['run'])
+    else:
+        args = parser.parse_args()
 
     if not hasattr(args, 'func'):
         parser.print_help()

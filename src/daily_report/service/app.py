@@ -17,13 +17,12 @@ class DailyReportService:
         self.db_path = default_db_path()
         self.manager = CollectorManager()
         self.connection_factory = SqliteConnectionFactory(self.db_path)
-        self._connections = []
+        # self._connections = []
 
     def setup_database(self) -> None:
         conn = create_connection(self.db_path)
         try:
             init_database(conn)
-            self._connections.append(conn)
         finally:
             conn.close()
 
@@ -60,9 +59,9 @@ class DailyReportService:
         self.manager.start_all()
         self.manager.wait_forever()
 
-    def close(self) -> None:
-        for conn in self._connections:
-            try:
-                conn.close()
-            except Exception:
-                logger.exception('Failed to close database connection.')
+    # def close(self) -> None:
+    #     for conn in self._connections:
+    #         try:
+    #             conn.close()
+    #         except Exception:
+    #             logger.exception('Failed to close database connection.')

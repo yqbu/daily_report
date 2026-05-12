@@ -16,7 +16,7 @@ import psutil
 import win32gui
 import win32process
 
-from daily_report.storage.database import create_connection, default_db_path, init_database
+from daily_report.storage.database import create_connection, default_db_path, init_database, SqliteConnectionFactory
 from daily_report.storage.storage_adapter.foreground_store import RepositoryForegroundSessionStore
 from daily_report.storage.repositories import AppSessionRepository
 
@@ -70,11 +70,11 @@ class ForegroundSnapshot:
 @dataclass
 class AppSessionState:
     id: Optional[int]
-    hwnd: int
     date: str
     app_name: str
     process_name: str
     pid: int
+    hwnd: int
     exe_path: Optional[str]
     window_title: str
     start_time: datetime
@@ -249,7 +249,11 @@ class ForegroundCollector:
 
     def stop(self) -> None:
         self._stop_event.set()
-        self._close_current_session()
+
+    def _close_store(self) -> None:
+        close = getattr(self.store, 'close', None)
+        if callable(close):
+            close()
 
     def run_forever(self) -> None:
         logger.info('ForegroundCollector started.')
@@ -257,16 +261,19 @@ class ForegroundCollector:
         self._last_monotonic = time.monotonic()
         self._last_flush_monotonic = self._last_monotonic
 
-        while not self._stop_event.is_set():
-            try:
-                self.poll_once()
-            except Exception:
-                logger.exception('ForegroundCollector poll failed.')
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    self.poll_once()
+                except Exception:
+                    logger.exception('ForegroundCollector poll failed.')
 
-            time.sleep(self.poll_interval_sec)
+                self._stop_event.wait(self.poll_interval_sec)
 
-        self._close_current_session()
-        logger.info('ForegroundCollector stopped.')
+        finally:
+            self._close_current_session()
+            self._close_store()
+            logger.info('ForegroundCollector stopped.')
 
     def poll_once(self) -> None:
         now_wall = datetime.now()
@@ -456,11 +463,8 @@ def debug_main() -> None:
     db_path = default_db_path()
     logger.info('SQLite database path: %s', db_path)
 
-    conn = create_connection(db_path)
-    init_database(conn)
-
-    repository = AppSessionRepository(conn)
-    store = RepositoryForegroundSessionStore(repository)
+    connection_factory = SqliteConnectionFactory(db_path)
+    store = RepositoryForegroundSessionStore(connection_factory)
 
     collector = ForegroundCollector(
         store=store,
@@ -476,7 +480,7 @@ def debug_main() -> None:
     except KeyboardInterrupt:
         collector.stop()
     finally:
-        conn.close()
+        store.close()
 
 
 if __name__ == '__main__':

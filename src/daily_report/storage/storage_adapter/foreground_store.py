@@ -10,11 +10,11 @@ from daily_report.storage.repositories import AppSessionRepository
 
 class AppSessionStateLike(Protocol):
     id: Optional[int]
-    hwnd: int
     date: str
     app_name: str
     process_name: str
     pid: int
+    hwnd: int
     exe_path: Optional[str]
     window_title: str
     start_time: datetime
