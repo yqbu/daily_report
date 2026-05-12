@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $DailyReportExe = Join-Path $ProjectRoot ".venv\Scripts\daily-report.exe"
@@ -36,7 +36,7 @@ function Show-CollectorNotification {
         return
     }
 
-    powershell -NoProfile -ExecutionPolicy Bypass -File $NotifyScript `
+    powershell -STA -NoProfile -ExecutionPolicy Bypass -File $NotifyScript `
         -Title $Title `
         -Message $Message `
         -TimeoutMs 3000

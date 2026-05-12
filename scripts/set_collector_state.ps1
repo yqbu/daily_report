@@ -1,4 +1,4 @@
-param(
+﻿param(
     [ValidateSet("running", "stopped", "error")]
     [string]$Status,
 
@@ -23,6 +23,10 @@ $state = [ordered]@{
     action_pids = $Pids
 }
 
-$state |
-    ConvertTo-Json -Compress |
-    Set-Content -Encoding UTF8 $StateFile
+$json = $state | ConvertTo-Json -Compress
+
+[System.IO.File]::WriteAllText(
+    $StateFile,
+    $json,
+    [System.Text.UTF8Encoding]::new($false)
+)

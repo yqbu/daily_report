@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Continue"
+﻿$ErrorActionPreference = "Continue"
 
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $LogDir = Join-Path $ProjectRoot "logs"
@@ -33,7 +33,7 @@ function Show-CollectorNotification {
         return
     }
 
-    powershell -NoProfile -ExecutionPolicy Bypass -File $NotifyScript `
+    powershell -STA -NoProfile -ExecutionPolicy Bypass -File $NotifyScript `
         -Title $Title `
         -Message $Message `
         -TimeoutMs 3000
