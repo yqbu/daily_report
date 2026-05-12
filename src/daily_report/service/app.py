@@ -5,6 +5,8 @@ import logging
 from daily_report.service.collector_manager import CollectorManager
 from daily_report.storage.database import create_connection, default_db_path, init_database, SqliteConnectionFactory
 
+from daily_report.service.single_instance import SingleInstanceError, SingleInstanceLock
+
 from daily_report.collector.foreground_collector import ForegroundCollector
 from daily_report.storage.storage_adapter.foreground_store import RepositoryForegroundSessionStore
 
@@ -22,6 +24,8 @@ class DailyReportService:
         self.manager = CollectorManager()
         self.connection_factory = SqliteConnectionFactory(self.db_path)
         # self._connections = []
+
+        self.lock_path = self.db_path.parent / 'daily_report_collector.lock'
 
     def setup_database(self) -> None:
         logger.info('SQLite database path: %s', self.db_path)
@@ -70,11 +74,20 @@ class DailyReportService:
         # self.manager.add('ai_prompt_receiver', ai_prompt_receiver)
 
     def run(self) -> None:
-        self.setup_database()
-        self.setup_collectors()
+        try:
+            with SingleInstanceLock(
+                self.lock_path,
+                app_name='daily-report collector',
+            ):
+                self.setup_database()
+                self.setup_collectors()
 
-        self.manager.start_all()
-        self.manager.wait_forever()
+                self.manager.start_all()
+                self.manager.wait_forever()
+
+        except SingleInstanceError as exc:
+            logger.warning("%s", exc)
+            return
 
     # def close(self) -> None:
     #     for conn in self._connections:

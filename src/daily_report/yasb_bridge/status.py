@@ -110,7 +110,7 @@ def print_status(
     )
 
     if as_json:
-        print(json.dumps(payload, ensure_ascii=False))
+        print(json.dumps(payload, ensure_ascii=True))
         return
 
     print(payload['tooltip'])
