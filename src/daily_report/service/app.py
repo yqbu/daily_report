@@ -17,11 +17,13 @@ class DailyReportService:
         self.db_path = default_db_path()
         self.manager = CollectorManager()
         self.connection_factory = SqliteConnectionFactory(self.db_path)
+        self._connections = []
 
     def setup_database(self) -> None:
         conn = create_connection(self.db_path)
         try:
             init_database(conn)
+            self._connections.append(conn)
         finally:
             conn.close()
 
@@ -38,8 +40,6 @@ class DailyReportService:
             min_title_change_interval_sec=2.0,
             flush_interval_sec=10.0,
         )
-
-        self.manager.add(foreground_collector)
 
         self.manager.add('foreground', foreground_collector)
 
