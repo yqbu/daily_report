@@ -1,17 +1,16 @@
 from __future__ import annotations
 
+from typing import Optional
+
 import sqlite3
 import threading
 from datetime import datetime
-from typing import Optional
 
 
 class AppSessionRepository:
     """
-    app_sessions 表的数据访问层。
-
-    foreground_collector 不直接写 SQL，
-    而是调用这个类。
+    app_sessions 表的数据访问层
+    foreground_collector 不直接写 SQL, 而是调用这个类
     """
 
     def __init__(self, conn: sqlite3.Connection):
@@ -24,8 +23,9 @@ class AppSessionRepository:
         date: str,
         app_name: str,
         process_name: str,
-        pid: int | None,
-        exe_path: str | None,
+        pid: Optional[int],
+        hwnd: Optional[int] = None,
+        exe_path: Optional[str] | None,
         window_title: str,
         start_time: datetime,
         end_time: datetime,
@@ -33,7 +33,7 @@ class AppSessionRepository:
         active_duration_sec: float = 0.0,
         is_active: bool = True,
     ) -> int:
-        now = datetime.now().isoformat(timespec="seconds")
+        now = datetime.now().isoformat(timespec='seconds')
 
         with self._lock:
             cursor = self.conn.execute(
@@ -43,6 +43,7 @@ class AppSessionRepository:
                     app_name,
                     process_name,
                     pid,
+                    hwnd,
                     exe_path,
                     window_title,
                     start_time,
@@ -54,17 +55,18 @@ class AppSessionRepository:
                     created_at,
                     updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     date,
                     app_name,
                     process_name,
                     pid,
+                    hwnd,
                     exe_path,
                     window_title,
-                    start_time.isoformat(timespec="seconds"),
-                    end_time.isoformat(timespec="seconds"),
+                    start_time.isoformat(timespec='seconds'),
+                    end_time.isoformat(timespec='seconds'),
                     float(duration_sec),
                     float(active_duration_sec),
                     int(is_active),
@@ -85,7 +87,7 @@ class AppSessionRepository:
         active_duration_sec: float,
         is_active: bool,
     ) -> None:
-        now = datetime.now().isoformat(timespec="seconds")
+        now = datetime.now().isoformat(timespec='seconds')
 
         with self._lock:
             self.conn.execute(
@@ -100,7 +102,7 @@ class AppSessionRepository:
                 WHERE id = ?
                 """,
                 (
-                    end_time.isoformat(timespec="seconds"),
+                    end_time.isoformat(timespec='seconds'),
                     float(duration_sec),
                     float(active_duration_sec),
                     int(is_active),
@@ -129,7 +131,7 @@ class AppSessionRepository:
 
     def list_today_sessions(self, date: str) -> list[sqlite3.Row]:
         """
-        查询某一天的所有应用使用记录。
+        查询某一天的所有应用使用记录
         """
         with self._lock:
             cursor = self.conn.execute(
@@ -145,7 +147,7 @@ class AppSessionRepository:
 
     def get_today_top_apps(self, date: str, limit: int = 5) -> list[sqlite3.Row]:
         """
-        统计某一天应用使用 Top N。
+        统计某一天应用使用 Top N
         """
         with self._lock:
             cursor = self.conn.execute(

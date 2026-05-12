@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 import os
 import sqlite3
 from pathlib import Path
@@ -7,8 +9,8 @@ from pathlib import Path
 
 def default_db_path() -> Path:
     """
-    默认数据库路径：
-    Windows 下放到 %APPDATA%/daily-report/daily_report.db
+    默认数据库路径:
+    Windows 下默认放到 %APPDATA%/daily-report/daily_report.db
     """
     appdata = os.getenv("APPDATA")
 
@@ -18,9 +20,9 @@ def default_db_path() -> Path:
     return Path.home() / ".daily-report" / "daily_report.db"
 
 
-def create_connection(db_path: str | Path | None = None) -> sqlite3.Connection:
+def create_connection(db_path: Optional[str | Path] = None) -> sqlite3.Connection:
     """
-    创建 SQLite 连接。
+    创建 SQLite 连接
     """
     path = Path(db_path) if db_path is not None else default_db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -39,7 +41,7 @@ def create_connection(db_path: str | Path | None = None) -> sqlite3.Connection:
 
 def init_database(conn: sqlite3.Connection, schema_path: str | Path | None = None) -> None:
     """
-    初始化数据库表结构。
+    初始化数据库表结构
     """
     if schema_path is None:
         schema_path = Path(__file__).with_name("schema.sql")

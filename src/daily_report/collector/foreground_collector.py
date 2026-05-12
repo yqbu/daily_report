@@ -16,6 +16,9 @@ import psutil
 import win32gui
 import win32process
 
+from daily_report.storage.database import create_connection, default_db_path, init_database
+from daily_report.storage.storage_adapter.foreground_store import RepositoryForegroundSessionStore
+from daily_report.storage.repositories import AppSessionRepository
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +36,8 @@ class LASTINPUTINFO(ctypes.Structure):
 
 def get_idle_seconds() -> float:
     """
-    返回用户距离上一次键盘/鼠标输入过去了多少秒。
-    用于判断当前是否处于挂机状态。
+    返回用户距离上一次键盘/鼠标输入过去了多少秒
+    用于判断当前是否处于挂机状态
     """
     lii = LASTINPUTINFO()
     lii.cbSize = ctypes.sizeof(LASTINPUTINFO)
@@ -97,131 +100,6 @@ class ForegroundSessionStore(Protocol):
 
 
 # =========================
-# SQLite store
-# =========================
-
-class SqliteForegroundSessionStore:
-    def __init__(self, db_path: str | Path):
-        self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-
-        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
-        self._lock = threading.RLock()
-
-        self._init_schema()
-
-    def _init_schema(self) -> None:
-        sql = """
-        CREATE TABLE IF NOT EXISTS app_sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT NOT NULL,
-            app_name TEXT NOT NULL,
-            process_name TEXT NOT NULL,
-            pid INTEGER,
-            exe_path TEXT,
-            window_title TEXT,
-            start_time TEXT NOT NULL,
-            end_time TEXT NOT NULL,
-            duration_sec REAL NOT NULL DEFAULT 0,
-            active_duration_sec REAL NOT NULL DEFAULT 0,
-            is_active INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_app_sessions_date
-        ON app_sessions(date);
-
-        CREATE INDEX IF NOT EXISTS idx_app_sessions_start_time
-        ON app_sessions(start_time);
-        """
-        with self._lock:
-            self._conn.executescript(sql)
-            self._conn.commit()
-
-    def open_session(self, session: AppSessionState) -> int:
-        now = datetime.now().isoformat(timespec="seconds")
-
-        with self._lock:
-            cursor = self._conn.execute(
-                """
-                INSERT INTO app_sessions (
-                    date,
-                    app_name,
-                    process_name,
-                    pid,
-                    hwnd,
-                    exe_path,
-                    window_title,
-                    start_time,
-                    end_time,
-                    duration_sec,
-                    active_duration_sec,
-                    is_active,
-                    created_at,
-                    updated_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    session.date,
-                    session.app_name,
-                    session.process_name,
-                    session.pid,
-                    session.hwnd,
-                    session.exe_path,
-                    session.window_title,
-                    session.start_time.isoformat(timespec="seconds"),
-                    session.end_time.isoformat(timespec="seconds"),
-                    session.duration_sec,
-                    session.active_duration_sec,
-                    int(session.is_active),
-                    now,
-                    now,
-                ),
-            )
-            self._conn.commit()
-            return int(cursor.lastrowid)
-
-    def update_session(self, session: AppSessionState) -> None:
-        if session.id is None:
-            return
-
-        now = datetime.now().isoformat(timespec="seconds")
-
-        with self._lock:
-            self._conn.execute(
-                """
-                UPDATE app_sessions
-                SET
-                    end_time = ?,
-                    duration_sec = ?,
-                    active_duration_sec = ?,
-                    is_active = ?,
-                    updated_at = ?
-                WHERE id = ?
-                """,
-                (
-                    session.end_time.isoformat(timespec="seconds"),
-                    float(session.duration_sec),
-                    float(session.active_duration_sec),
-                    int(session.is_active),
-                    now,
-                    session.id,
-                ),
-            )
-            self._conn.commit()
-
-    def close_session(self, session: AppSessionState) -> None:
-        self.update_session(session)
-
-    def close(self) -> None:
-        with self._lock:
-            self._conn.close()
-
-
-# =========================
 # Foreground window utilities
 # =========================
 
@@ -247,8 +125,8 @@ _APP_NAME_OVERRIDES = {
 
 def friendly_app_name(process_name: str, exe_path: Optional[str]) -> str:
     """
-    生成更适合展示的应用名。
-    第一版先用进程名映射即可，后续可以改成读取 exe 的 FileDescription。
+    生成更适合展示的应用名
+    第一版先用进程名映射即可, 后续可以改成读取 exe 的 FileDescription
     """
     key = process_name.lower()
 
@@ -267,8 +145,8 @@ def read_foreground_snapshot(
     idle_threshold_sec: int = 180,
 ) -> Optional[ForegroundSnapshot]:
     """
-    读取当前前台窗口快照。
-    返回 None 表示当前没有有效前台窗口。
+    读取当前前台窗口快照
+    返回 None 表示当前没有有效前台窗口
     """
     hwnd = win32gui.GetForegroundWindow()
 
@@ -322,13 +200,12 @@ def read_foreground_snapshot(
 
 class ForegroundCollector:
     """
-    前台应用采集器。
+    前台应用采集器
 
-    设计目标：
-    1. 不依赖 GUI。
-    2. 不依赖 YASB。
-    3. 只负责采集并写入 store。
-    4. 通过 stop_event 安全停止。
+    设计目标: 
+    1. 不依赖 GUI
+    2. 只负责采集并写入 store
+    3. 通过 stop_event 安全停止
     """
 
     def __init__(
@@ -354,8 +231,8 @@ class ForegroundCollector:
 
     def start(self, blocking: bool = True) -> Optional[threading.Thread]:
         """
-        blocking=True：当前线程持续运行。
-        blocking=False：启动后台线程并返回。
+        blocking=True: 当前线程持续运行
+        blocking=False: 启动后台线程并返回
         """
         if blocking:
             self.run_forever()
@@ -414,7 +291,7 @@ class ForegroundCollector:
             self._last_monotonic = now_mono
             return
 
-        # 跨天时切分 session，方便日报按天统计
+        # 跨天时切分 session, 方便日报按天统计
         if self._current is not None and self._current.date != now_wall.date().isoformat():
             self._accumulate_current(
                 now_wall=now_wall,
@@ -535,22 +412,22 @@ class ForegroundCollector:
         if self._current is None:
             return True
 
-        # 窗口句柄变了，说明前台窗口变了
+        # 窗口句柄变了, 说明前台窗口变了
         if snapshot.hwnd != self._current.hwnd:
             return True
 
-        # 进程变了，一定切 session
+        # 进程变了, 一定切 session
         if snapshot.pid != self._current.pid:
             return True
 
-        # 进程名变了，也切
+        # 进程名变了, 也切
         if snapshot.process_name != self._current.process_name:
             return True
 
         if not self.split_on_title_change:
             return False
 
-        # 标题变化频繁时，如果当前 session 太短，可以不立刻切，避免碎片过多。
+        # 标题变化频繁时, 如果当前 session 太短, 可以不立刻切, 避免碎片过多
         title_changed = snapshot.window_title != self._current.window_title
 
         if not title_changed:
@@ -559,7 +436,7 @@ class ForegroundCollector:
         current_duration = self._current.duration_sec
 
         if current_duration < self.min_title_change_interval_sec:
-            # 短时间内标题变化，直接更新标题，不切 session。
+            # 短时间内标题变化, 直接更新标题, 不切 session
             self._current.window_title = snapshot.window_title
             return False
 
@@ -569,14 +446,6 @@ class ForegroundCollector:
 # =========================
 # Minimal runnable entry
 # =========================
-
-def default_db_path() -> Path:
-    appdata = os.getenv("APPDATA")
-    if appdata:
-        return Path(appdata) / "daily-report" / "daily_report.db"
-    return Path.home() / ".daily-report" / "daily_report.db"
-
-
 def main() -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -586,7 +455,11 @@ def main() -> None:
     db_path = default_db_path()
     logger.info("SQLite database path: %s", db_path)
 
-    store = SqliteForegroundSessionStore(default_db_path())
+    conn = create_connection(db_path)
+    init_database(conn)
+
+    repository = AppSessionRepository(conn)
+    store = RepositoryForegroundSessionStore(repository)
 
     collector = ForegroundCollector(
         store=store,
@@ -602,7 +475,7 @@ def main() -> None:
     except KeyboardInterrupt:
         collector.stop()
     finally:
-        store.close()
+        conn.close()
 
 
 if __name__ == "__main__":
