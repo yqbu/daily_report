@@ -2,10 +2,7 @@
   "manifest_version": 3,
   "name": "Daily Report AI Prompt Collector",
   "version": "0.1.0",
-  "description": "Collect user prompts from ChatGPT and DeepSeek for local daily report generation.",
-  "permissions": [
-    "storage"
-  ],
+  "description": "Capture user prompts sent on ChatGPT and DeepSeek pages and send them to the local daily_report receiver.",
   "host_permissions": [
     "https://chatgpt.com/*",
     "https://chat.openai.com/*",

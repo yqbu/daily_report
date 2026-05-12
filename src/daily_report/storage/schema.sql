@@ -121,3 +121,46 @@ ON browser_history_entries(date, is_selected, is_deleted);
 
 CREATE INDEX IF NOT EXISTS idx_browser_history_entries_visit_time_chrome
 ON browser_history_entries(browser, profile_name, visit_time_chrome);
+
+CREATE TABLE IF NOT EXISTS ai_prompt_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    date TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+
+    platform TEXT NOT NULL,
+    conversation_url TEXT,
+    page_title TEXT,
+
+    prompt_text TEXT NOT NULL,
+    prompt_preview TEXT NOT NULL,
+    prompt_hash TEXT NOT NULL,
+    dedupe_key TEXT NOT NULL UNIQUE,
+    char_count INTEGER NOT NULL,
+
+    is_sensitive INTEGER NOT NULL DEFAULT 0,
+    sensitivity_reason TEXT,
+    is_selected INTEGER NOT NULL DEFAULT 1,
+    is_deleted INTEGER NOT NULL DEFAULT 0,
+
+    client_event_id TEXT,
+    source TEXT NOT NULL DEFAULT 'edge_extension',
+
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_prompt_entries_date
+ON ai_prompt_entries(date);
+
+CREATE INDEX IF NOT EXISTS idx_ai_prompt_entries_timestamp
+ON ai_prompt_entries(timestamp);
+
+CREATE INDEX IF NOT EXISTS idx_ai_prompt_entries_platform
+ON ai_prompt_entries(platform);
+
+CREATE INDEX IF NOT EXISTS idx_ai_prompt_entries_selected
+ON ai_prompt_entries(date, is_selected, is_deleted);
+
+CREATE INDEX IF NOT EXISTS idx_ai_prompt_entries_sensitive
+ON ai_prompt_entries(date, is_sensitive, is_deleted);

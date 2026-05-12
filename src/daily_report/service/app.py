@@ -19,6 +19,9 @@ from daily_report.storage.storage_adapter.clipboard_store import RepositoryClipb
 from daily_report.collector.edge_history_collector import EdgeHistoryCollector
 from daily_report.storage.storage_adapter.edge_history_store import RepositoryEdgeHistoryEntryStore
 
+from daily_report.collector.ai_prompt_receiver import AiPromptReceiver
+from daily_report.storage.storage_adapter.ai_prompt_store import RepositoryAiPromptEntryStore
+
 
 logger = logging.getLogger(__name__)
 
@@ -73,12 +76,14 @@ class DailyReportService:
         )
         self.manager.add('edge_history', edge_collector)
 
-        # 后续继续加：
-        # edge_history_collector = EdgeHistoryCollector(...)
-        # self.manager.add('edge_history', edge_history_collector)
-        #
-        # ai_prompt_receiver = AiPromptReceiver(...)
-        # self.manager.add('ai_prompt_receiver', ai_prompt_receiver)
+        ai_prompt_store = RepositoryAiPromptEntryStore(connection_factory=self.connection_factory)
+        ai_prompt_receiver = AiPromptReceiver(
+            store=ai_prompt_store,
+            host="127.0.0.1",
+            port=8765,
+            endpoint="/api/ai-prompts",
+        )
+        self.manager.add("ai_prompt", ai_prompt_receiver)
 
     def cleanup_runtime_data(self) -> None:
         conn = create_connection(self.db_path)
