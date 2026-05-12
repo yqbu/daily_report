@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import threading
+import time
 import logging
 
 from daily_report.service.collector_manager import CollectorManager
 from daily_report.storage.database import create_connection, default_db_path, init_database, SqliteConnectionFactory
 
 from daily_report.service.single_instance import SingleInstanceError, SingleInstanceLock
+from daily_report.service.cleanup import cleanup_database, cleanup_logs
 
 from daily_report.collector.foreground_collector import ForegroundCollector
 from daily_report.storage.storage_adapter.foreground_store import RepositoryForegroundSessionStore
@@ -73,6 +76,41 @@ class DailyReportService:
         # ai_prompt_receiver = AiPromptReceiver(...)
         # self.manager.add('ai_prompt_receiver', ai_prompt_receiver)
 
+    def cleanup_runtime_data(self) -> None:
+        conn = create_connection(self.db_path)
+        try:
+            cleanup_database(
+                conn,
+                retention_days=7,
+                report_retention_days=90,
+                vacuum=False,
+            )
+        finally:
+            conn.close()
+
+        cleanup_logs(
+            self.db_path.parent.parent / 'logs',
+            retention_days=7,
+        )
+
+    def start_cleanup_worker(self) -> None:
+        thread = threading.Thread(
+            target=self._cleanup_loop,
+            name='CleanupWorker',
+            daemon=True,
+        )
+        thread.start()
+
+    def _cleanup_loop(self) -> None:
+        while True:
+            try:
+                self.cleanup_runtime_data()
+            except Exception:
+                logger.exception('Runtime cleanup failed')
+
+            # 每 12 小时清理一次
+            time.sleep(24 * 60 * 60)
+
     def run(self) -> None:
         try:
             with SingleInstanceLock(
@@ -80,13 +118,14 @@ class DailyReportService:
                 app_name='daily-report collector',
             ):
                 self.setup_database()
+                self.cleanup_runtime_data()
+                self.start_cleanup_worker()
                 self.setup_collectors()
-
                 self.manager.start_all()
                 self.manager.wait_forever()
 
         except SingleInstanceError as exc:
-            logger.warning("%s", exc)
+            logger.warning('%s', exc)
             return
 
     # def close(self) -> None:

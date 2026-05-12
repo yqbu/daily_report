@@ -16,7 +16,8 @@ dist/
 # Local database and runtime data
 data/*
 !data/.gitkeep
-logs/
+logs/*
+!logs/.gitkeep
 outputs/
 
 # IDE
