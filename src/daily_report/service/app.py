@@ -16,6 +16,9 @@ from daily_report.storage.storage_adapter.foreground_store import RepositoryFore
 from daily_report.collector.clipboard_collector import ClipboardCollector
 from daily_report.storage.storage_adapter.clipboard_store import RepositoryClipboardEntryStore
 
+from daily_report.collector.edge_history_collector import EdgeHistoryCollector
+from daily_report.storage.storage_adapter.edge_history_store import RepositoryEdgeHistoryEntryStore
+
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +43,7 @@ class DailyReportService:
             conn.close()
 
     def setup_collectors(self) -> None:
-        foreground_store = RepositoryForegroundSessionStore(
-            connection_factory=self.connection_factory
-        )
-
+        foreground_store = RepositoryForegroundSessionStore(connection_factory=self.connection_factory)
         foreground_collector = ForegroundCollector(
             store=foreground_store,
             poll_interval_sec=2.0,
@@ -52,13 +52,9 @@ class DailyReportService:
             min_title_change_interval_sec=2.0,
             flush_interval_sec=10.0,
         )
-
         self.manager.add('foreground', foreground_collector)
 
-        clipboard_store = RepositoryClipboardEntryStore(
-            connection_factory=self.connection_factory
-        )
-
+        clipboard_store = RepositoryClipboardEntryStore(connection_factory=self.connection_factory)
         clipboard_collector = ClipboardCollector(
             store=clipboard_store,
             poll_interval_sec=1.0,
@@ -66,8 +62,16 @@ class DailyReportService:
             max_text_chars=10_000,
             preview_chars=160,
         )
-
         self.manager.add('clipboard', clipboard_collector)
+
+        edge_store = RepositoryEdgeHistoryEntryStore(connection_factory=self.connection_factory)
+        edge_collector = EdgeHistoryCollector(
+            store=edge_store,
+            poll_interval_sec=60.0,
+            initial_lookback_hours=24,
+            max_rows_per_profile=500,
+        )
+        self.manager.add('edge_history', edge_collector)
 
         # 后续继续加：
         # edge_history_collector = EdgeHistoryCollector(...)
