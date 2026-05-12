@@ -8,6 +8,7 @@ from typing import Any
 
 from daily_report.storage.database import default_db_path, create_connection
 from daily_report.storage.repositories import AppSessionRepository
+from daily_report.yasb_bridge.collector_state import build_collector_status_payload
 
 
 def fmt_seconds(sec: int | float | None) -> str:
@@ -82,6 +83,24 @@ def build_status_payload(
         'Top 应用: ',
     ]
 
+    collector_payload = build_collector_status_payload()
+
+    tooltip_lines.extend(
+        [
+            "",
+            f"采集状态：{collector_payload['collector_status_label']}",
+        ]
+    )
+
+    last_action_message = collector_payload.get("last_action_message") or ""
+    last_action_time = collector_payload.get("last_action_time") or ""
+
+    if last_action_message:
+        if last_action_time:
+            tooltip_lines.append(f"最近操作: {last_action_time} {last_action_message}")
+        else:
+            tooltip_lines.append(f"最近操作: {last_action_message}")
+
     for idx, row in enumerate(top_apps, start=1):
         tooltip_lines.append(
             f'{idx}. {row['app_name']} '
@@ -89,13 +108,17 @@ def build_status_payload(
             f'({row['session_count']} 段)'
         )
 
-    return {
-        'active_time': fmt_seconds(total_active_duration_sec),
-        'total_time': fmt_seconds(total_duration_sec),
-        'top_apps_inline': top_apps_inline,
-        'session_count': int(session_count or 0),
-        'tooltip': '\n'.join(tooltip_lines),
+    payload = {
+        "active_time": fmt_seconds(total_active_duration_sec),
+        "total_time": fmt_seconds(total_duration_sec),
+        "top_apps_inline": top_apps_inline,
+        "session_count": int(session_count or 0),
+        "tooltip": "\n".join(tooltip_lines),
     }
+
+    payload.update(collector_payload)
+
+    return payload
 
 
 def print_status(
