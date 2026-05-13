@@ -115,12 +115,12 @@ if ($running.Count -gt 0) {
 
     Set-CollectorState `
         -Status "running" `
-        -Message "采集服务已经在运行，PID=$pidsText" `
+        -Message "服务已经在运行，PID=$pidsText" `
         -Pids $pidsText
 
     Show-CollectorNotification `
         -Title "Daily Report" `
-        -Message "采集服务已经在运行，PID=$pidsText"
+        -Message "服务已经在运行，PID=$pidsText"
 
     exit 0
 }
@@ -140,12 +140,12 @@ try {
 
     Set-CollectorState `
         -Status "running" `
-        -Message "前台应用采集已启动，PID=$($proc.Id)" `
+        -Message "服务已启动, PID=$($proc.Id)" `
         -Pids "$($proc.Id)"
 
     Show-CollectorNotification `
         -Title "Daily Report" `
-        -Message "前台应用采集已启动，PID=$($proc.Id)"
+        -Message "服务已启动, PID=$($proc.Id)"
 
     exit 0
 }
@@ -155,11 +155,11 @@ catch {
 
     Set-CollectorState `
         -Status "error" `
-        -Message "采集服务启动失败：$($_.Exception.Message)"
+        -Message "服务启动失败: $($_.Exception.Message)"
 
     Show-CollectorNotification `
         -Title "Daily Report" `
-        -Message "采集服务启动失败：$($_.Exception.Message)"
+        -Message "服务启动失败: $($_.Exception.Message)"
 
     exit 1
 }

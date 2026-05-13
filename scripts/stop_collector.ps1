@@ -96,11 +96,11 @@ if ($matched.Count -eq 0) {
 
     Set-CollectorState `
         -Status "stopped" `
-        -Message "采集服务当前未运行"
+        -Message "服务当前未运行"
 
     Show-CollectorNotification `
         -Title "Daily Report" `
-        -Message "采集服务当前未运行"
+        -Message "服务当前未运行"
 
     exit 0
 }
@@ -177,12 +177,12 @@ if ($failedPids.Count -gt 0) {
 
     Set-CollectorState `
         -Status "error" `
-        -Message "采集服务停止失败，PID=$failedText" `
+        -Message "服务停止失败, PID=$failedText" `
         -Pids $failedText
 
     Show-CollectorNotification `
         -Title "Daily Report" `
-        -Message "采集服务停止失败，PID=$failedText"
+        -Message "服务停止失败, PID=$failedText"
 
     exit 1
 }
@@ -192,12 +192,12 @@ if ($stoppedPids.Count -gt 0) {
 
     Set-CollectorState `
         -Status "stopped" `
-        -Message "采集服务已停止，PID=$stoppedText" `
+        -Message "服务已停止, PID=$stoppedText" `
         -Pids $stoppedText
 
     Show-CollectorNotification `
         -Title "Daily Report" `
-        -Message "采集服务已停止，PID=$stoppedText"
+        -Message "服务已停止, PID=$stoppedText"
 
     exit 0
 }
@@ -205,16 +205,16 @@ if ($stoppedPids.Count -gt 0) {
 if ($alreadyExitedPids.Count -gt 0) {
     Set-CollectorState `
         -Status "stopped" `
-        -Message "采集服务已经退出"
+        -Message "服务已经退出"
     Show-CollectorNotification `
         -Title "Daily Report" `
-        -Message "采集服务已经退出"
+        -Message "服务已经退出"
 
     exit 0
 }
 
 Show-CollectorNotification `
     -Title "Daily Report" `
-    -Message "未发现需要停止的采集服务"
+    -Message "未发现需要停止的服务"
 
 exit 0

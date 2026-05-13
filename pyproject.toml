@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "daily-report"
 version = "0.1.0"
-requires-python = ">=3.10"
+requires-python = ">=3.11,<3.13"
 
 # 运行这个项目需要的依赖
 dependencies = [
@@ -15,6 +15,7 @@ dependencies = [
     "openai>=1.0.0",
     "schedule>=1.2.0",
     "pydantic>=2.0.0",
+    "PySide6>=6.9,<6.12",
 ]
 
 [tool.setuptools.packages.find]

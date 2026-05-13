@@ -99,15 +99,18 @@ def build_collector_status_payload() -> dict[str, Any]:
     if is_running:
         collector_status = "running"
         collector_status_label = "采集中"
+        collector_status_icon = '<span style="color:#18b681;font-size: 13px;margin: 0 8px 2px -2px;">\uf144</span>'
     else:
         collector_status = "stopped"
         collector_status_label = "未运行"
+        collector_status_icon = '<span style="color:#e55454;font-size: 13px;margin: 0 8px 2px -2px;">\uf28d</span>'
 
     pids = ",".join(str(item["pid"]) for item in processes)
 
     return {
         "collector_status": collector_status,
         "collector_status_label": collector_status_label,
+        "collector_status_icon": collector_status_icon,
         "collector_pids": pids,
         "collector_process_count": len(processes),
         "last_action_message": action_state.get("last_action_message", ""),

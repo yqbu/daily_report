@@ -62,7 +62,7 @@ def build_status_payload(
         ).fetchone()
 
     except sqlite3.Error as exc:
-        return empty_status(f'SQLite 错误：{exc}')
+        return empty_status(f'SQLite 错误: {exc}')
 
     total_duration_sec = total_row['total_duration_sec'] if total_row else 0
     total_active_duration_sec = total_row['total_active_duration_sec'] if total_row else 0
@@ -85,10 +85,17 @@ def build_status_payload(
 
     collector_payload = build_collector_status_payload()
 
+    for idx, row in enumerate(top_apps, start=1):
+        tooltip_lines.append(
+            f'{idx}. {row['app_name']} '
+            f'{fmt_seconds(row['total_active_duration_sec'])} '
+            f'({row['session_count']} 次)'
+        )
+
     tooltip_lines.extend(
         [
             "",
-            f"采集状态：{collector_payload['collector_status_label']}",
+            f"采集状态: {collector_payload['collector_status_label']}",
         ]
     )
 
@@ -101,18 +108,12 @@ def build_status_payload(
         else:
             tooltip_lines.append(f"最近操作: {last_action_message}")
 
-    for idx, row in enumerate(top_apps, start=1):
-        tooltip_lines.append(
-            f'{idx}. {row['app_name']} '
-            f'{fmt_seconds(row['total_active_duration_sec'])} '
-            f'({row['session_count']} 段)'
-        )
-
     payload = {
         "active_time": fmt_seconds(total_active_duration_sec),
         "total_time": fmt_seconds(total_duration_sec),
         "top_apps_inline": top_apps_inline,
         "session_count": int(session_count or 0),
+        "collector_status_icon": collector_payload['collector_status_icon'],
         "tooltip": "\n".join(tooltip_lines),
     }
 
