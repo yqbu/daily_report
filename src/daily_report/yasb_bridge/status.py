@@ -21,6 +21,52 @@ def fmt_seconds(sec: int | float | None) -> str:
     return f'{m}m'
 
 
+def fmt_top_apps(apps: list[dict[str, Any]], with_header: bool = True) -> str:
+    """
+    apps:
+        [
+            {"name": "Microsoft Edge", "duration": "31m", "count": 157},
+            {"name": "PyCharm", "duration": "16m", "count": 39},
+        ]
+    """
+    if not apps:
+        return "No app usage data."
+
+    rank_width = max(len("No."), len(f"{len(apps)}."))
+    name_width = max(len("Top App"), max(len(item["app_name"]) for item in apps))
+    duration_width = max(len("Time"), max(len(fmt_seconds(item['total_active_duration_sec'])) for item in apps))
+    count_texts = [f"{item['session_count']} 次" for item in apps]
+    count_width = max(len("Count"), max(len(text) for text in count_texts))
+
+    lines = []
+
+    if with_header:
+        header = (
+            f"{'No.':<{rank_width}} "
+            f"{'Top App':<{name_width}}  "
+            f"{'Time':>{duration_width}}  "
+            f"{'Count':>{count_width}}"
+        )
+        lines.append(header)
+        lines.append("-" * (len(header) + 2))
+
+    for idx, item in enumerate(apps, start=1):
+        idx_text = f"{idx}."
+        name = item["app_name"]
+        duration = fmt_seconds(item['total_active_duration_sec'])
+        count_text = f"{item['session_count']} 次"
+
+        line = (
+            f"{idx_text:<{rank_width}} "
+            f"{name:<{name_width}}  "
+            f"{duration:>{duration_width}}  "
+            f"({count_text:>{count_width}})"
+        )
+        lines.append(line)
+    # print("\n".join(lines))
+    return "\n".join(lines)
+
+
 def empty_status(message: str) -> dict[str, Any]:
     return {
         'active_time': '0m',
@@ -32,9 +78,9 @@ def empty_status(message: str) -> dict[str, Any]:
 
 
 def build_status_payload(
-    *,
-    target_date: str | None = None,
-    limit: int = 5,
+        *,
+        target_date: str | None = None,
+        limit: int = 5,
 ) -> dict[str, Any]:
     db_path = Path(default_db_path())
 
@@ -51,10 +97,9 @@ def build_status_payload(
 
         total_row = conn.execute(
             """
-            SELECT
-                COALESCE(SUM(duration_sec), 0) AS total_duration_sec,
-                COALESCE(SUM(active_duration_sec), 0) AS total_active_duration_sec,
-                COUNT(*) AS session_count
+            SELECT COALESCE(SUM(duration_sec), 0)        AS total_duration_sec,
+                   COALESCE(SUM(active_duration_sec), 0) AS total_active_duration_sec,
+                   COUNT(*)                              AS session_count
             FROM app_sessions
             WHERE date = ?
             """,
@@ -80,17 +125,18 @@ def build_status_payload(
         f'日期: {day}',
         f'今日总时长: {fmt_seconds(total_duration_sec)}',
         f'今日活跃: {fmt_seconds(total_active_duration_sec)}',
-        'Top 应用: ',
+        # 'Top 应用: ',
     ]
 
     collector_payload = build_collector_status_payload()
 
-    for idx, row in enumerate(top_apps, start=1):
-        tooltip_lines.append(
-            f'{idx}. {row['app_name']} '
-            f'{fmt_seconds(row['total_active_duration_sec'])} '
-            f'({row['session_count']} 次)'
-        )
+    tooltip_lines.append(fmt_top_apps(top_apps))
+    # for idx, row in enumerate(top_apps, start=1):
+    #     tooltip_lines.append(
+    #         f'{idx}. {row['app_name']} '
+    #         f'{fmt_seconds(row['total_active_duration_sec'])} '
+    #         f'({row['session_count']} 次)'
+    #     )
 
     tooltip_lines.extend(
         [
@@ -113,8 +159,7 @@ def build_status_payload(
         "total_time": fmt_seconds(total_duration_sec),
         "top_apps_inline": top_apps_inline,
         "session_count": int(session_count or 0),
-        "collector_status_icon": collector_payload['collector_status_icon'],
-        "tooltip": "\n".join(tooltip_lines),
+        "tooltip": "\n".join(tooltip_lines)
     }
 
     payload.update(collector_payload)
@@ -123,10 +168,10 @@ def build_status_payload(
 
 
 def print_status(
-    *,
-    target_date: str | None = None,
-    limit: int = 5,
-    as_json: bool = True,
+        *,
+        target_date: str | None = None,
+        limit: int = 5,
+        as_json: bool = True,
 ) -> None:
     payload = build_status_payload(
         target_date=target_date,
