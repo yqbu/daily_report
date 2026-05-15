@@ -8,7 +8,7 @@ from typing import Any
 
 from daily_report.storage.database import default_db_path, create_connection
 from daily_report.storage.repositories import AppSessionRepository
-from daily_report.yasb_bridge.collector_state import build_collector_status_payload
+from daily_report.yasb_bridge.collector_status import build_collector_status_payload
 
 
 def fmt_seconds(sec: int | float | None) -> str:
