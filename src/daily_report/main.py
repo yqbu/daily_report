@@ -5,7 +5,7 @@ import argparse
 import logging
 
 from daily_report.service.app import DailyReportService
-from daily_report.yasb_bridge.status import print_status
+from daily_report.yasb_bridge.usage_status import print_status
 
 
 def setup_logging(level: str = 'INFO') -> None:
