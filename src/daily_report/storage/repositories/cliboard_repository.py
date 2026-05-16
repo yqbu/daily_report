@@ -91,10 +91,10 @@ class ClipboardEntryRepository:
 
             if row is None:
                 raise RuntimeError(
-                    f"Failed to fetch clipboard entry id: {date}, {content_hash}"
+                    f'Failed to fetch clipboard entry id: {date}, {content_hash}'
                 )
 
-            return int(row["id"])
+            return int(row['id'])
 
     def list_today_entries(self, date: str) -> list[sqlite3.Row]:
         with self._lock:

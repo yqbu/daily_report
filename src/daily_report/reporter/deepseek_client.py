@@ -8,7 +8,7 @@ from openai import OpenAI
 
 @dataclass(frozen=True)
 class ChatMessage:
-    role: Literal["system", "user", "assistant"]
+    role: Literal['system', 'user', 'assistant']
     content: str
 
 
@@ -19,14 +19,14 @@ class DeepSeekClient:
         self,
         *,
         api_key: str,
-        model_name: str = "deepseek-chat",
-        base_url: str = "https://api.deepseek.com",
+        model_name: str = 'deepseek-chat',
+        base_url: str = 'https://api.deepseek.com',
         temperature: float = 0.2,
     ) -> None:
         if not api_key:
             raise ValueError(
-                "DeepSeek API key is empty. Set DEEPSEEK_API_KEY, "
-                "or pass --api-key, or save it in local_settings.json."
+                'DeepSeek API key is empty. Set DEEPSEEK_API_KEY, '
+                'or pass --api-key, or save it in local_settings.json.'
             )
         self.model_name = model_name
         self.temperature = temperature
@@ -35,8 +35,8 @@ class DeepSeekClient:
     def chat(self, messages: Iterable[ChatMessage]) -> str:
         response = self.client.chat.completions.create(
             model=self.model_name,
-            messages=[{"role": m.role, "content": m.content} for m in messages],
+            messages=[{'role': m.role, 'content': m.content} for m in messages],
             temperature=self.temperature,
         )
         content = response.choices[0].message.content
-        return content or ""
+        return content or ''

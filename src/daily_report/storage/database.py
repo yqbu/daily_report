@@ -43,14 +43,14 @@ def create_connection(db_path: Optional[str | Path] = None) -> sqlite3.Connectio
     conn = sqlite3.connect(path, check_same_thread=True)
     conn.row_factory = sqlite3.Row
 
-    # 推荐开启 WAL，读写并发会更友好。
-    conn.execute("PRAGMA journal_mode=WAL;")
+    # 推荐开启 WAL, 读写并发会更友好
+    conn.execute('PRAGMA journal_mode=WAL;')
 
-    # 外键支持，后面如果加关联表会有用。
-    conn.execute("PRAGMA foreign_keys=ON;")
+    # 外键支持, 后面如果加关联表会有用
+    conn.execute('PRAGMA foreign_keys=ON;')
 
-    conn.execute("PRAGMA synchronous = NORMAL;")
-    conn.execute("PRAGMA busy_timeout = 5000;")
+    conn.execute('PRAGMA synchronous = NORMAL;')
+    conn.execute('PRAGMA busy_timeout = 5000;')
 
     return conn
 
@@ -60,9 +60,9 @@ def init_database(conn: sqlite3.Connection, schema_path: str | Path | None = Non
     初始化数据库表结构
     """
     if schema_path is None:
-        schema_path = Path(__file__).with_name("schema.sql")
+        schema_path = Path(__file__).with_name('schema.sql')
 
-    schema_sql = Path(schema_path).read_text(encoding="utf-8")
+    schema_sql = Path(schema_path).read_text(encoding='utf-8')
 
     conn.executescript(schema_sql)
     conn.commit()

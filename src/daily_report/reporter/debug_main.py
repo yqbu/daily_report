@@ -13,11 +13,11 @@ def debug_generate_report() -> None:
     """
     service = ReportService()
     result = service.generate_report()
-    print("=" * 20, "PROMPT", "=" * 20)
+    print('=' * 20, 'PROMPT', '=' * 20)
     print(result.prompt_text)
-    print("=" * 20, "REPORT", "=" * 20)
+    print('=' * 20, 'REPORT', '=' * 20)
     print(result.report_markdown)
-    print(f"Saved report id: {result.report_id}")
+    print(f'Saved report id: {result.report_id}')
 
 
 def debug_build_prompt() -> None:
@@ -25,5 +25,5 @@ def debug_build_prompt() -> None:
     print(service.build_prompt())
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     debug_generate_report()

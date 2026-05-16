@@ -33,27 +33,27 @@ def get_runtime_paths() -> RuntimePaths:
     project_root = get_project_root()
 
     data_dir = Path(
-        os.getenv("DAILY_REPORT_DATA_DIR", project_root / "data")
+        os.getenv('DAILY_REPORT_DATA_DIR', project_root / 'data')
     ).resolve()
 
     data_dir.mkdir(parents=True, exist_ok=True)
 
     log_dir = Path(
-        os.getenv("DAILY_REPORT_LOG_DIR", project_root / "logs")
+        os.getenv('DAILY_REPORT_LOG_DIR', project_root / 'logs')
     ).resolve()
     log_dir.mkdir(parents=True, exist_ok=True)
 
     output_dir = Path(
-        os.getenv("DAILY_REPORT_OUTPUT_DIR", project_root / "output")
+        os.getenv('DAILY_REPORT_OUTPUT_DIR', project_root / 'output')
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 
     return RuntimePaths(
         project_root=project_root,
         data_dir=data_dir,
-        db_path=data_dir / "daily_report.db",
-        local_settings_path=data_dir / "local_settings.json",
-        status_json_path=data_dir / "status.json",
+        db_path=data_dir / 'daily_report.db',
+        local_settings_path=data_dir / 'local_settings.json',
+        status_json_path=data_dir / 'status.json',
         log_dir=log_dir,
         output_dir=output_dir
     )

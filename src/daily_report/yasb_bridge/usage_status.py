@@ -30,13 +30,13 @@ def fmt_top_apps(apps: list[dict[str, Any]], with_header: bool = True) -> str:
         ]
     """
     if not apps:
-        return "No app usage data."
+        return 'No app usage data.'
 
-    rank_width = max(len("No."), len(f"{len(apps)}."))
-    name_width = max(len("Top App"), max(len(item["app_name"]) for item in apps))
-    duration_width = max(len("Time"), max(len(fmt_seconds(item['total_active_duration_sec'])) for item in apps))
+    rank_width = max(len('No.'), len(f'{len(apps)}.'))
+    name_width = max(len('Top App'), max(len(item['app_name']) for item in apps))
+    duration_width = max(len('Time'), max(len(fmt_seconds(item['total_active_duration_sec'])) for item in apps))
     count_texts = [f"{item['session_count']} 次" for item in apps]
-    count_width = max(len("Count"), max(len(text) for text in count_texts))
+    count_width = max(len('Count'), max(len(text) for text in count_texts))
 
     lines = []
 
@@ -48,23 +48,23 @@ def fmt_top_apps(apps: list[dict[str, Any]], with_header: bool = True) -> str:
             f"{'Count':>{count_width}}"
         )
         lines.append(header)
-        lines.append("-" * (len(header) + 2))
+        lines.append('-' * (len(header) + 2))
 
     for idx, item in enumerate(apps, start=1):
-        idx_text = f"{idx}."
-        name = item["app_name"]
+        idx_text = f'{idx}.'
+        name = item['app_name']
         duration = fmt_seconds(item['total_active_duration_sec'])
         count_text = f"{item['session_count']} 次"
 
         line = (
-            f"{idx_text:<{rank_width}} "
-            f"{name:<{name_width}}  "
-            f"{duration:>{duration_width}}  "
-            f"({count_text:>{count_width}})"
+            f'{idx_text:<{rank_width}} '
+            f'{name:<{name_width}}  '
+            f'{duration:>{duration_width}}  '
+            f'({count_text:>{count_width}})'
         )
         lines.append(line)
     # print("\n".join(lines))
-    return "\n".join(lines)
+    return '\n'.join(lines)
 
 
 def empty_status(message: str) -> dict[str, Any]:
@@ -140,26 +140,26 @@ def build_status_payload(
 
     tooltip_lines.extend(
         [
-            "",
+            '',
             f"采集状态: {collector_payload['collector_status_label']}",
         ]
     )
 
-    last_action_message = collector_payload.get("last_action_message") or ""
-    last_action_time = collector_payload.get("last_action_time") or ""
+    last_action_message = collector_payload.get('last_action_message') or ''
+    last_action_time = collector_payload.get('last_action_time') or ''
 
     if last_action_message:
         if last_action_time:
-            tooltip_lines.append(f"最近操作: {last_action_time} {last_action_message}")
+            tooltip_lines.append(f'最近操作: {last_action_time} {last_action_message}')
         else:
-            tooltip_lines.append(f"最近操作: {last_action_message}")
+            tooltip_lines.append(f'最近操作: {last_action_message}')
 
     payload = {
-        "active_time": fmt_seconds(total_active_duration_sec),
-        "total_time": fmt_seconds(total_duration_sec),
-        "top_apps_inline": top_apps_inline,
-        "session_count": int(session_count or 0),
-        "tooltip": "\n".join(tooltip_lines)
+        'active_time': fmt_seconds(total_active_duration_sec),
+        'total_time': fmt_seconds(total_duration_sec),
+        'top_apps_inline': top_apps_inline,
+        'session_count': int(session_count or 0),
+        'tooltip': '\n'.join(tooltip_lines)
     }
 
     payload.update(collector_payload)

@@ -36,10 +36,10 @@ class SingleInstanceLock:
 
         self.lock_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # a+b: 不存在则创建；存在则不清空
+        # a+b: 不存在则创建存在则不清空
         self._fp = open(self.lock_path, 'a+b')
 
-        # 确保文件至少有 1 字节，否则某些锁实现对空文件行为不稳定
+        # 确保文件至少有 1 字节, 否则某些锁实现对空文件行为不稳定
         self._fp.seek(0, os.SEEK_END)
         if self._fp.tell() == 0:
             self._fp.write(b'\0')
@@ -96,7 +96,7 @@ class SingleInstanceLock:
         self._fp.write(owner_text.encode('utf-8'))
         self._fp.flush()
 
-        # 重新回到开头，保持锁定区域对应第 1 个字节
+        # 重新回到开头, 保持锁定区域对应第 1 个字节
         self._fp.seek(0)
 
     def _read_owner_safely(self) -> str:

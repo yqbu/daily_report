@@ -79,11 +79,11 @@ class DailyReportService:
         ai_prompt_store = RepositoryAiPromptEntryStore(connection_factory=self.connection_factory)
         ai_prompt_receiver = AiPromptReceiver(
             store=ai_prompt_store,
-            host="127.0.0.1",
+            host='127.0.0.1',
             port=8765,
-            endpoint="/api/ai-prompts",
+            endpoint='/api/ai-prompts',
         )
-        self.manager.add("ai_prompt", ai_prompt_receiver)
+        self.manager.add('ai_prompt', ai_prompt_receiver)
 
     def cleanup_runtime_data(self) -> None:
         conn = create_connection(self.db_path)

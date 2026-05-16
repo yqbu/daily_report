@@ -38,7 +38,7 @@ class AiPromptEntryRepository:
         client_event_id: Optional[str],
         source: str,
     ) -> int:
-        now = datetime.now().isoformat(timespec="seconds")
+        now = datetime.now().isoformat(timespec='seconds')
 
         with self._lock:
             self.conn.execute(
@@ -78,7 +78,7 @@ class AiPromptEntryRepository:
                 """,
                 (
                     date,
-                    timestamp.isoformat(timespec="seconds"),
+                    timestamp.isoformat(timespec='seconds'),
                     platform,
                     conversation_url,
                     page_title,
@@ -109,8 +109,8 @@ class AiPromptEntryRepository:
             self.conn.commit()
 
             if row is None:
-                raise RuntimeError(f"Failed to fetch ai prompt entry id: {dedupe_key}")
-            return int(row["id"])
+                raise RuntimeError(f'Failed to fetch ai prompt entry id: {dedupe_key}')
+            return int(row['id'])
 
     def list_today_entries(self, date: str) -> list[sqlite3.Row]:
         with self._lock:
@@ -127,7 +127,7 @@ class AiPromptEntryRepository:
             return list(cursor.fetchall())
 
     def update_selected(self, entry_id: int, is_selected: bool) -> None:
-        now = datetime.now().isoformat(timespec="seconds")
+        now = datetime.now().isoformat(timespec='seconds')
 
         with self._lock:
             self.conn.execute(
@@ -142,7 +142,7 @@ class AiPromptEntryRepository:
             self.conn.commit()
 
     def soft_delete(self, entry_id: int) -> None:
-        now = datetime.now().isoformat(timespec="seconds")
+        now = datetime.now().isoformat(timespec='seconds')
 
         with self._lock:
             self.conn.execute(

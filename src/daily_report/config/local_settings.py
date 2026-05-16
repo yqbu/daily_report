@@ -12,10 +12,10 @@ from daily_report.config.paths import get_runtime_paths
 
 @dataclass
 class ModelSettings:
-    provider: str = "deepseek"
-    model_name: str = "deepseek-chat"
-    base_url: str = "https://api.deepseek.com"
-    api_key: str = ""
+    provider: str = 'deepseek'
+    model_name: str = 'deepseek-chat'
+    base_url: str = 'https://api.deepseek.com'
+    api_key: str = ''
     max_prompt_chars: int = 12000
     timeout_seconds: int = 60
     temperature: float = 0.3
@@ -39,26 +39,26 @@ class PrivacySettings:
     clipboard_preview_only: bool = True
     sensitive_keywords: list[str] = field(
         default_factory=lambda: [
-            "password",
-            "token",
-            "api_key",
-            "secret",
-            "sk-",
-            "密码",
-            "认证",
+            'password',
+            'token',
+            'api_key',
+            'secret',
+            'sk-',
+            '密码',
+            '认证',
         ]
     )
 
 
 @dataclass
 class YasbSettings:
-    status_json_path: str = ""
-    status_cli_command: str = "daily-report status --json"
+    status_json_path: str = ''
+    status_cli_command: str = 'daily-report status --json'
 
 
 @dataclass
 class LoggingSettings:
-    level: str = "INFO"
+    level: str = 'INFO'
     retention_days: int = 30
 
 
@@ -84,7 +84,7 @@ def load_local_settings(path: Path | None = None) -> LocalSettings:
         save_local_settings(settings, settings_path)
         return settings
 
-    with settings_path.open("r", encoding="utf-8") as f:
+    with settings_path.open('r', encoding='utf-8') as f:
         raw = json.load(f)
 
     return _merge_settings(settings, raw)
@@ -102,13 +102,13 @@ def save_local_settings(
 
     fd, tmp_name = tempfile.mkstemp(
         prefix=settings_path.name,
-        suffix=".tmp",
+        suffix='.tmp',
         dir=str(settings_path.parent),
         text=True,
     )
 
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         Path(tmp_name).replace(settings_path)
     finally:
@@ -124,7 +124,7 @@ def get_model_api_key(settings: LocalSettings | None = None) -> str:
     1. 环境变量 DEEPSEEK_API_KEY
     2. data/local_settings.json 中的 model.api_key
     """
-    env_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    env_key = os.getenv('DEEPSEEK_API_KEY', '').strip()
     if env_key:
         return env_key
 
@@ -134,21 +134,21 @@ def get_model_api_key(settings: LocalSettings | None = None) -> str:
 
 def mask_api_key(api_key: str) -> str:
     if not api_key:
-        return ""
+        return ''
 
     if len(api_key) <= 10:
-        return "*" * len(api_key)
+        return '*' * len(api_key)
 
     return f"{api_key[:4]}{'*' * 8}{api_key[-4:]}"
 
 
 def _merge_settings(default: LocalSettings, raw: dict[str, Any]) -> LocalSettings:
     return LocalSettings(
-        model=_merge_dataclass(ModelSettings, default.model, raw.get("model", {})),
-        collector=_merge_dataclass(CollectorSettings, default.collector, raw.get("collector", {})),
-        privacy=_merge_dataclass(PrivacySettings, default.privacy, raw.get("privacy", {})),
-        yasb=_merge_dataclass(YasbSettings, default.yasb, raw.get("yasb", {})),
-        logging=_merge_dataclass(LoggingSettings, default.logging, raw.get("logging", {})),
+        model=_merge_dataclass(ModelSettings, default.model, raw.get('model', {})),
+        collector=_merge_dataclass(CollectorSettings, default.collector, raw.get('collector', {})),
+        privacy=_merge_dataclass(PrivacySettings, default.privacy, raw.get('privacy', {})),
+        yasb=_merge_dataclass(YasbSettings, default.yasb, raw.get('yasb', {})),
+        logging=_merge_dataclass(LoggingSettings, default.logging, raw.get('logging', {})),
     )
 
 

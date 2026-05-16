@@ -474,7 +474,7 @@ def debug_main() -> None:
     db_path = default_db_path()
     logger.info('SQLite database path: %s', db_path)
 
-    # 关键：先初始化数据库
+    # 关键: 先初始化数据库
     conn = create_connection(db_path)
     try:
         init_database(conn)

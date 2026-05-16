@@ -25,19 +25,19 @@ from daily_report.storage.storage_adapter.ai_prompt_store import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_HOST = "127.0.0.1"
+DEFAULT_HOST = '127.0.0.1'
 DEFAULT_PORT = 8765
-DEFAULT_ENDPOINT = "/api/ai-prompts"
+DEFAULT_ENDPOINT = '/api/ai-prompts'
 MAX_BODY_BYTES = 2 * 1024 * 1024
 MAX_PROMPT_CHARS = 20_000
 
 SENSITIVE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"(?i)\b(password|passwd|pwd)\s*[:=]\s*\S+"), "password-like content"),
-    (re.compile(r"(?i)\b(api[_-]?key|secret|access[_-]?token|refresh[_-]?token)\s*[:=]\s*\S+"), "token/key-like content"),
-    (re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"), "OpenAI-like API key"),
-    (re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{20,}"), "Bearer token"),
-    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), "private key block"),
-    (re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"), "JWT-like token"),
+    (re.compile(r'(?i)\b(password|passwd|pwd)\s*[:=]\s*\S+'), 'password-like content'),
+    (re.compile(r'(?i)\b(api[_-]?key|secret|access[_-]?token|refresh[_-]?token)\s*[:=]\s*\S+'), 'token/key-like content'),
+    (re.compile(r'\bsk-[A-Za-z0-9_-]{20,}\b'), 'OpenAI-like API key'),
+    (re.compile(r'(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{20,}'), 'Bearer token'),
+    (re.compile(r'-----BEGIN [A-Z ]*PRIVATE KEY-----'), 'private key block'),
+    (re.compile(r'\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b'), 'JWT-like token'),
 ]
 
 
@@ -71,24 +71,24 @@ class AiPromptEntryStore(Protocol):
 
 def normalize_prompt(text: Any) -> str:
     if text is None:
-        return ""
+        return ''
 
-    value = str(text).replace("\x00", "")
-    value = re.sub(r"\r\n?", "\n", value)
-    value = re.sub(r"[ \t]+", " ", value)
-    value = re.sub(r"\n{3,}", "\n\n", value)
+    value = str(text).replace('\x00', '')
+    value = re.sub(r'\r\n?', '\n', value)
+    value = re.sub(r'[ \t]+', ' ', value)
+    value = re.sub(r'\n{3,}', '\n\n', value)
     return value.strip()[:MAX_PROMPT_CHARS]
 
 
 def make_preview(text: str, max_chars: int = 160) -> str:
-    compact = re.sub(r"\s+", " ", text).strip()
+    compact = re.sub(r'\s+', ' ', text).strip()
     if len(compact) <= max_chars:
         return compact
-    return compact[: max_chars - 1] + "…"
+    return compact[: max_chars - 1] + '…'
 
 
 def sha256_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8", errors="ignore")).hexdigest()
+    return hashlib.sha256(text.encode('utf-8', errors='ignore')).hexdigest()
 
 
 def parse_client_timestamp(value: Any) -> datetime:
@@ -108,7 +108,7 @@ def parse_client_timestamp(value: Any) -> datetime:
 
     try:
         # Accept ISO strings produced by new Date().toISOString().
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(text.replace('Z', '+00:00'))
         if parsed.tzinfo is not None:
             parsed = parsed.astimezone().replace(tzinfo=None)
         return parsed
@@ -117,25 +117,25 @@ def parse_client_timestamp(value: Any) -> datetime:
 
 
 def detect_platform(conversation_url: str, declared_platform: Any = None) -> str:
-    declared = str(declared_platform or "").strip()
+    declared = str(declared_platform or '').strip()
     if declared:
         normalized = declared.lower()
-        if "deepseek" in normalized:
-            return "DeepSeek"
-        if "chatgpt" in normalized or "openai" in normalized:
-            return "ChatGPT"
+        if 'deepseek' in normalized:
+            return 'DeepSeek'
+        if 'chatgpt' in normalized or 'openai' in normalized:
+            return 'ChatGPT'
         return declared[:64]
 
     try:
-        host = (urlparse(conversation_url).hostname or "").lower()
+        host = (urlparse(conversation_url).hostname or '').lower()
     except Exception:
-        host = ""
+        host = ''
 
-    if "deepseek" in host:
-        return "DeepSeek"
-    if "chatgpt" in host or "openai" in host:
-        return "ChatGPT"
-    return "Unknown"
+    if 'deepseek' in host:
+        return 'DeepSeek'
+    if 'chatgpt' in host or 'openai' in host:
+        return 'ChatGPT'
+    return 'Unknown'
 
 
 def detect_sensitive(prompt_text: str) -> tuple[bool, Optional[str]]:
@@ -160,7 +160,7 @@ def make_dedupe_key(
     """
     epoch = int(timestamp.replace(tzinfo=timezone.utc).timestamp())
     bucket = epoch // bucket_seconds
-    raw = f"{platform}|{conversation_url}|{prompt_hash}|{bucket}"
+    raw = f'{platform}|{conversation_url}|{prompt_hash}|{bucket}'
     return sha256_text(raw)
 
 
@@ -179,7 +179,7 @@ class AiPromptReceiver:
     与现有 CollectorManager 兼容，提供 start(blocking=False)、stop()。
     """
 
-    name: str = "ai_prompt_receiver"
+    name: str = 'ai_prompt_receiver'
 
     def __init__(
         self,
@@ -194,7 +194,7 @@ class AiPromptReceiver:
         self.host = host
         self.port = int(port)
         self.endpoint = endpoint
-        self.auth_token = auth_token if auth_token is not None else os.getenv("DAILY_REPORT_AI_PROMPT_TOKEN", "").strip() or None
+        self.auth_token = auth_token if auth_token is not None else os.getenv('DAILY_REPORT_AI_PROMPT_TOKEN', '').strip() or None
         self.min_prompt_chars = int(min_prompt_chars)
 
         self._stop_event = threading.Event()
@@ -208,7 +208,7 @@ class AiPromptReceiver:
 
         thread = threading.Thread(
             target=self.run_forever,
-            name="AiPromptReceiver",
+            name='AiPromptReceiver',
             daemon=True,
         )
         self._thread = thread
@@ -221,21 +221,21 @@ class AiPromptReceiver:
             try:
                 self._server.shutdown()
             except Exception:
-                logger.exception("Failed to shutdown AiPromptReceiver HTTP server.")
+                logger.exception('Failed to shutdown AiPromptReceiver HTTP server.')
 
     def run_forever(self) -> None:
         handler_cls = self._make_handler_class()
         self._server = HTTPServer((self.host, self.port), handler_cls)
 
         if self.auth_token:
-            logger.info("AiPromptReceiver token auth enabled.")
+            logger.info('AiPromptReceiver token auth enabled.')
         else:
             logger.warning(
-                "AiPromptReceiver token auth is disabled. "
-                "For local MVP this is acceptable, but setting DAILY_REPORT_AI_PROMPT_TOKEN is safer."
+                'AiPromptReceiver token auth is disabled. '
+                'For local MVP this is acceptable, but setting DAILY_REPORT_AI_PROMPT_TOKEN is safer.'
             )
 
-        logger.info("AiPromptReceiver started at http://%s:%s%s", self.host, self.port, self.endpoint)
+        logger.info('AiPromptReceiver started at http://%s:%s%s', self.host, self.port, self.endpoint)
 
         try:
             self._server.serve_forever(poll_interval=0.5)
@@ -244,32 +244,32 @@ class AiPromptReceiver:
                 self._server.server_close()
             finally:
                 self._close_store()
-                logger.info("AiPromptReceiver stopped.")
+                logger.info('AiPromptReceiver stopped.')
 
     def _make_handler_class(self) -> type[BaseHTTPRequestHandler]:
         receiver = self
 
         class RequestHandler(BaseHTTPRequestHandler):
-            server_version = "DailyReportAiPromptReceiver/0.1"
+            server_version = 'DailyReportAiPromptReceiver/0.1'
 
             def do_OPTIONS(self) -> None:  # noqa: N802
                 self._send_cors_response(204, {})
 
             def do_GET(self) -> None:  # noqa: N802
-                if self.path == "/health" or self.path == f"{receiver.endpoint}/health":
-                    self._send_json(200, {"ok": True, "name": receiver.name})
+                if self.path == '/health' or self.path == f'{receiver.endpoint}/health':
+                    self._send_json(200, {'ok': True, 'name': receiver.name})
                     return
-                self._send_json(404, {"ok": False, "error": "not_found"})
+                self._send_json(404, {'ok': False, 'error': 'not_found'})
 
             def do_POST(self) -> None:  # noqa: N802
                 if self.path != receiver.endpoint:
-                    self._send_json(404, {"ok": False, "error": "not_found"})
+                    self._send_json(404, {'ok': False, 'error': 'not_found'})
                     return
 
                 if receiver.auth_token:
-                    request_token = self.headers.get("X-Daily-Report-Token", "")
+                    request_token = self.headers.get('X-Daily-Report-Token', '')
                     if request_token != receiver.auth_token:
-                        self._send_json(401, {"ok": False, "error": "unauthorized"})
+                        self._send_json(401, {'ok': False, 'error': 'unauthorized'})
                         return
 
                 try:
@@ -279,50 +279,50 @@ class AiPromptReceiver:
                     self._send_json(
                         200,
                         {
-                            "ok": True,
-                            "id": entry.id,
-                            "is_sensitive": entry.is_sensitive,
-                            "is_selected": entry.is_selected,
+                            'ok': True,
+                            'id': entry.id,
+                            'is_sensitive': entry.is_sensitive,
+                            'is_selected': entry.is_selected,
                         },
                     )
                 except ValueError as exc:
-                    self._send_json(400, {"ok": False, "error": str(exc)})
+                    self._send_json(400, {'ok': False, 'error': str(exc)})
                 except Exception:
-                    logger.exception("Failed to save AI prompt entry.")
-                    self._send_json(500, {"ok": False, "error": "internal_error"})
+                    logger.exception('Failed to save AI prompt entry.')
+                    self._send_json(500, {'ok': False, 'error': 'internal_error'})
 
             def log_message(self, fmt: str, *args: Any) -> None:
-                logger.debug("AiPromptReceiver HTTP: " + fmt, *args)
+                logger.debug('AiPromptReceiver HTTP: ' + fmt, *args)
 
             def _read_json_body(self) -> dict[str, Any]:
-                content_length = int(self.headers.get("Content-Length", "0") or 0)
+                content_length = int(self.headers.get('Content-Length', '0') or 0)
                 if content_length <= 0:
-                    raise ValueError("empty_body")
+                    raise ValueError('empty_body')
                 if content_length > MAX_BODY_BYTES:
-                    raise ValueError("body_too_large")
+                    raise ValueError('body_too_large')
 
                 raw = self.rfile.read(content_length)
                 try:
-                    data = json.loads(raw.decode("utf-8"))
+                    data = json.loads(raw.decode('utf-8'))
                 except json.JSONDecodeError as exc:
-                    raise ValueError("invalid_json") from exc
+                    raise ValueError('invalid_json') from exc
 
                 if not isinstance(data, dict):
-                    raise ValueError("json_body_must_be_object")
+                    raise ValueError('json_body_must_be_object')
                 return data
 
             def _send_json(self, status: int, payload: dict[str, Any]) -> None:
                 self._send_cors_response(status, payload)
 
             def _send_cors_response(self, status: int, payload: dict[str, Any]) -> None:
-                body = b"" if status == 204 else json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                body = b'' if status == 204 else json.dumps(payload, ensure_ascii=False).encode('utf-8')
                 self.send_response(status)
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-                self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Daily-Report-Token")
-                self.send_header("Access-Control-Max-Age", "86400")
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Content-Length", str(len(body)))
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+                self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Daily-Report-Token')
+                self.send_header('Access-Control-Max-Age', '86400')
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Content-Length', str(len(body)))
                 self.end_headers()
                 if body:
                     self.wfile.write(body)
@@ -330,15 +330,15 @@ class AiPromptReceiver:
         return RequestHandler
 
     def _entry_from_payload(self, payload: dict[str, Any]) -> AiPromptEntryState:
-        prompt_text = normalize_prompt(payload.get("prompt_text"))
+        prompt_text = normalize_prompt(payload.get('prompt_text'))
         if len(prompt_text) < self.min_prompt_chars:
-            raise ValueError("prompt_too_short")
+            raise ValueError('prompt_too_short')
 
-        conversation_url = str(payload.get("conversation_url") or "").strip()[:2048]
-        page_title = str(payload.get("page_title") or "").replace("\x00", "").strip()[:512]
-        platform = detect_platform(conversation_url, payload.get("platform"))
+        conversation_url = str(payload.get('conversation_url') or '').strip()[:2048]
+        page_title = str(payload.get('page_title') or '').replace('\x00', '').strip()[:512]
+        platform = detect_platform(conversation_url, payload.get('platform'))
 
-        timestamp = parse_client_timestamp(payload.get("submitted_at") or payload.get("timestamp"))
+        timestamp = parse_client_timestamp(payload.get('submitted_at') or payload.get('timestamp'))
         prompt_hash = sha256_text(prompt_text)
         dedupe_key = make_dedupe_key(
             platform=platform,
@@ -364,12 +364,12 @@ class AiPromptReceiver:
             is_sensitive=is_sensitive,
             sensitivity_reason=sensitivity_reason,
             is_selected=not is_sensitive,
-            client_event_id=str(payload.get("client_event_id") or "").strip()[:128] or None,
-            source=str(payload.get("source") or "edge_extension").strip()[:64],
+            client_event_id=str(payload.get('client_event_id') or '').strip()[:128] or None,
+            source=str(payload.get('source') or 'edge_extension').strip()[:64],
         )
 
     def _close_store(self) -> None:
-        close = getattr(self.store, "close", None)
+        close = getattr(self.store, 'close', None)
         if callable(close):
             close()
 
@@ -377,11 +377,11 @@ class AiPromptReceiver:
 def debug_main() -> None:
     logging.basicConfig(
         level=logging.INFO,
-        format="[%(asctime)s] %(levelname)s %(name)s: %(message)s",
+        format='[%(asctime)s] %(levelname)s %(name)s: %(message)s',
     )
 
     db_path = default_db_path()
-    logger.info("SQLite database path: %s", db_path)
+    logger.info('SQLite database path: %s', db_path)
 
     conn = create_connection(db_path)
     try:
@@ -400,5 +400,5 @@ def debug_main() -> None:
         time.sleep(0.2)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     debug_main()

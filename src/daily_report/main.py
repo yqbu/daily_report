@@ -18,7 +18,7 @@ def setup_logging(level: str = 'INFO') -> None:
 
 def run_service(args: argparse.Namespace) -> None:
     setup_logging(args.log_level)
-    # 延迟导入，避免只执行 report/status 命令时被采集服务依赖阻断。
+    # 延迟导入, 避免只执行 report/status 命令时被采集服务依赖阻断
     from daily_report.service.app import DailyReportService
     service = DailyReportService()
     service.run()
@@ -40,8 +40,8 @@ def run_build_prompt(args: argparse.Namespace) -> None:
     if args.out:
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(prompt, encoding="utf-8")
-        print(f"Prompt saved to: {out_path}")
+        out_path.write_text(prompt, encoding='utf-8')
+        print(f'Prompt saved to: {out_path}')
     else:
         print(prompt)
 
@@ -58,24 +58,24 @@ def run_generate_today(args: argparse.Namespace) -> None:
     if args.out:
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(result.report_markdown, encoding="utf-8")
-        print(f"Report markdown saved to: {out_path}")
+        out_path.write_text(result.report_markdown, encoding='utf-8')
+        print(f'Report markdown saved to: {out_path}')
 
     if args.print_prompt:
-        print("\n" + "=" * 20 + " PROMPT " + "=" * 20)
+        print('\n' + '=' * 20 + ' PROMPT ' + '=' * 20)
         print(result.prompt_text)
 
-    print("\n" + "=" * 20 + " REPORT " + "=" * 20)
+    print('\n' + '=' * 20 + ' REPORT ' + '=' * 20)
     print(result.report_markdown)
     if result.report_id > 0:
-        print(f"\nSaved report id: {result.report_id}")
+        print(f'\nSaved report id: {result.report_id}')
 
 
 def run_latest_report(args: argparse.Namespace) -> None:
     service = ReportService(db_path=args.db_path)
     record = service.get_latest_report(args.date)
     if record is None:
-        print("No report found.")
+        print('No report found' )
         return
     print(record.report_markdown)
 
@@ -83,48 +83,48 @@ def run_latest_report(args: argparse.Namespace) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='daily-report',
-        description='Daily report collector and generator.',
+        description='Daily report collector and generator' ,
     )
 
     subparsers = parser.add_subparsers(dest='command')
 
-    run_parser = subparsers.add_parser('run', help='Run background collectors.')
+    run_parser = subparsers.add_parser('run', help='Run background collectors' )
     run_parser.add_argument('--log-level', default='INFO', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'])
     run_parser.set_defaults(func=run_service)
 
-    status_parser = subparsers.add_parser('status', help="Print today's status for YASB or command line.")
-    status_parser.add_argument('--json', action='store_true', help='Output status as JSON.')
+    status_parser = subparsers.add_parser('status', help='Print today\'s status for YASB or command line' )
+    status_parser.add_argument('--json', action='store_true', help='Output status as JSON' )
     status_parser.add_argument(
-        '--date', default=None, help='Target date, format: YYYY-MM-DD. Default: today.'
+        '--date', default=None, help='Target date, format: YYYY-MM-DD. Default: today'
     )
-    status_parser.add_argument( '--limit', type=int, default=5, help='Top app limit.')
+    status_parser.add_argument( '--limit', type=int, default=5, help='Top app limit' )
     status_parser.set_defaults(func=run_status)
 
     prompt_parser = subparsers.add_parser(
-        "build-prompt",
-        help="Build the daily report prompt without calling the model.",
+        'build-prompt',
+        help='Build the daily report prompt without calling the model' ,
     )
-    prompt_parser.add_argument("--date", default=None, help="Target date, format: YYYY-MM-DD.")
-    prompt_parser.add_argument("--max-chars", type=int, default=None)
-    prompt_parser.add_argument("--out", default=None, help="Optional output txt path.")
-    prompt_parser.add_argument("--db-path", default=None, help="Optional SQLite db path.")
+    prompt_parser.add_argument('--date', default=None, help='Target date, format: YYYY-MM-DD' )
+    prompt_parser.add_argument('--max-chars', type=int, default=None)
+    prompt_parser.add_argument('--out', default=None, help='Optional output txt path' )
+    prompt_parser.add_argument('--db-path', default=None, help='Optional SQLite db path' )
     prompt_parser.set_defaults(func=run_build_prompt)
 
     gen_parser = subparsers.add_parser(
-        "generate-report", help="Generate a Markdown daily report with DeepSeek and save it.",
+        'generate-report', help='Generate a Markdown daily report with DeepSeek and save it' ,
     )
-    gen_parser.add_argument("--date", default=None, help="Target date, format: YYYY-MM-DD.")
-    gen_parser.add_argument("--api-key", default=None, help="DeepSeek API key override.")
-    gen_parser.add_argument("--db-path", default=None, help="Optional SQLite db path.")
-    gen_parser.add_argument("--out", default=None, help="Optional output markdown path.")
-    gen_parser.add_argument("--no-save", action="store_true", help="Do not save to daily_reports.")
-    gen_parser.add_argument("--print-prompt", action="store_true", help="Print prompt before report.")
-    gen_parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
+    gen_parser.add_argument('--date', default=None, help='Target date, format: YYYY-MM-DD' )
+    gen_parser.add_argument('--api-key', default=None, help='DeepSeek API key override' )
+    gen_parser.add_argument('--db-path', default=None, help='Optional SQLite db path' )
+    gen_parser.add_argument('--out', default=None, help='Optional output markdown path' )
+    gen_parser.add_argument('--no-save', action='store_true', help='Do not save to daily_reports' )
+    gen_parser.add_argument('--print-prompt', action='store_true', help='Print prompt before report' )
+    gen_parser.add_argument('--log-level', default='INFO', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'])
     gen_parser.set_defaults(func=run_generate_today)
 
-    latest_parser = subparsers.add_parser("latest-report", help="Print latest saved report markdown for a date.")
-    latest_parser.add_argument("--date", default=None, help="Target date, format: YYYY-MM-DD.")
-    latest_parser.add_argument("--db-path", default=None, help="Optional SQLite db path.")
+    latest_parser = subparsers.add_parser('latest-report', help='Print latest saved report markdown for a date' )
+    latest_parser.add_argument('--date', default=None, help='Target date, format: YYYY-MM-DD' )
+    latest_parser.add_argument('--db-path', default=None, help='Optional SQLite db path' )
     latest_parser.set_defaults(func=run_latest_report)
 
     return parser
@@ -133,7 +133,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
 
-    # 如果没有任何参数，默认执行 run 命令
+    # 如果没有任何参数, 默认执行 run 命令
     if len(sys.argv) == 1:
         args = parser.parse_args(['run'])
     else:

@@ -114,8 +114,8 @@ class ReportService:
 
             return ReportMaterialBundle(
                 date=day,
-                total_time=fmt_seconds(total["total_duration_sec"] if total else 0),
-                active_time=fmt_seconds(total["total_active_duration_sec"] if total else 0),
+                total_time=fmt_seconds(total['total_duration_sec'] if total else 0),
+                active_time=fmt_seconds(total['total_active_duration_sec'] if total else 0),
                 top_apps=[
                     f"{r['app_name']} {fmt_seconds(r['active_sec'])}（{r['session_count']} 次）"
                     for r in top_rows
@@ -162,8 +162,8 @@ class ReportService:
         )
         markdown = client.chat(
             [
-                ChatMessage(role="system", content="你是一名严谨的工作日报写作助手。"),
-                ChatMessage(role="user", content=prompt),
+                ChatMessage(role='system', content='你是一名严谨的工作日报写作助手。'),
+                ChatMessage(role='user', content=prompt),
             ]
         )
 
@@ -190,23 +190,23 @@ class ReportService:
     def _build_material_summary(self, day: str) -> str:
         bundle = self.build_bundle(day)
         return (
-            f"active_time={bundle.active_time}; "
-            f"top_apps={len(bundle.top_apps)}; "
-            f"app_sessions={len(bundle.app_sessions)}; "
-            f"clipboard={len(bundle.clipboard_items)}; "
-            f"browser={len(bundle.browser_items)}; "
-            f"ai_prompts={len(bundle.ai_prompts)}"
+            f'active_time={bundle.active_time}; '
+            f'top_apps={len(bundle.top_apps)}; '
+            f'app_sessions={len(bundle.app_sessions)}; '
+            f'clipboard={len(bundle.clipboard_items)}; '
+            f'browser={len(bundle.browser_items)}; '
+            f'ai_prompts={len(bundle.ai_prompts)}'
         )
 
     def _build_source_counts(self, day: str) -> dict[str, Any]:
         bundle = self.build_bundle(day)
         return {
-            "date": day,
-            "top_apps": len(bundle.top_apps),
-            "app_sessions": len(bundle.app_sessions),
-            "clipboard_items": len(bundle.clipboard_items),
-            "browser_items": len(bundle.browser_items),
-            "ai_prompts": len(bundle.ai_prompts),
+            'date': day,
+            'top_apps': len(bundle.top_apps),
+            'app_sessions': len(bundle.app_sessions),
+            'clipboard_items': len(bundle.clipboard_items),
+            'browser_items': len(bundle.browser_items),
+            'ai_prompts': len(bundle.ai_prompts),
         }
 
     @staticmethod
@@ -219,15 +219,15 @@ class ReportService:
     @staticmethod
     def _hhmm(value: str | None) -> str:
         if not value:
-            return ""
-        if len(value) >= 16 and value[10] in {" ", "T"}:
+            return ''
+        if len(value) >= 16 and value[10] in {' ', 'T'}:
             return value[11:16]
         return value[:5]
 
     @classmethod
     def _format_browser_item(cls, row) -> str:
-        time_part = cls._hhmm(row["visit_time"])
-        if row["is_search"]:
+        time_part = cls._hhmm(row['visit_time'])
+        if row['is_search']:
             return f"{time_part} 搜索 {row['search_engine'] or ''}：{row['search_query'] or ''}"
-        title = row["title"] or row["domain"] or ""
+        title = row['title'] or row['domain'] or ''
         return f"{time_part} {row['domain'] or ''}：{title}"

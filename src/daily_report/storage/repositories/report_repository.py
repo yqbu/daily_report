@@ -53,7 +53,7 @@ class DailyReportRepository:
                 report_markdown,
                 material_summary,
                 json.dumps(source_counts or {}, ensure_ascii=False),
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             ),
         )
         self.conn.commit()
@@ -144,12 +144,12 @@ class DailyReportRepository:
     @staticmethod
     def _to_record(row: sqlite3.Row) -> DailyReportRecord:
         return DailyReportRecord(
-            id=row["id"],
-            date=row["date"],
-            model_name=row["model_name"],
-            prompt_text=row["prompt_text"],
-            report_markdown=row["report_markdown"],
-            material_summary=row["material_summary"],
-            source_counts=json.loads(row["source_counts_json"] or "{}"),
-            created_at=row["created_at"],
+            id=row['id'],
+            date=row['date'],
+            model_name=row['model_name'],
+            prompt_text=row['prompt_text'],
+            report_markdown=row['report_markdown'],
+            material_summary=row['material_summary'],
+            source_counts=json.loads(row['source_counts_json'] or '{}'),
+            created_at=row['created_at'],
         )

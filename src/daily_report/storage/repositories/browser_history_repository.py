@@ -40,7 +40,7 @@ class BrowserHistoryEntryRepository:
         is_noise: bool,
         is_selected: bool,
     ) -> int:
-        now = datetime.now().isoformat(timespec="seconds")
+        now = datetime.now().isoformat(timespec='seconds')
 
         with self._lock:
             self.conn.execute(
@@ -87,7 +87,7 @@ class BrowserHistoryEntryRepository:
                     browser,
                     profile_name,
                     int(visit_id),
-                    visit_time.isoformat(timespec="seconds"),
+                    visit_time.isoformat(timespec='seconds'),
                     int(visit_time_chrome),
                     title,
                     url,
@@ -119,11 +119,11 @@ class BrowserHistoryEntryRepository:
 
             if row is None:
                 raise RuntimeError(
-                    f"Failed to fetch browser history entry id: "
-                    f"{browser}, {profile_name}, {visit_id}"
+                    f'Failed to fetch browser history entry id: '
+                    f'{browser}, {profile_name}, {visit_id}'
                 )
 
-            return int(row["id"])
+            return int(row['id'])
 
     def get_latest_visit_time_chrome(
         self,
@@ -145,7 +145,7 @@ class BrowserHistoryEntryRepository:
         if row is None:
             return None
 
-        value = row["max_visit_time_chrome"]
+        value = row['max_visit_time_chrome']
         return int(value) if value is not None else None
 
     def list_today_entries(self, date: str) -> list[sqlite3.Row]:
@@ -163,7 +163,7 @@ class BrowserHistoryEntryRepository:
             return list(cursor.fetchall())
 
     def update_selected(self, entry_id: int, is_selected: bool) -> None:
-        now = datetime.now().isoformat(timespec="seconds")
+        now = datetime.now().isoformat(timespec='seconds')
 
         with self._lock:
             self.conn.execute(
@@ -178,7 +178,7 @@ class BrowserHistoryEntryRepository:
             self.conn.commit()
 
     def soft_delete(self, entry_id: int) -> None:
-        now = datetime.now().isoformat(timespec="seconds")
+        now = datetime.now().isoformat(timespec='seconds')
 
         with self._lock:
             self.conn.execute(
