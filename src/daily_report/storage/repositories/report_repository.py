@@ -24,14 +24,14 @@ class DailyReportRepository:
         self.conn = conn
 
     def create(
-            self,
-            *,
-            date: str,
-            model_name: str,
-            prompt_text: str,
-            report_markdown: str,
-            material_summary: str | None = None,
-            source_counts: dict[str, Any] | None = None,
+        self,
+        *,
+        date: str,
+        model_name: str,
+        prompt_text: str,
+        report_markdown: str,
+        material_summary: str | None = None,
+        source_counts: dict[str, Any] | None = None,
     ) -> int:
         cursor = self.conn.execute(
             """
@@ -59,6 +59,26 @@ class DailyReportRepository:
         self.conn.commit()
         return int(cursor.lastrowid)
 
+    def save_report(
+        self,
+        *,
+        date: str,
+        model_name: str,
+        prompt_text: str,
+        report_markdown: str,
+        material_summary: str | None = None,
+        source_counts: dict[str, Any] | None = None,
+    ) -> int:
+        """Backward-compatible alias for service/report_service.py."""
+        return self.create(
+            date=date,
+            model_name=model_name,
+            prompt_text=prompt_text,
+            report_markdown=report_markdown,
+            material_summary=material_summary,
+            source_counts=source_counts,
+        )
+
     def get_latest_by_date(self, date: str) -> DailyReportRecord | None:
         cursor = self.conn.execute(
             """
@@ -73,7 +93,7 @@ class DailyReportRepository:
                 created_at
             FROM daily_reports
             WHERE date = ?
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC, id DESC
             LIMIT 1
             """,
             (date,),
@@ -95,7 +115,7 @@ class DailyReportRepository:
                 created_at
             FROM daily_reports
             WHERE date = ?
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC, id DESC
             """,
             (date,),
         )
@@ -114,7 +134,7 @@ class DailyReportRepository:
                 source_counts_json,
                 created_at
             FROM daily_reports
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC, id DESC
             LIMIT ?
             """,
             (limit,),

@@ -2,12 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date as date_cls
+from pathlib import Path
+from typing import Any
 
 from daily_report.config.local_settings import load_local_settings
 from daily_report.reporter.deepseek_client import ChatMessage, DeepSeekClient
 from daily_report.reporter.prompt_builder import ReportMaterialBundle, build_daily_report_prompt
-from daily_report.storage.repositories.report_repository import DailyReportRepository
-from daily_report.storage.database import create_connection, default_db_path
+from daily_report.storage.database import (
+    SqliteConnectionFactory,
+    create_connection,
+    default_db_path,
+    init_database,
+)
+from daily_report.storage.storage_adapter.report_store import ReportStore, SaveReportCommand
 from daily_report.yasb_bridge.usage_status import fmt_seconds
 
 
@@ -19,17 +26,27 @@ class GeneratedReport:
 
 
 class ReportService:
-    def __init__(self, db_path=None):
-        self.db_path = db_path or default_db_path()
+    def __init__(self, db_path: str | Path | None = None):
+        self.db_path = Path(db_path) if db_path is not None else default_db_path()
+        self.connection_factory = SqliteConnectionFactory(self.db_path)
+
+    def ensure_database(self) -> None:
+        conn = create_connection(self.db_path)
+        try:
+            init_database(conn)
+        finally:
+            conn.close()
 
     def build_bundle(self, target_date: str | None = None) -> ReportMaterialBundle:
+        self.ensure_database()
         day = target_date or date_cls.today().isoformat()
         conn = create_connection(self.db_path)
         try:
             total = conn.execute(
                 """
-                SELECT COALESCE(SUM(duration_sec), 0) AS total_duration_sec,
-                       COALESCE(SUM(active_duration_sec), 0) AS total_active_duration_sec
+                SELECT
+                    COALESCE(SUM(duration_sec), 0) AS total_duration_sec,
+                    COALESCE(SUM(active_duration_sec), 0) AS total_active_duration_sec
                 FROM app_sessions
                 WHERE date = ?
                 """,
@@ -70,6 +87,7 @@ class ReportService:
                 """,
                 (day,),
             )
+
             browser_rows = self._safe_select(
                 conn,
                 """
@@ -81,6 +99,7 @@ class ReportService:
                 """,
                 (day,),
             )
+
             ai_rows = self._safe_select(
                 conn,
                 """
@@ -102,19 +121,17 @@ class ReportService:
                     for r in top_rows
                 ],
                 app_sessions=[
-                    f"{r['start_time'][11:16] if r['start_time'] else ''}-{r['end_time'][11:16] if r['end_time'] else ''} "
+                    f"{self._hhmm(r['start_time'])}-{self._hhmm(r['end_time'])} "
                     f"{r['app_name']}：{r['window_title'] or ''}（{fmt_seconds(r['active_duration_sec'])}）"
                     for r in app_rows
                 ],
                 clipboard_items=[
-                    f"{r['last_seen_at'][11:16] if r['last_seen_at'] else ''} {r['content_preview']}"
+                    f"{self._hhmm(r['last_seen_at'])} {r['content_preview']}"
                     for r in clip_rows
                 ],
-                browser_items=[
-                    self._format_browser_item(r) for r in browser_rows
-                ],
+                browser_items=[self._format_browser_item(r) for r in browser_rows],
                 ai_prompts=[
-                    f"{r['timestamp'][11:16] if r['timestamp'] else ''} {r['platform']}：{r['prompt_preview']}"
+                    f"{self._hhmm(r['timestamp'])} {r['platform']}：{r['prompt_preview']}"
                     for r in ai_rows
                 ],
             )
@@ -126,10 +143,17 @@ class ReportService:
         bundle = self.build_bundle(target_date)
         return build_daily_report_prompt(bundle, max_chars=max_chars or settings.model.max_prompt_chars)
 
-    def generate_report(self, target_date: str | None = None, *, api_key: str | None = None) -> GeneratedReport:
+    def generate_report(
+        self,
+        target_date: str | None = None,
+        *,
+        api_key: str | None = None,
+        save: bool = True,
+    ) -> GeneratedReport:
         settings = load_local_settings()
         day = target_date or date_cls.today().isoformat()
         prompt = self.build_prompt(day, max_chars=settings.model.max_prompt_chars)
+
         client = DeepSeekClient(
             api_key=api_key or settings.model.api_key,
             model_name=settings.model.model_name,
@@ -142,18 +166,48 @@ class ReportService:
                 ChatMessage(role="user", content=prompt),
             ]
         )
-        conn = create_connection(self.db_path)
-        try:
-            repo = DailyReportRepository(conn)
-            report_id = repo.save_report(
-                date=day,
-                model_name=settings.model.model_name,
-                prompt_text=prompt,
-                report_markdown=markdown,
+
+        report_id = -1
+        if save:
+            store = ReportStore(self.connection_factory)
+            report_id = store.save(
+                SaveReportCommand(
+                    date=day,
+                    model_name=settings.model.model_name,
+                    prompt_text=prompt,
+                    report_markdown=markdown,
+                    material_summary=self._build_material_summary(day),
+                    source_counts=self._build_source_counts(day),
+                )
             )
-        finally:
-            conn.close()
         return GeneratedReport(report_id=report_id, prompt_text=prompt, report_markdown=markdown)
+
+    def get_latest_report(self, target_date: str | None = None):
+        self.ensure_database()
+        day = target_date or date_cls.today().isoformat()
+        return ReportStore(self.connection_factory).latest_by_date(day)
+
+    def _build_material_summary(self, day: str) -> str:
+        bundle = self.build_bundle(day)
+        return (
+            f"active_time={bundle.active_time}; "
+            f"top_apps={len(bundle.top_apps)}; "
+            f"app_sessions={len(bundle.app_sessions)}; "
+            f"clipboard={len(bundle.clipboard_items)}; "
+            f"browser={len(bundle.browser_items)}; "
+            f"ai_prompts={len(bundle.ai_prompts)}"
+        )
+
+    def _build_source_counts(self, day: str) -> dict[str, Any]:
+        bundle = self.build_bundle(day)
+        return {
+            "date": day,
+            "top_apps": len(bundle.top_apps),
+            "app_sessions": len(bundle.app_sessions),
+            "clipboard_items": len(bundle.clipboard_items),
+            "browser_items": len(bundle.browser_items),
+            "ai_prompts": len(bundle.ai_prompts),
+        }
 
     @staticmethod
     def _safe_select(conn, sql: str, params: tuple) -> list:
@@ -163,8 +217,16 @@ class ReportService:
             return []
 
     @staticmethod
-    def _format_browser_item(row) -> str:
-        time_part = row["visit_time"][11:16] if row["visit_time"] else ""
+    def _hhmm(value: str | None) -> str:
+        if not value:
+            return ""
+        if len(value) >= 16 and value[10] in {" ", "T"}:
+            return value[11:16]
+        return value[:5]
+
+    @classmethod
+    def _format_browser_item(cls, row) -> str:
+        time_part = cls._hhmm(row["visit_time"])
         if row["is_search"]:
             return f"{time_part} 搜索 {row['search_engine'] or ''}：{row['search_query'] or ''}"
         title = row["title"] or row["domain"] or ""

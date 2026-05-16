@@ -13,6 +13,7 @@ class RuntimePaths:
     local_settings_path: Path
     status_json_path: Path
     log_dir: Path
+    output_dir: Path
 
 
 def get_project_root() -> Path:
@@ -37,8 +38,15 @@ def get_runtime_paths() -> RuntimePaths:
 
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    log_dir = data_dir / "logs"
+    log_dir = Path(
+        os.getenv("DAILY_REPORT_LOG_DIR", project_root / "logs")
+    ).resolve()
     log_dir.mkdir(parents=True, exist_ok=True)
+
+    output_dir = Path(
+        os.getenv("DAILY_REPORT_OUTPUT_DIR", project_root / "output")
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     return RuntimePaths(
         project_root=project_root,
@@ -47,4 +55,5 @@ def get_runtime_paths() -> RuntimePaths:
         local_settings_path=data_dir / "local_settings.json",
         status_json_path=data_dir / "status.json",
         log_dir=log_dir,
+        output_dir=output_dir
     )

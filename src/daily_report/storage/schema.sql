@@ -166,18 +166,14 @@ CREATE INDEX IF NOT EXISTS idx_ai_prompt_entries_sensitive
 ON ai_prompt_entries(date, is_sensitive, is_deleted);
 
 CREATE TABLE IF NOT EXISTS daily_reports (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-    date TEXT NOT NULL,
-
-    model_name TEXT NOT NULL,
-    prompt_text TEXT NOT NULL,
-    report_markdown TEXT NOT NULL,
-
-    material_summary TEXT,
-    source_counts_json TEXT,
-
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  date TEXT NOT NULL,
+  model_name TEXT NOT NULL,
+  prompt_text TEXT NOT NULL,
+  report_markdown TEXT NOT NULL,
+  material_summary TEXT,
+  source_counts_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_daily_reports_date
@@ -185,3 +181,4 @@ ON daily_reports(date);
 
 CREATE INDEX IF NOT EXISTS idx_daily_reports_created_at
 ON daily_reports(created_at);
+

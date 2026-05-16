@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import os
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
+from typing import Optional
 
 from daily_report.config.paths import get_runtime_paths
 
@@ -82,3 +83,11 @@ class SqliteConnectionFactory:
 
     def open(self) -> sqlite3.Connection:
         return create_connection(self.db_path)
+
+    @contextmanager
+    def connect(self) -> Iterator[sqlite3.Connection]:
+        conn = self.open()
+        try:
+            yield conn
+        finally:
+            conn.close()
