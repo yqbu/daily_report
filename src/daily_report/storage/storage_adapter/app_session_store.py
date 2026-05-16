@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional, Protocol
 
 from daily_report.storage.database import SqliteConnectionFactory
-from daily_report.storage.repositories import AppSessionRepository
+from daily_report.storage.repositories.app_session_repository import AppSessionRepository
 
 
 class AppSessionStateLike(Protocol):

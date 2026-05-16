@@ -129,7 +129,7 @@ class MockDataProvider:
             AppSessionRecord(True, "09:00:12", "09:42:33", "VSCode", "Code.exe", "daily_reporter/main.py - Visual Studio Code", "42m 21s", True),
             AppSessionRecord(True, "09:42:33", "10:03:15", "Edge", "msedge.exe", "ChatGPT - 智能日报", "20m 42s", True),
             AppSessionRecord(False, "10:03:15", "10:16:08", "Explorer", "explorer.exe", "Downloads", "12m 53s", False),
-            AppSessionRecord(True, "10:16:08", "11:20:44", "VSCode", "Code.exe", "foreground_collector.py - Visual Studio Code", "1h 04m", True),
+            AppSessionRecord(True, "10:16:08", "11:20:44", "VSCode", "Code.exe", "app_session_collector.py - Visual Studio Code", "1h 04m", True),
             AppSessionRecord(True, "11:20:44", "11:32:10", "WeCom", "WeCom.exe", "项目组 - 工作群", "11m 26s", True),
         ]
 
@@ -694,7 +694,7 @@ class DashboardPage(QWidget):
         for text in [
             "22:11    ChatGPT    YASB 自定义 Widget 如何渲染和刷新",
             "22:06    Edge       PySide6 QTableView example",
-            "21:58    VSCode     foreground_collector.py",
+            "21:58    VSCode     app_session_collector.py",
             "20:42    剪贴板      class ForegroundCollector 片段",
             "21:30    WeCom      项目进度同步",
         ]:

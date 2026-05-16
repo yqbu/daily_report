@@ -6,6 +6,8 @@ import os
 import sqlite3
 from pathlib import Path
 
+from daily_report.config.paths import get_runtime_paths
+
 
 # def default_db_path() -> Path:
 #     """
@@ -20,11 +22,14 @@ from pathlib import Path
 #     return Path.home() / ".daily-report" / "daily_report.db"
 
 
-def default_db_path() -> Path:
-    project_root = Path(__file__).resolve().parents[3]
-    data_dir = project_root / 'data'
+# def default_db_path() -> Path:
+#     project_root = Path(__file__).resolve().parents[3]
+#     data_dir = project_root / 'data'
+#
+#     return data_dir / 'daily_report.db'
 
-    return data_dir / 'daily_report.db'
+def default_db_path() -> Path:
+    return get_runtime_paths().db_path
 
 
 def create_connection(db_path: Optional[str | Path] = None) -> sqlite3.Connection:

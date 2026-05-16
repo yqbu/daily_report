@@ -15,7 +15,7 @@ import win32gui
 import win32process
 
 from daily_report.storage.database import create_connection, default_db_path, init_database, SqliteConnectionFactory
-from daily_report.storage.storage_adapter.foreground_store import RepositoryForegroundSessionStore
+from daily_report.storage.storage_adapter.app_session_store import RepositoryForegroundSessionStore
 
 logger = logging.getLogger(__name__)
 

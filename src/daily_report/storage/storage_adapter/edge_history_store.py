@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional, Protocol
 
 from daily_report.storage.database import SqliteConnectionFactory
-from daily_report.storage.repositories import BrowserHistoryEntryRepository
+from daily_report.storage.repositories.browser_history_repository import BrowserHistoryEntryRepository
 
 
 class EdgeHistoryEntryStateLike(Protocol):

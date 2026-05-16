@@ -15,6 +15,11 @@ dist/
 
 # Local database and runtime data
 data/*
+*.db
+*.sqlite
+*.sqlite3
+local_settings.json
+status.json
 !data/.gitkeep
 logs/*
 !logs/.gitkeep

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from daily_report.storage.database import default_db_path, create_connection
-from daily_report.storage.repositories import AppSessionRepository
+from daily_report.storage.repositories.app_session_repository import AppSessionRepository
 from daily_report.yasb_bridge.collector_status import build_collector_status_payload
 
 

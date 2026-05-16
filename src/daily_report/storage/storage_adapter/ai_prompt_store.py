@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional, Protocol
 
 from daily_report.storage.database import SqliteConnectionFactory
-from daily_report.storage.repositories import AiPromptEntryRepository
+from daily_report.storage.repositories.ai_prompt_repository import AiPromptEntryRepository
 
 
 class AiPromptEntryStateLike(Protocol):

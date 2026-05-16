@@ -4,14 +4,14 @@ import threading
 import time
 import logging
 
-from daily_report.service.collector_manager import CollectorManager
+from daily_report.collector.collector_manager import CollectorManager
 from daily_report.storage.database import create_connection, default_db_path, init_database, SqliteConnectionFactory
 
 from daily_report.service.single_instance import SingleInstanceError, SingleInstanceLock
 from daily_report.service.cleanup import cleanup_database, cleanup_logs
 
-from daily_report.collector.foreground_collector import ForegroundCollector
-from daily_report.storage.storage_adapter.foreground_store import RepositoryForegroundSessionStore
+from daily_report.collector.app_session_collector import ForegroundCollector
+from daily_report.storage.storage_adapter.app_session_store import RepositoryForegroundSessionStore
 
 from daily_report.collector.clipboard_collector import ClipboardCollector
 from daily_report.storage.storage_adapter.clipboard_store import RepositoryClipboardEntryStore
