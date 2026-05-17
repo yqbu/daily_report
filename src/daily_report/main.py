@@ -16,8 +16,16 @@ def setup_logging(level: str = 'INFO') -> None:
     )
 
 
+def configured_log_level(override: str | None = None) -> str:
+    if override:
+        return override
+    from daily_report.config.local_settings import load_local_settings
+
+    return load_local_settings().logging.level
+
+
 def run_service(args: argparse.Namespace) -> None:
-    setup_logging(args.log_level)
+    setup_logging(configured_log_level(args.log_level))
     # 延迟导入, 避免只执行 report/status 命令时被采集服务依赖阻断
     from daily_report.service.app import DailyReportService
     service = DailyReportService()
@@ -47,7 +55,7 @@ def run_build_prompt(args: argparse.Namespace) -> None:
 
 
 def run_generate_today(args: argparse.Namespace) -> None:
-    setup_logging(args.log_level)
+    setup_logging(configured_log_level(args.log_level))
     service = ReportService(db_path=args.db_path)
     result = service.generate_report(
         target_date=args.date,
@@ -95,7 +103,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest='command')
 
     run_parser = subparsers.add_parser('run', help='Run background collectors' )
-    run_parser.add_argument('--log-level', default='INFO', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'])
+    run_parser.add_argument('--log-level', default=None, choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'])
     run_parser.set_defaults(func=run_service)
 
     status_parser = subparsers.add_parser('status', help='Print today\'s status for YASB or command line' )
@@ -125,7 +133,7 @@ def build_parser() -> argparse.ArgumentParser:
     gen_parser.add_argument('--out', default=None, help='Optional output markdown path' )
     gen_parser.add_argument('--no-save', action='store_true', help='Do not save to daily_reports' )
     gen_parser.add_argument('--print-prompt', action='store_true', help='Print prompt before report' )
-    gen_parser.add_argument('--log-level', default='INFO', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'])
+    gen_parser.add_argument('--log-level', default=None, choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'])
     gen_parser.set_defaults(func=run_generate_today)
 
     latest_parser = subparsers.add_parser('latest-report', help='Print latest saved report markdown for a date' )

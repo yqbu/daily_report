@@ -3,6 +3,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTextBrowser, QVBoxLayout, QWidget
 
+from daily_report.config.local_settings import load_local_settings
 from daily_report.gui.data_provider import GuiDataProvider, MaterialRow
 from daily_report.gui.widgets import Card, PageHeader, checkbox_item, make_table, normal_item
 
@@ -24,6 +25,7 @@ class MaterialReviewPage(QWidget):
         self.type_combo.currentTextChanged.connect(self.apply_filters)
         filters.addWidget(self.type_combo)
         self.hide_sensitive = QCheckBox("隐藏疑似敏感内容")
+        self.hide_sensitive.setChecked(load_local_settings().privacy.hide_sensitive_by_default)
         self.hide_sensitive.stateChanged.connect(self.apply_filters)
         filters.addWidget(self.hide_sensitive)
         filters.addStretch()
@@ -43,6 +45,7 @@ class MaterialReviewPage(QWidget):
 
         self.detail = QTextBrowser()
         self.detail.setMinimumHeight(110)
+        self.detail.setPlainText("选择上方表格中的一条素材后，这里会显示时间、来源和内容预览，便于确认是否进入日报。")
         left.addWidget(self.detail)
         content.addLayout(left, 1)
         root.addLayout(content, 1)

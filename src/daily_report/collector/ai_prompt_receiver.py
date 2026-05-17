@@ -189,6 +189,8 @@ class AiPromptReceiver:
         endpoint: str = DEFAULT_ENDPOINT,
         auth_token: Optional[str] = None,
         min_prompt_chars: int = 2,
+        sensitive_unselected_by_default: bool = True,
+        sensitive_keywords: list[str] | None = None,
     ):
         self.store = store
         self.host = host
@@ -196,6 +198,8 @@ class AiPromptReceiver:
         self.endpoint = endpoint
         self.auth_token = auth_token if auth_token is not None else os.getenv('DAILY_REPORT_AI_PROMPT_TOKEN', '').strip() or None
         self.min_prompt_chars = int(min_prompt_chars)
+        self.sensitive_unselected_by_default = sensitive_unselected_by_default
+        self.sensitive_keywords = [kw.strip() for kw in (sensitive_keywords or []) if kw.strip()]
 
         self._stop_event = threading.Event()
         self._server: Optional[HTTPServer] = None
@@ -348,6 +352,8 @@ class AiPromptReceiver:
         )
 
         is_sensitive, sensitivity_reason = detect_sensitive(prompt_text)
+        if not is_sensitive:
+            is_sensitive, sensitivity_reason = self._detect_sensitive_keyword(prompt_text)
 
         return AiPromptEntryState(
             id=None,
@@ -363,7 +369,7 @@ class AiPromptReceiver:
             char_count=len(prompt_text),
             is_sensitive=is_sensitive,
             sensitivity_reason=sensitivity_reason,
-            is_selected=not is_sensitive,
+            is_selected=(not is_sensitive) if self.sensitive_unselected_by_default else True,
             client_event_id=str(payload.get('client_event_id') or '').strip()[:128] or None,
             source=str(payload.get('source') or 'edge_extension').strip()[:64],
         )
@@ -372,6 +378,13 @@ class AiPromptReceiver:
         close = getattr(self.store, 'close', None)
         if callable(close):
             close()
+
+    def _detect_sensitive_keyword(self, text: str) -> tuple[bool, Optional[str]]:
+        lower_text = text.lower()
+        for keyword in self.sensitive_keywords:
+            if keyword.lower() in lower_text:
+                return True, f'keyword:{keyword}'
+        return False, None
 
 
 def debug_main() -> None:

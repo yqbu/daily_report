@@ -90,21 +90,337 @@ class GuiDataProvider:
         finally:
             conn.close()
 
-    def list_app_sessions(self, day: str | None = None) -> list[dict[str, Any]]:
+    def list_app_sessions(
+        self,
+        day: str | None = None,
+        *,
+        app_name: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        day = day or self.today()
+        sql = """
+            SELECT * FROM app_sessions
+            WHERE date = ?
+        """
+        params: list[Any] = [day]
+        if app_name and app_name != "全部":
+            sql += " AND app_name = ?"
+            params.append(app_name)
+        sql += " ORDER BY start_time ASC"
+        if limit is not None:
+            sql += " LIMIT ? OFFSET ?"
+            params.extend([int(limit), int(offset)])
+
+        conn = self.connect()
+        try:
+            rows = conn.execute(sql, tuple(params)).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+    def count_app_sessions(self, day: str | None = None, *, app_name: str | None = None) -> int:
+        day = day or self.today()
+        sql = "SELECT COUNT(*) AS n FROM app_sessions WHERE date = ?"
+        params: list[Any] = [day]
+        if app_name and app_name != "全部":
+            sql += " AND app_name = ?"
+            params.append(app_name)
+        conn = self.connect()
+        try:
+            row = conn.execute(sql, tuple(params)).fetchone()
+            return int(row["n"] if row else 0)
+        finally:
+            conn.close()
+
+    def list_app_names(self, day: str | None = None) -> list[str]:
         day = day or self.today()
         conn = self.connect()
         try:
             rows = conn.execute(
                 """
-                SELECT * FROM app_sessions
-                WHERE date = ?
-                ORDER BY start_time ASC
+                SELECT DISTINCT app_name
+                FROM app_sessions
+                WHERE date = ? AND app_name IS NOT NULL AND app_name != ''
+                ORDER BY app_name ASC
                 """,
                 (day,),
             ).fetchall()
-            return [dict(r) for r in rows]
+            return [str(r["app_name"]) for r in rows]
         finally:
             conn.close()
+
+    def list_clipboard_entries(
+        self,
+        day: str | None = None,
+        *,
+        keyword: str = "",
+        hide_sensitive: bool = False,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        day = day or self.today()
+        sql = """
+            SELECT *
+            FROM clipboard_entries
+            WHERE date = ? AND is_deleted = 0
+        """
+        params: list[Any] = [day]
+        if hide_sensitive:
+            sql += " AND is_sensitive = 0"
+        sql, params = self._append_keyword_filter(
+            sql,
+            params,
+            keyword,
+            ["content", "content_preview", "sensitivity_reason"],
+        )
+        sql += " ORDER BY last_seen_at DESC, id DESC"
+        sql, params = self._append_limit(sql, params, limit, offset)
+        return self._fetch_dicts(sql, tuple(params))
+
+    def count_clipboard_entries(
+        self,
+        day: str | None = None,
+        *,
+        keyword: str = "",
+        hide_sensitive: bool = False,
+    ) -> int:
+        day = day or self.today()
+        sql = """
+            SELECT COUNT(*) AS n
+            FROM clipboard_entries
+            WHERE date = ? AND is_deleted = 0
+        """
+        params: list[Any] = [day]
+        if hide_sensitive:
+            sql += " AND is_sensitive = 0"
+        sql, params = self._append_keyword_filter(
+            sql,
+            params,
+            keyword,
+            ["content", "content_preview", "sensitivity_reason"],
+        )
+        return self._fetch_count(sql, tuple(params))
+
+    def list_browser_history_entries(
+        self,
+        day: str | None = None,
+        *,
+        keyword: str = "",
+        domain: str | None = None,
+        mode: str = "全部",
+        hide_noise: bool = True,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        day = day or self.today()
+        sql = """
+            SELECT *
+            FROM browser_history_entries
+            WHERE date = ? AND is_deleted = 0
+        """
+        params: list[Any] = [day]
+        if hide_noise:
+            sql += " AND is_noise = 0"
+        if domain and domain != "全部":
+            sql += " AND domain = ?"
+            params.append(domain)
+        if mode == "搜索":
+            sql += " AND is_search = 1"
+        elif mode == "普通访问":
+            sql += " AND is_search = 0"
+        sql, params = self._append_keyword_filter(
+            sql,
+            params,
+            keyword,
+            ["title", "url", "domain", "search_engine", "search_query", "profile_name"],
+        )
+        sql += " ORDER BY visit_time DESC, id DESC"
+        sql, params = self._append_limit(sql, params, limit, offset)
+        return self._fetch_dicts(sql, tuple(params))
+
+    def count_browser_history_entries(
+        self,
+        day: str | None = None,
+        *,
+        keyword: str = "",
+        domain: str | None = None,
+        mode: str = "全部",
+        hide_noise: bool = True,
+    ) -> int:
+        day = day or self.today()
+        sql = """
+            SELECT COUNT(*) AS n
+            FROM browser_history_entries
+            WHERE date = ? AND is_deleted = 0
+        """
+        params: list[Any] = [day]
+        if hide_noise:
+            sql += " AND is_noise = 0"
+        if domain and domain != "全部":
+            sql += " AND domain = ?"
+            params.append(domain)
+        if mode == "搜索":
+            sql += " AND is_search = 1"
+        elif mode == "普通访问":
+            sql += " AND is_search = 0"
+        sql, params = self._append_keyword_filter(
+            sql,
+            params,
+            keyword,
+            ["title", "url", "domain", "search_engine", "search_query", "profile_name"],
+        )
+        return self._fetch_count(sql, tuple(params))
+
+    def list_browser_domains(self, day: str | None = None) -> list[str]:
+        day = day or self.today()
+        conn = self.connect()
+        try:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT domain
+                FROM browser_history_entries
+                WHERE date = ? AND is_deleted = 0 AND domain IS NOT NULL AND domain != ''
+                ORDER BY domain ASC
+                """,
+                (day,),
+            ).fetchall()
+            return [str(r["domain"]) for r in rows]
+        finally:
+            conn.close()
+
+    def list_ai_prompt_entries(
+        self,
+        day: str | None = None,
+        *,
+        keyword: str = "",
+        platform: str | None = None,
+        hide_sensitive: bool = False,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        day = day or self.today()
+        sql = """
+            SELECT *
+            FROM ai_prompt_entries
+            WHERE date = ? AND is_deleted = 0
+        """
+        params: list[Any] = [day]
+        if platform and platform != "全部":
+            sql += " AND platform = ?"
+            params.append(platform)
+        if hide_sensitive:
+            sql += " AND is_sensitive = 0"
+        sql, params = self._append_keyword_filter(
+            sql,
+            params,
+            keyword,
+            ["platform", "page_title", "prompt_text", "prompt_preview", "conversation_url", "source"],
+        )
+        sql += " ORDER BY timestamp DESC, id DESC"
+        sql, params = self._append_limit(sql, params, limit, offset)
+        return self._fetch_dicts(sql, tuple(params))
+
+    def count_ai_prompt_entries(
+        self,
+        day: str | None = None,
+        *,
+        keyword: str = "",
+        platform: str | None = None,
+        hide_sensitive: bool = False,
+    ) -> int:
+        day = day or self.today()
+        sql = """
+            SELECT COUNT(*) AS n
+            FROM ai_prompt_entries
+            WHERE date = ? AND is_deleted = 0
+        """
+        params: list[Any] = [day]
+        if platform and platform != "全部":
+            sql += " AND platform = ?"
+            params.append(platform)
+        if hide_sensitive:
+            sql += " AND is_sensitive = 0"
+        sql, params = self._append_keyword_filter(
+            sql,
+            params,
+            keyword,
+            ["platform", "page_title", "prompt_text", "prompt_preview", "conversation_url", "source"],
+        )
+        return self._fetch_count(sql, tuple(params))
+
+    def list_ai_platforms(self, day: str | None = None) -> list[str]:
+        day = day or self.today()
+        conn = self.connect()
+        try:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT platform
+                FROM ai_prompt_entries
+                WHERE date = ? AND is_deleted = 0 AND platform IS NOT NULL AND platform != ''
+                ORDER BY platform ASC
+                """,
+                (day,),
+            ).fetchall()
+            return [str(r["platform"]) for r in rows]
+        finally:
+            conn.close()
+
+    def list_daily_reports(
+        self,
+        *,
+        day: str | None = None,
+        keyword: str = "",
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        sql = """
+            SELECT *
+            FROM daily_reports
+            WHERE 1 = 1
+        """
+        params: list[Any] = []
+        if day:
+            sql += " AND date = ?"
+            params.append(day)
+        sql, params = self._append_keyword_filter(
+            sql,
+            params,
+            keyword,
+            ["model_name", "prompt_text", "report_markdown", "material_summary", "source_counts_json"],
+        )
+        sql += " ORDER BY created_at DESC, id DESC"
+        sql, params = self._append_limit(sql, params, limit, offset)
+        return self._fetch_dicts(sql, tuple(params))
+
+    def count_daily_reports(self, *, day: str | None = None, keyword: str = "") -> int:
+        sql = """
+            SELECT COUNT(*) AS n
+            FROM daily_reports
+            WHERE 1 = 1
+        """
+        params: list[Any] = []
+        if day:
+            sql += " AND date = ?"
+            params.append(day)
+        sql, params = self._append_keyword_filter(
+            sql,
+            params,
+            keyword,
+            ["model_name", "prompt_text", "report_markdown", "material_summary", "source_counts_json"],
+        )
+        return self._fetch_count(sql, tuple(params))
+
+    def get_daily_report(self, report_id: int) -> dict[str, Any] | None:
+        rows = self._fetch_dicts(
+            """
+            SELECT *
+            FROM daily_reports
+            WHERE id = ?
+            """,
+            (int(report_id),),
+        )
+        return rows[0] if rows else None
 
     def list_materials(self, day: str | None = None) -> list[MaterialRow]:
         day = day or self.today()
@@ -207,7 +523,24 @@ class GuiDataProvider:
             raise ValueError(f"Unsupported material table: {table}")
         conn = self.connect()
         try:
-            conn.execute(f"UPDATE {table} SET is_selected = ? WHERE id = ?", (1 if selected else 0, int(id_text)))
+            conn.execute(
+                f"UPDATE {table} SET is_selected = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
+                (1 if selected else 0, int(id_text)),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def soft_delete_material(self, key: str) -> None:
+        table, id_text = key.split(":", 1)
+        if table not in {"clipboard_entries", "browser_history_entries", "ai_prompt_entries"}:
+            raise ValueError(f"Unsupported soft delete table: {table}")
+        conn = self.connect()
+        try:
+            conn.execute(
+                f"UPDATE {table} SET is_deleted = 1, updated_at = datetime('now', 'localtime') WHERE id = ?",
+                (int(id_text),),
+            )
             conn.commit()
         finally:
             conn.close()
@@ -228,7 +561,55 @@ class GuiDataProvider:
     @staticmethod
     def _count(conn: sqlite3.Connection, table: str, day: str) -> int:
         try:
-            row = conn.execute(f"SELECT COUNT(*) AS n FROM {table} WHERE date = ?", (day,)).fetchone()
+            deleted_clause = " AND is_deleted = 0" if table in {
+                "clipboard_entries",
+                "browser_history_entries",
+                "ai_prompt_entries",
+            } else ""
+            row = conn.execute(f"SELECT COUNT(*) AS n FROM {table} WHERE date = ?{deleted_clause}", (day,)).fetchone()
             return int(row["n"] if row else 0)
         except sqlite3.Error:
             return 0
+
+    @staticmethod
+    def _append_keyword_filter(
+        sql: str,
+        params: list[Any],
+        keyword: str,
+        columns: list[str],
+    ) -> tuple[str, list[Any]]:
+        keyword = keyword.strip()
+        if not keyword:
+            return sql, params
+        like = f"%{keyword}%"
+        sql += " AND (" + " OR ".join(f"{column} LIKE ?" for column in columns) + ")"
+        params.extend([like] * len(columns))
+        return sql, params
+
+    @staticmethod
+    def _append_limit(
+        sql: str,
+        params: list[Any],
+        limit: int | None,
+        offset: int,
+    ) -> tuple[str, list[Any]]:
+        if limit is None:
+            return sql, params
+        sql += " LIMIT ? OFFSET ?"
+        params.extend([int(limit), int(offset)])
+        return sql, params
+
+    def _fetch_dicts(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
+        conn = self.connect()
+        try:
+            return [dict(row) for row in conn.execute(sql, params).fetchall()]
+        finally:
+            conn.close()
+
+    def _fetch_count(self, sql: str, params: tuple[Any, ...] = ()) -> int:
+        conn = self.connect()
+        try:
+            row = conn.execute(sql, params).fetchone()
+            return int(row["n"] if row else 0)
+        finally:
+            conn.close()

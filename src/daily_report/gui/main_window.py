@@ -3,11 +3,14 @@ from __future__ import annotations
 from PySide6.QtWidgets import QButtonGroup, QFrame, QHBoxLayout, QLabel, QMainWindow, QPushButton, QStackedWidget, QVBoxLayout, QWidget
 
 from daily_report.gui.data_provider import GuiDataProvider
+from daily_report.gui.pages.ai_prompts_page import AiPromptsPage
 from daily_report.gui.pages.app_sessions_page import AppSessionsPage
+from daily_report.gui.pages.browser_history_page import BrowserHistoryPage
+from daily_report.gui.pages.clipboard_page import ClipboardPage
 from daily_report.gui.pages.dashboard_page import DashboardPage
 from daily_report.gui.pages.material_review_page import MaterialReviewPage
-from daily_report.gui.pages.placeholder_page import PlaceholderPage
 from daily_report.gui.pages.report_generate_page import ReportGeneratePage
+from daily_report.gui.pages.reports_history_page import ReportsHistoryPage
 from daily_report.gui.pages.settings_page import SettingsPage
 
 
@@ -46,12 +49,12 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.stack.addWidget(DashboardPage(self.provider))
         self.stack.addWidget(AppSessionsPage(self.provider))
-        self.stack.addWidget(PlaceholderPage("剪贴板", "查看复制文本记录，支持脱敏、预览和人工勾选"))
-        self.stack.addWidget(PlaceholderPage("浏览记录", "查看 Edge 历史记录、搜索关键词和噪声过滤结果"))
-        self.stack.addWidget(PlaceholderPage("AI 提问", "查看 ChatGPT / DeepSeek 用户提问记录"))
+        self.stack.addWidget(ClipboardPage(self.provider))
+        self.stack.addWidget(BrowserHistoryPage(self.provider))
+        self.stack.addWidget(AiPromptsPage(self.provider))
         self.stack.addWidget(MaterialReviewPage(self.provider))
         self.stack.addWidget(ReportGeneratePage(self.provider))
-        self.stack.addWidget(PlaceholderPage("历史日报", "查看、复制和导出历史生成的 Markdown 日报"))
+        self.stack.addWidget(ReportsHistoryPage(self.provider))
         self.stack.addWidget(SettingsPage(self.provider))
         layout.addWidget(self.stack, 1)
         self.set_page(0)

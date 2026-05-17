@@ -157,11 +157,15 @@ def make_table(columns: list[str]) -> QTableWidget:
     table = QTableWidget(0, len(columns))
     table.setHorizontalHeaderLabels(columns)
     table.verticalHeader().setVisible(False)
+    table.verticalHeader().setDefaultSectionSize(38)
     table.setSelectionBehavior(QTableWidget.SelectRows)
     table.setEditTriggers(QTableWidget.NoEditTriggers)
+    table.setAlternatingRowColors(True)
+    table.setWordWrap(False)
     table.setShowGrid(False)
     table.horizontalHeader().setStretchLastSection(True)
     table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+    table.horizontalHeader().setMinimumSectionSize(86)
     table.setMinimumHeight(260)
     return table
 

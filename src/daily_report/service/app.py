@@ -5,6 +5,7 @@ import time
 import logging
 
 from daily_report.collector.collector_manager import CollectorManager
+from daily_report.config.local_settings import load_local_settings
 from daily_report.storage.database import create_connection, default_db_path, init_database, SqliteConnectionFactory
 
 from daily_report.service.single_instance import SingleInstanceError, SingleInstanceLock
@@ -46,51 +47,63 @@ class DailyReportService:
             conn.close()
 
     def setup_collectors(self) -> None:
-        foreground_store = RepositoryForegroundSessionStore(connection_factory=self.connection_factory)
-        foreground_collector = ForegroundCollector(
-            store=foreground_store,
-            poll_interval_sec=2.0,
-            idle_threshold_sec=180,
-            split_on_title_change=True,
-            min_title_change_interval_sec=2.0,
-            flush_interval_sec=10.0,
-        )
-        self.manager.add('foreground', foreground_collector)
+        settings = load_local_settings()
 
-        clipboard_store = RepositoryClipboardEntryStore(connection_factory=self.connection_factory)
-        clipboard_collector = ClipboardCollector(
-            store=clipboard_store,
-            poll_interval_sec=1.0,
-            min_text_chars=2,
-            max_text_chars=10_000,
-            preview_chars=160,
-        )
-        self.manager.add('clipboard', clipboard_collector)
+        if settings.collector.foreground_enabled:
+            foreground_store = RepositoryForegroundSessionStore(connection_factory=self.connection_factory)
+            foreground_collector = ForegroundCollector(
+                store=foreground_store,
+                poll_interval_sec=float(settings.collector.foreground_poll_interval_sec),
+                idle_threshold_sec=180,
+                split_on_title_change=True,
+                min_title_change_interval_sec=2.0,
+                flush_interval_sec=10.0,
+            )
+            self.manager.add('foreground', foreground_collector)
 
-        edge_store = RepositoryEdgeHistoryEntryStore(connection_factory=self.connection_factory)
-        edge_collector = EdgeHistoryCollector(
-            store=edge_store,
-            poll_interval_sec=60.0,
-            initial_lookback_hours=24,
-            max_rows_per_profile=500,
-        )
-        self.manager.add('edge_history', edge_collector)
+        if settings.collector.clipboard_enabled:
+            clipboard_store = RepositoryClipboardEntryStore(connection_factory=self.connection_factory)
+            clipboard_collector = ClipboardCollector(
+                store=clipboard_store,
+                poll_interval_sec=1.0,
+                min_text_chars=2,
+                max_text_chars=10_000,
+                preview_chars=160,
+                sensitive_unselected_by_default=settings.privacy.sensitive_unselected_by_default,
+                sensitive_keywords=settings.privacy.sensitive_keywords,
+                clipboard_preview_only=settings.privacy.clipboard_preview_only,
+            )
+            self.manager.add('clipboard', clipboard_collector)
 
-        ai_prompt_store = RepositoryAiPromptEntryStore(connection_factory=self.connection_factory)
-        ai_prompt_receiver = AiPromptReceiver(
-            store=ai_prompt_store,
-            host='127.0.0.1',
-            port=8765,
-            endpoint='/api/ai-prompts',
-        )
-        self.manager.add('ai_prompt', ai_prompt_receiver)
+        if settings.collector.edge_history_enabled:
+            edge_store = RepositoryEdgeHistoryEntryStore(connection_factory=self.connection_factory)
+            edge_collector = EdgeHistoryCollector(
+                store=edge_store,
+                poll_interval_sec=float(settings.collector.edge_sync_interval_min * 60),
+                initial_lookback_hours=24,
+                max_rows_per_profile=500,
+            )
+            self.manager.add('edge_history', edge_collector)
+
+        if settings.collector.ai_prompt_enabled:
+            ai_prompt_store = RepositoryAiPromptEntryStore(connection_factory=self.connection_factory)
+            ai_prompt_receiver = AiPromptReceiver(
+                store=ai_prompt_store,
+                host='127.0.0.1',
+                port=8765,
+                endpoint='/api/ai-prompts',
+                sensitive_unselected_by_default=settings.privacy.sensitive_unselected_by_default,
+                sensitive_keywords=settings.privacy.sensitive_keywords,
+            )
+            self.manager.add('ai_prompt', ai_prompt_receiver)
 
     def cleanup_runtime_data(self) -> None:
+        settings = load_local_settings()
         conn = create_connection(self.db_path)
         try:
             cleanup_database(
                 conn,
-                retention_days=7,
+                retention_days=settings.logging.retention_days,
                 report_retention_days=90,
                 vacuum=False,
             )
@@ -99,7 +112,7 @@ class DailyReportService:
 
         cleanup_logs(
             self.db_path.parent.parent / 'logs',
-            retention_days=7,
+            retention_days=settings.logging.retention_days,
         )
 
     def start_cleanup_worker(self) -> None:

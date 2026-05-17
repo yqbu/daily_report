@@ -179,12 +179,18 @@ class ClipboardCollector:
         min_text_chars: int = 2,
         max_text_chars: int = 10_000,
         preview_chars: int = 160,
+        sensitive_unselected_by_default: bool = True,
+        sensitive_keywords: list[str] | None = None,
+        clipboard_preview_only: bool = False,
     ):
         self.store = store
         self.poll_interval_sec = poll_interval_sec
         self.min_text_chars = min_text_chars
         self.max_text_chars = max_text_chars
         self.preview_chars = preview_chars
+        self.sensitive_unselected_by_default = sensitive_unselected_by_default
+        self.sensitive_keywords = [kw.strip() for kw in (sensitive_keywords or []) if kw.strip()]
+        self.clipboard_preview_only = clipboard_preview_only
 
         self._stop_event = threading.Event()
         self._last_hash: Optional[str] = None
@@ -244,19 +250,22 @@ class ClipboardCollector:
 
         now = datetime.now()
         is_sensitive, sensitivity_reason = detect_sensitive(text)
+        if not is_sensitive:
+            is_sensitive, sensitivity_reason = self.detect_sensitive_keyword(text)
 
+        content_preview = make_preview(text, self.preview_chars)
         entry = ClipboardEntryState(
             id=None,
             date=now.date().isoformat(),
             first_seen_at=now,
             last_seen_at=now,
-            content=text,
-            content_preview=make_preview(text, self.preview_chars),
+            content=content_preview if self.clipboard_preview_only else text,
+            content_preview=content_preview,
             content_hash=content_hash,
             char_count=len(text),
             is_sensitive=is_sensitive,
             sensitivity_reason=sensitivity_reason,
-            is_selected=not is_sensitive,
+            is_selected=(not is_sensitive) if self.sensitive_unselected_by_default else True,
         )
 
         entry.id = self.store.save_entry(entry)
@@ -273,3 +282,10 @@ class ClipboardCollector:
         close = getattr(self.store, 'close', None)
         if callable(close):
             close()
+
+    def detect_sensitive_keyword(self, text: str) -> tuple[bool, Optional[str]]:
+        lower_text = text.lower()
+        for keyword in self.sensitive_keywords:
+            if keyword.lower() in lower_text:
+                return True, f'keyword:{keyword}'
+        return False, None

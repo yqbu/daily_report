@@ -5,7 +5,7 @@ from datetime import date as date_cls
 from pathlib import Path
 from typing import Any
 
-from daily_report.config.local_settings import load_local_settings
+from daily_report.config.local_settings import get_model_api_key, load_local_settings
 from daily_report.reporter.deepseek_client import ChatMessage, DeepSeekClient
 from daily_report.reporter.prompt_builder import ReportMaterialBundle, build_daily_report_prompt
 from daily_report.storage.database import (
@@ -155,10 +155,11 @@ class ReportService:
         prompt = self.build_prompt(day, max_chars=settings.model.max_prompt_chars)
 
         client = DeepSeekClient(
-            api_key=api_key or settings.model.api_key,
+            api_key=api_key or get_model_api_key(settings),
             model_name=settings.model.model_name,
             base_url=settings.model.base_url,
             temperature=settings.model.temperature,
+            timeout_seconds=settings.model.timeout_seconds,
         )
         markdown = client.chat(
             [

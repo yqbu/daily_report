@@ -68,6 +68,10 @@ class ReportGeneratePage(QWidget):
         self.prompt_text.setPlainText(prompt)
 
     def generate_report(self) -> None:
+        if load_local_settings().privacy.require_manual_confirm_before_llm:
+            message = "将把已勾选素材汇总后发送给模型生成日报，是否继续？"
+            if QMessageBox.question(self, "确认调用模型", message) != QMessageBox.StandardButton.Yes:
+                return
         self.generate_btn.setEnabled(False)
         self.generate_btn.setText("生成中...")
 
