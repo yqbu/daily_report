@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import date
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QComboBox, QDateEdit, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from daily_report.gui.data_provider import GuiDataProvider
-from daily_report.gui.widgets import PageHeader, checkbox_item, fmt_seconds, make_table, normal_item
+from daily_report.gui.widgets import PageHeader, SmartDateEdit, checkbox_item, fmt_seconds, make_table, normal_item
 
 
 class AppSessionsPage(QWidget):
@@ -25,8 +25,7 @@ class AppSessionsPage(QWidget):
 
         filters = QHBoxLayout()
         filters.addWidget(QLabel("日期："))
-        self.date_edit = QDateEdit()
-        self.date_edit.setCalendarPopup(True)
+        self.date_edit = SmartDateEdit()
         self.date_edit.setDate(date.today())
         self.date_edit.dateChanged.connect(self.refresh)
         filters.addWidget(self.date_edit)

@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
-    QDateEdit,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -20,7 +19,7 @@ from PySide6.QtWidgets import (
 
 from daily_report.config.local_settings import load_local_settings
 from daily_report.gui.data_provider import GuiDataProvider
-from daily_report.gui.widgets import Card, PageHeader, checkbox_item, make_table, normal_item
+from daily_report.gui.widgets import Card, PageHeader, SmartDateEdit, checkbox_item, make_table, normal_item
 
 
 class AiPromptsPage(QWidget):
@@ -41,8 +40,7 @@ class AiPromptsPage(QWidget):
 
         filters = QHBoxLayout()
         filters.addWidget(QLabel("日期："))
-        self.date_edit = QDateEdit()
-        self.date_edit.setCalendarPopup(True)
+        self.date_edit = SmartDateEdit()
         self.date_edit.setDate(date.today())
         self.date_edit.dateChanged.connect(self.refresh)
         filters.addWidget(self.date_edit)

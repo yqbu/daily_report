@@ -5,7 +5,6 @@ from datetime import date
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
-    QDateEdit,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -20,7 +19,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from daily_report.gui.data_provider import GuiDataProvider
-from daily_report.gui.widgets import Card, PageHeader, make_table, normal_item
+from daily_report.gui.widgets import Card, PageHeader, SmartDateEdit, make_table, normal_item
 
 
 class ReportsHistoryPage(QWidget):
@@ -43,8 +42,7 @@ class ReportsHistoryPage(QWidget):
         self.date_filter = QCheckBox("按日期过滤")
         self.date_filter.stateChanged.connect(self.refresh)
         filters.addWidget(self.date_filter)
-        self.date_edit = QDateEdit()
-        self.date_edit.setCalendarPopup(True)
+        self.date_edit = SmartDateEdit()
         self.date_edit.setDate(date.today())
         self.date_edit.dateChanged.connect(self.refresh)
         filters.addWidget(self.date_edit)

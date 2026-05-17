@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
-from PySide6.QtCore import Qt, QRectF
-from PySide6.QtGui import QColor, QPainter, QPen, QBrush, QFont
+from PySide6.QtCore import QDate, QPoint, QSize, Qt, QRectF, Signal
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QBrush, QFont
 from PySide6.QtWidgets import (
-    QFrame, QHeaderView, QLabel, QPushButton, QSizePolicy, QTableWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget
+    QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QPushButton,
+    QSizePolicy, QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget
 )
 
 
@@ -42,9 +43,9 @@ class MetricCard(Card):
         title_label = QLabel(title)
         title_label.setObjectName("MutedText")
         value_label = QLabel(value)
-        value_label.setStyleSheet("font-size: 28px; font-weight: 800; color: #1d4ed8;")
+        value_label.setStyleSheet("font-size: 21pt; font-weight: 800; color: #1d4ed8;")
         delta_label = QLabel(delta)
-        delta_label.setStyleSheet("font-size: 12px; color: #16a34a; font-weight: 600;")
+        delta_label.setStyleSheet("font-size: 9pt; color: #16a34a; font-weight: 600;")
         layout.addWidget(title_label)
         layout.addWidget(value_label)
         layout.addWidget(delta_label)
@@ -63,6 +64,199 @@ class PageHeader(QWidget):
             subtitle_label = QLabel(subtitle)
             subtitle_label.setObjectName("MutedText")
             layout.addWidget(subtitle_label)
+
+
+class MaterialDatePopup(QFrame):
+    date_selected = Signal(QDate)
+
+    def __init__(self, selected_date: QDate, max_date: QDate, parent: QWidget | None = None):
+        super().__init__(parent, Qt.WindowType.Popup)
+        self.setObjectName("MaterialDatePopup")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.selected_date = selected_date
+        self.max_date = max_date
+        self.visible_month = QDate(selected_date.year(), selected_date.month(), 1)
+        self.day_buttons: list[QPushButton] = []
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+
+        header = QHBoxLayout()
+        header.setSpacing(8)
+        self.prev_btn = QToolButton()
+        self.prev_btn.setObjectName("CalendarNavButton")
+        self.prev_btn.setText("‹")
+        self.prev_btn.clicked.connect(lambda: self.change_month(-1))
+        header.addWidget(self.prev_btn)
+
+        self.title = QLabel()
+        self.title.setObjectName("CalendarTitle")
+        self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header.addWidget(self.title, 1)
+
+        self.next_btn = QToolButton()
+        self.next_btn.setObjectName("CalendarNavButton")
+        self.next_btn.setText("›")
+        self.next_btn.clicked.connect(lambda: self.change_month(1))
+        header.addWidget(self.next_btn)
+        layout.addLayout(header)
+
+        week_row = QGridLayout()
+        week_row.setHorizontalSpacing(4)
+        for col, name in enumerate(["一", "二", "三", "四", "五", "六", "日"]):
+            label = QLabel(name)
+            label.setObjectName("CalendarWeekday")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            week_row.addWidget(label, 0, col)
+        layout.addLayout(week_row)
+
+        self.days_grid = QGridLayout()
+        self.days_grid.setHorizontalSpacing(4)
+        self.days_grid.setVerticalSpacing(4)
+        for row in range(6):
+            for col in range(7):
+                button = QPushButton()
+                button.setObjectName("CalendarDayButton")
+                button.setFixedSize(34, 30)
+                button.clicked.connect(self.select_day)
+                self.day_buttons.append(button)
+                self.days_grid.addWidget(button, row, col)
+        layout.addLayout(self.days_grid)
+
+        footer = QHBoxLayout()
+        footer.addStretch()
+        today_btn = QPushButton("今天")
+        today_btn.setObjectName("CalendarTodayButton")
+        today_btn.clicked.connect(lambda: self.pick_date(QDate.currentDate()))
+        footer.addWidget(today_btn)
+        layout.addLayout(footer)
+
+        self.refresh()
+
+    def change_month(self, months: int) -> None:
+        next_month = self.visible_month.addMonths(months)
+        max_month = QDate(self.max_date.year(), self.max_date.month(), 1)
+        if next_month > max_month:
+            return
+        self.visible_month = next_month
+        self.refresh()
+
+    def refresh(self) -> None:
+        self.title.setText(self.visible_month.toString("yyyy年 M月"))
+        max_month = QDate(self.max_date.year(), self.max_date.month(), 1)
+        self.next_btn.setEnabled(self.visible_month < max_month)
+
+        first = self.visible_month
+        start_col = first.dayOfWeek() - 1
+        days = first.daysInMonth()
+        today = QDate.currentDate()
+
+        for index, button in enumerate(self.day_buttons):
+            day_number = index - start_col + 1
+            valid = 1 <= day_number <= days
+            if not valid:
+                button.setText("")
+                button.setEnabled(False)
+                button.setProperty("today", False)
+                button.setProperty("selected", False)
+                self.repolish(button)
+                continue
+
+            date_value = QDate(first.year(), first.month(), day_number)
+            button.setText(str(day_number))
+            button.date_value = date_value
+            button.setEnabled(date_value <= self.max_date)
+            button.setProperty("today", date_value == today)
+            button.setProperty("selected", date_value == self.selected_date)
+            self.repolish(button)
+
+    def select_day(self) -> None:
+        button = self.sender()
+        if not isinstance(button, QPushButton):
+            return
+        date_value = getattr(button, "date_value", None)
+        if isinstance(date_value, QDate):
+            self.pick_date(date_value)
+
+    def pick_date(self, date_value: QDate) -> None:
+        if date_value > self.max_date:
+            return
+        self.selected_date = date_value
+        self.date_selected.emit(date_value)
+        self.hide()
+
+    @staticmethod
+    def repolish(widget: QWidget) -> None:
+        widget.style().unpolish(widget)
+        widget.style().polish(widget)
+
+
+class SmartDateEdit(QWidget):
+    dateChanged = Signal(QDate)
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._date = QDate.currentDate()
+        self._maximum_date = QDate.currentDate()
+        self.popup: MaterialDatePopup | None = None
+
+        self.setObjectName("SmartDateEdit")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setFixedWidth(220)
+        self.setFixedHeight(32)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self.line = QLineEdit()
+        self.line.setReadOnly(True)
+        self.line.setObjectName("SmartDateEditLine")
+        layout.addWidget(self.line, 1)
+
+        self.button = QToolButton()
+        self.button.setObjectName("SmartDateEditButton")
+        self.button.setText("")
+        self.button.setIcon(QIcon(str(Path(__file__).with_name("assets") / "chevron-down.svg")))
+        self.button.setIconSize(QSize(14, 14))
+        self.button.setFixedSize(32, 32)
+        self.button.clicked.connect(self.show_calendar)
+        layout.addWidget(self.button)
+        self.update_text()
+
+    def date(self) -> QDate:
+        return self._date
+
+    def setDate(self, date_value: QDate) -> None:
+        if date_value > self._maximum_date:
+            date_value = self._maximum_date
+        if date_value == self._date:
+            self.update_text()
+            return
+        self._date = date_value
+        self.update_text()
+        self.dateChanged.emit(self._date)
+
+    def setMaximumDate(self, date_value: QDate) -> None:
+        self._maximum_date = date_value
+        if self._date > self._maximum_date:
+            self.setDate(self._maximum_date)
+
+    def maximumDate(self) -> QDate:
+        return self._maximum_date
+
+    def update_text(self) -> None:
+        self.line.setText(self._date.toString("yyyy-MM-dd"))
+
+    def show_calendar(self) -> None:
+        if self.popup is not None:
+            self.popup.hide()
+            self.popup.deleteLater()
+        self.popup = MaterialDatePopup(self._date, self._maximum_date, self)
+        self.popup.date_selected.connect(self.setDate)
+        pos = self.mapToGlobal(QPoint(0, self.height() + 4))
+        self.popup.move(pos)
+        self.popup.show()
 
 
 class UsageBarChart(Card):

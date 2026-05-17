@@ -47,6 +47,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._create_sidebar())
 
         self.stack = QStackedWidget()
+        self.stack.setObjectName("AppStack")
         self.stack.addWidget(DashboardPage(self.provider))
         self.stack.addWidget(AppSessionsPage(self.provider))
         self.stack.addWidget(ClipboardPage(self.provider))

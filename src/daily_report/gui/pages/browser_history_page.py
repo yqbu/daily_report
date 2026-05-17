@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
-    QDateEdit,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -19,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from daily_report.gui.data_provider import GuiDataProvider
-from daily_report.gui.widgets import Card, PageHeader, checkbox_item, fmt_seconds, make_table, normal_item
+from daily_report.gui.widgets import Card, PageHeader, SmartDateEdit, checkbox_item, fmt_seconds, make_table, normal_item
 
 
 class BrowserHistoryPage(QWidget):
@@ -40,8 +39,7 @@ class BrowserHistoryPage(QWidget):
 
         filters = QHBoxLayout()
         filters.addWidget(QLabel("日期："))
-        self.date_edit = QDateEdit()
-        self.date_edit.setCalendarPopup(True)
+        self.date_edit = SmartDateEdit()
         self.date_edit.setDate(date.today())
         self.date_edit.dateChanged.connect(self.refresh)
         filters.addWidget(self.date_edit)
@@ -63,16 +61,20 @@ class BrowserHistoryPage(QWidget):
         filters.addWidget(self.hide_noise)
 
         filters.addStretch()
-        self.search = QLineEdit()
-        self.search.setPlaceholderText("搜索标题、URL、域名或搜索词")
-        self.search.setFixedWidth(300)
-        self.search.returnPressed.connect(self.refresh)
-        filters.addWidget(self.search)
-
         refresh_btn = QPushButton("刷新")
         refresh_btn.clicked.connect(self.refresh)
         filters.addWidget(refresh_btn)
         root.addLayout(filters)
+
+        search_row = QHBoxLayout()
+        search_row.setSpacing(10)
+        search_row.addWidget(QLabel("搜索："))
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("搜索标题、URL、域名或搜索词")
+        self.search.setMinimumWidth(260)
+        self.search.returnPressed.connect(self.refresh)
+        search_row.addWidget(self.search, 1)
+        root.addLayout(search_row)
 
         self.table = make_table(["选中", "时间", "类型", "标题 / 搜索词", "域名", "浏览器", "Profile", "停留", "噪声"])
         self.table.itemChanged.connect(self.on_item_changed)
