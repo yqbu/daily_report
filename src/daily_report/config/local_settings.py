@@ -22,6 +22,11 @@ class ModelSettings:
 
 
 @dataclass
+class AppSettings:
+    model: ModelSettings
+
+
+@dataclass
 class CollectorSettings:
     foreground_enabled: bool = True
     clipboard_enabled: bool = True
@@ -71,6 +76,11 @@ class LocalSettings:
     logging: LoggingSettings = field(default_factory=LoggingSettings)
 
 
+def get_settings_path() -> Path:
+    # 与当前项目的 data/daily_report.db 放在同级目录，便于本地单机部署。
+    return get_runtime_paths().db_path.parent / "local_settings.json"
+
+
 def load_local_settings(path: Path | None = None) -> LocalSettings:
     paths = get_runtime_paths()
     settings_path = path or paths.local_settings_path
@@ -91,15 +101,17 @@ def load_local_settings(path: Path | None = None) -> LocalSettings:
 
 
 def save_local_settings(
-    settings: LocalSettings,
-    path: Path | None = None,
+        settings: LocalSettings,
+        path: Path | None = None,
+        save_api_key: bool = True
 ) -> None:
     paths = get_runtime_paths()
     settings_path = path or paths.local_settings_path
     settings_path.parent.mkdir(parents=True, exist_ok=True)
 
     data = asdict(settings)
-
+    if not save_api_key:
+        data["model"]["api_key"] = ""
     fd, tmp_name = tempfile.mkstemp(
         prefix=settings_path.name,
         suffix='.tmp',

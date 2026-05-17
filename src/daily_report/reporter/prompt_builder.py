@@ -53,3 +53,25 @@ def build_daily_report_prompt(bundle: ReportMaterialBundle, *, max_chars: int = 
     if max_chars > 0 and len(prompt) > max_chars:
         prompt = prompt[:max_chars] + '\n\n[提示: 由于长度限制, 后续素材已截断]'
     return prompt
+
+
+def build_material_summary(bundle: ReportMaterialBundle) -> str:
+    lines: list[str] = [
+        f"日期：{bundle.date}",
+        f"总时长：{bundle.total_time}",
+        f"活跃时间：{bundle.active_time}",
+        "",
+        "Top 应用：",
+    ]
+    lines.extend([f"- {item}" for item in bundle.top_apps] or ["- 暂无"])
+
+    sections = [
+        ("应用使用记录", bundle.app_sessions),
+        ("剪贴板素材", bundle.clipboard_items),
+        ("浏览记录与搜索", bundle.browser_items),
+        ("AI 提问记录", bundle.ai_prompts),
+    ]
+    for title, items in sections:
+        lines.extend(["", f"{title}："])
+        lines.extend([f"- {item}" for item in items] or ["- 暂无"])
+    return "\n".join(lines)

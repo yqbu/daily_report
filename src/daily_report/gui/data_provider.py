@@ -1,0 +1,234 @@
+from __future__ import annotations
+
+import sqlite3
+from dataclasses import dataclass
+from datetime import date as date_cls
+from pathlib import Path
+from typing import Any
+
+from daily_report.storage.database import create_connection, default_db_path, init_database
+from daily_report.yasb_bridge.usage_status import build_status_payload, fmt_seconds
+
+
+@dataclass(frozen=True)
+class MaterialRow:
+    key: str
+    selected: bool
+    time: str
+    source_type: str
+    preview: str
+    source: str
+    sensitive: bool
+
+
+class GuiDataProvider:
+    def __init__(self, db_path: str | Path | None = None):
+        self.db_path = Path(db_path) if db_path is not None else default_db_path()
+        self.ensure_database()
+
+    def ensure_database(self) -> None:
+        conn = create_connection(self.db_path)
+        try:
+            init_database(conn)
+        finally:
+            conn.close()
+
+    def connect(self) -> sqlite3.Connection:
+        return create_connection(self.db_path)
+
+    @staticmethod
+    def today() -> str:
+        return date_cls.today().isoformat()
+
+    def status(self, day: str | None = None) -> dict[str, Any]:
+        return build_status_payload(target_date=day, limit=5)
+
+    def dashboard(self, day: str | None = None) -> dict[str, Any]:
+        day = day or self.today()
+        conn = self.connect()
+        try:
+            total = conn.execute(
+                """
+                SELECT COALESCE(SUM(duration_sec), 0) AS total_duration_sec,
+                       COALESCE(SUM(active_duration_sec), 0) AS total_active_duration_sec,
+                       COUNT(*) AS session_count
+                FROM app_sessions
+                WHERE date = ?
+                """,
+                (day,),
+            ).fetchone()
+            top = conn.execute(
+                """
+                SELECT app_name, SUM(active_duration_sec) AS active_sec, COUNT(*) AS session_count
+                FROM app_sessions
+                WHERE date = ?
+                GROUP BY app_name
+                ORDER BY active_sec DESC
+                LIMIT 5
+                """,
+                (day,),
+            ).fetchall()
+            sessions = self.list_app_sessions(day)
+            return {
+                "date": day,
+                "active_time": fmt_seconds(total["total_active_duration_sec"] if total else 0),
+                "total_time": fmt_seconds(total["total_duration_sec"] if total else 0),
+                "app_session_count": int(total["session_count"] if total else 0),
+                "clipboard_count": self._count(conn, "clipboard_entries", day),
+                "browser_count": self._count(conn, "browser_history_entries", day),
+                "ai_prompt_count": self._count(conn, "ai_prompt_entries", day),
+                "top_apps": [
+                    {
+                        "name": row["app_name"],
+                        "seconds": float(row["active_sec"] or 0),
+                        "session_count": int(row["session_count"] or 0),
+                    }
+                    for row in top
+                ],
+                "sessions": sessions,
+            }
+        finally:
+            conn.close()
+
+    def list_app_sessions(self, day: str | None = None) -> list[dict[str, Any]]:
+        day = day or self.today()
+        conn = self.connect()
+        try:
+            rows = conn.execute(
+                """
+                SELECT * FROM app_sessions
+                WHERE date = ?
+                ORDER BY start_time ASC
+                """,
+                (day,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+    def list_materials(self, day: str | None = None) -> list[MaterialRow]:
+        day = day or self.today()
+        conn = self.connect()
+        try:
+            rows: list[MaterialRow] = []
+            for r in conn.execute(
+                """
+                SELECT id, is_selected, start_time, app_name, window_title, is_active
+                FROM app_sessions
+                WHERE date = ?
+                ORDER BY start_time DESC
+                """,
+                (day,),
+            ).fetchall():
+                rows.append(
+                    MaterialRow(
+                        key=f"app_sessions:{r['id']}",
+                        selected=bool(r["is_selected"]),
+                        time=self._time_part(r["start_time"]),
+                        source_type="应用记录",
+                        preview=f"{r['app_name']} - {r['window_title'] or ''}",
+                        source=r["app_name"],
+                        sensitive=False,
+                    )
+                )
+            for r in self._safe_fetchall(
+                conn,
+                """
+                SELECT id, is_selected, last_seen_at, content_preview, is_sensitive
+                FROM clipboard_entries
+                WHERE date = ? AND is_deleted = 0
+                ORDER BY last_seen_at DESC
+                """,
+                (day,),
+            ):
+                rows.append(
+                    MaterialRow(
+                        key=f"clipboard_entries:{r['id']}",
+                        selected=bool(r["is_selected"]),
+                        time=self._time_part(r["last_seen_at"]),
+                        source_type="剪贴板",
+                        preview=r["content_preview"],
+                        source="剪贴板",
+                        sensitive=bool(r["is_sensitive"]),
+                    )
+                )
+            for r in self._safe_fetchall(
+                conn,
+                """
+                SELECT id, is_selected, visit_time, title, domain, is_search, search_engine, search_query
+                FROM browser_history_entries
+                WHERE date = ? AND is_deleted = 0 AND is_noise = 0
+                ORDER BY visit_time DESC
+                """,
+                (day,),
+            ):
+                preview = f"搜索：{r['search_query']}" if r["is_search"] else (r["title"] or r["domain"] or "")
+                source = r["search_engine"] if r["is_search"] else (r["domain"] or "Edge")
+                rows.append(
+                    MaterialRow(
+                        key=f"browser_history_entries:{r['id']}",
+                        selected=bool(r["is_selected"]),
+                        time=self._time_part(r["visit_time"]),
+                        source_type="浏览记录",
+                        preview=preview,
+                        source=source or "Edge",
+                        sensitive=False,
+                    )
+                )
+            for r in self._safe_fetchall(
+                conn,
+                """
+                SELECT id, is_selected, timestamp, platform, prompt_preview, is_sensitive
+                FROM ai_prompt_entries
+                WHERE date = ? AND is_deleted = 0
+                ORDER BY timestamp DESC
+                """,
+                (day,),
+            ):
+                rows.append(
+                    MaterialRow(
+                        key=f"ai_prompt_entries:{r['id']}",
+                        selected=bool(r["is_selected"]),
+                        time=self._time_part(r["timestamp"]),
+                        source_type="AI 提问",
+                        preview=r["prompt_preview"],
+                        source=r["platform"],
+                        sensitive=bool(r["is_sensitive"]),
+                    )
+                )
+            rows.sort(key=lambda x: x.time, reverse=True)
+            return rows
+        finally:
+            conn.close()
+
+    def update_material_selected(self, key: str, selected: bool) -> None:
+        table, id_text = key.split(":", 1)
+        if table not in {"app_sessions", "clipboard_entries", "browser_history_entries", "ai_prompt_entries"}:
+            raise ValueError(f"Unsupported material table: {table}")
+        conn = self.connect()
+        try:
+            conn.execute(f"UPDATE {table} SET is_selected = ? WHERE id = ?", (1 if selected else 0, int(id_text)))
+            conn.commit()
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _time_part(value: str | None) -> str:
+        if not value:
+            return ""
+        return value[11:19] if len(value) >= 19 else value
+
+    @staticmethod
+    def _safe_fetchall(conn: sqlite3.Connection, sql: str, params: tuple) -> list[sqlite3.Row]:
+        try:
+            return list(conn.execute(sql, params).fetchall())
+        except sqlite3.Error:
+            return []
+
+    @staticmethod
+    def _count(conn: sqlite3.Connection, table: str, day: str) -> int:
+        try:
+            row = conn.execute(f"SELECT COUNT(*) AS n FROM {table} WHERE date = ?", (day,)).fetchone()
+            return int(row["n"] if row else 0)
+        except sqlite3.Error:
+            return 0

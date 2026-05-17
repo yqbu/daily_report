@@ -8,7 +8,7 @@ from daily_report.collector.collector_manager import CollectorManager
 from daily_report.storage.database import create_connection, default_db_path, init_database, SqliteConnectionFactory
 
 from daily_report.service.single_instance import SingleInstanceError, SingleInstanceLock
-from daily_report.service.cleanup import cleanup_database, cleanup_logs
+from daily_report.service.cleanup_service import cleanup_database, cleanup_logs
 
 from daily_report.collector.app_session_collector import ForegroundCollector
 from daily_report.storage.storage_adapter.app_session_store import RepositoryForegroundSessionStore

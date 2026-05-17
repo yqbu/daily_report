@@ -80,6 +80,12 @@ def run_latest_report(args: argparse.Namespace) -> None:
     print(record.report_markdown)
 
 
+def run_gui_cmd(args: argparse.Namespace) -> None:
+    from daily_report.gui.app import run_gui
+
+    raise SystemExit(run_gui())
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='daily-report',
@@ -126,6 +132,9 @@ def build_parser() -> argparse.ArgumentParser:
     latest_parser.add_argument('--date', default=None, help='Target date, format: YYYY-MM-DD' )
     latest_parser.add_argument('--db-path', default=None, help='Optional SQLite db path' )
     latest_parser.set_defaults(func=run_latest_report)
+
+    gui_parser = subparsers.add_parser('gui', help='Open PySide6 desktop GUI')
+    gui_parser.set_defaults(func=run_gui_cmd)
 
     return parser
 
