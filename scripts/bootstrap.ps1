@@ -339,10 +339,8 @@ try {
     Write-Host ""
     Write-Host "Next commands:" -ForegroundColor Cyan
     Write-Host "    .\$VenvDir\Scripts\Activate.ps1"
-    Write-Host "    python .\src\daily_report\gui\test_gui.py"
-    Write-Host ""
-    Write-Host "If you configured [project.scripts] in pyproject.toml, you can also run:" -ForegroundColor Cyan
-    Write-Host "    daily-report-gui"
+    Write-Host "    daily-report status --json"
+    Write-Host "    daily-report gui"
     Write-Host ""
 } catch {
     Write-Host ""

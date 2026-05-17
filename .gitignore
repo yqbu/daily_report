@@ -26,6 +26,7 @@ status.json
 logs/*
 !logs/.gitkeep
 outputs/
+output/
 
 # IDE
 .idea/
