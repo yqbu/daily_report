@@ -13,7 +13,7 @@ Current and planned features include:
 - Edge browser history collection
 - ChatGPT / DeepSeek prompt collection through a lightweight browser extension
 - Local SQLite storage
-- PySide6-based desktop GUI
+- PySide6 + QWebEngine + Vue-based desktop GUI
 - Manual selection of report materials
 - DeepSeek API-based Markdown daily report generation
 - YASB integration for lightweight status display and quick actions
@@ -50,11 +50,21 @@ python -m pip install -U pip
 python -m pip install -e .
 ```
 
+Build the Web UI:
+
+```powershell
+cd frontend
+npm install
+npm run build
+cd ..
+```
+
 Run the CLI:
 
 ```powershell
 daily-report status --json
 daily-report run
+daily-report gui
 ```
 
 ## First Deployment
@@ -121,6 +131,54 @@ If development dependencies are defined in `pyproject.toml`, install them with:
 python -m pip install -e ".[dev]"
 ```
 
+### Web GUI Development
+
+The desktop GUI now uses one `QWebEngineView` to host the Vue SPA. The Python side exposes data through `QWebChannel`; collector, storage, report, service, and YASB modules remain Python-owned.
+
+Build production assets before launching the desktop UI:
+
+```powershell
+cd frontend
+npm install
+npm run build
+cd ..
+daily-report gui
+```
+
+For frontend development, start Vite and point the desktop shell at the dev server:
+
+```powershell
+cd frontend
+npm run dev
+```
+
+In another terminal:
+
+```powershell
+$env:DAILY_REPORT_WEB_DEV_SERVER = "http://127.0.0.1:5173"
+daily-report gui
+```
+
+Or use one command to start both Vite and the desktop shell:
+
+```powershell
+daily-report gui --dev --remote-debugging
+```
+
+This starts `npm run dev` in `frontend/`, waits for `http://127.0.0.1:5173`, then opens the QWebEngine window with real Python Bridge access. Closing the desktop window stops the Vite process started by this command.
+
+To inspect the Web UI inside QWebEngine with browser DevTools:
+
+```powershell
+$env:DAILY_REPORT_WEB_DEV_SERVER = "http://127.0.0.1:5173"
+$env:QTWEBENGINE_REMOTE_DEBUGGING = "9223"
+daily-report gui
+```
+
+Then open `http://127.0.0.1:9223` in Chrome or Edge and select the Daily Reporter page. Running `npm run dev` directly in a normal browser is useful for layout work, but Python Bridge calls only use real data inside the QWebEngine desktop shell; browser-only mode falls back to mock/empty responses.
+
+If `frontend/dist/index.html` does not exist and no dev server URL is configured, the desktop window shows a clear build instruction page instead of failing silently.
+
 ## Project Structure
 
 A recommended project structure is:
@@ -146,6 +204,10 @@ daily_report/
       ├─ storage/
       ├─ report/
       ├─ gui/
+      │  ├─ web_app.py
+      │  ├─ web_window.py
+      │  ├─ bridge.py
+      │  └─ services/
       ├─ service/
       └─ yasb_bridge/
 ```

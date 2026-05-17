@@ -89,9 +89,18 @@ def run_latest_report(args: argparse.Namespace) -> None:
 
 
 def run_gui_cmd(args: argparse.Namespace) -> None:
-    from daily_report.gui.app import run_gui
+    from daily_report.gui.web_app import run_gui
 
-    raise SystemExit(run_gui())
+    remote_debugging_port = None
+    if args.remote_debugging:
+        remote_debugging_port = args.remote_debugging_port
+    raise SystemExit(
+        run_gui(
+            dev=args.dev,
+            dev_port=args.dev_port,
+            remote_debugging_port=remote_debugging_port,
+        )
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -141,7 +150,15 @@ def build_parser() -> argparse.ArgumentParser:
     latest_parser.add_argument('--db-path', default=None, help='Optional SQLite db path' )
     latest_parser.set_defaults(func=run_latest_report)
 
-    gui_parser = subparsers.add_parser('gui', help='Open PySide6 desktop GUI')
+    gui_parser = subparsers.add_parser('gui', help='Open PySide6 WebEngine desktop GUI')
+    gui_parser.add_argument('--dev', action='store_true', help='Start Vite dev server and load it in QWebEngine')
+    gui_parser.add_argument('--dev-port', type=int, default=5173, help='Vite dev server port, default: 5173')
+    gui_parser.add_argument(
+        '--remote-debugging',
+        action='store_true',
+        help='Enable QWebEngine remote debugging, default port: 9223',
+    )
+    gui_parser.add_argument('--remote-debugging-port', type=int, default=9223)
     gui_parser.set_defaults(func=run_gui_cmd)
 
     return parser
