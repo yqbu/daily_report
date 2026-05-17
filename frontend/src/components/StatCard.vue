@@ -1,13 +1,14 @@
 <template>
-  <section class="card flex items-center gap-4 p-5">
-    <div class="grid h-14 w-14 place-items-center rounded-2xl" :class="toneClass">
-      <span class="text-xl font-black">{{ icon }}</span>
+  <section class="app-card flex min-w-0 items-center gap-3 p-4">
+    <div class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl" :class="toneClass">
+      <el-icon v-if="iconComponent" :size="25"><component :is="iconComponent" /></el-icon>
+      <span v-else class="text-lg font-black">{{ icon }}</span>
     </div>
-    <div>
-      <div class="text-sm font-semibold text-slate-500">{{ title }}</div>
-      <div class="mt-1 flex items-end gap-1">
-        <span class="text-3xl font-black tracking-tight text-slate-950">{{ value }}</span>
-        <span v-if="unit" class="mb-1 text-sm font-semibold text-slate-500">{{ unit }}</span>
+    <div class="min-w-0">
+      <div class="truncate text-sm font-bold text-slate-500">{{ title }}</div>
+      <div class="mt-1 flex min-w-0 items-end gap-1">
+        <span class="truncate text-[28px] font-black leading-none tracking-tight text-slate-950">{{ value }}</span>
+        <span v-if="unit" class="mb-1 shrink-0 text-sm font-bold text-slate-500">{{ unit }}</span>
       </div>
     </div>
   </section>
@@ -21,6 +22,7 @@ const props = defineProps<{
   value: string | number
   unit?: string
   icon?: string
+  iconComponent?: unknown
   tone?: 'blue' | 'green' | 'purple' | 'orange'
 }>()
 

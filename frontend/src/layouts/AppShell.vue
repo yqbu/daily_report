@@ -1,17 +1,40 @@
 <template>
-  <div class="flex h-screen overflow-hidden bg-surface text-ink">
+  <div class="app-shell flex">
     <Sidebar />
-    <div class="flex min-w-0 flex-1 flex-col">
+    <div class="main-area flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <TopBar />
-      <main class="min-h-0 flex-1 overflow-y-auto px-8 py-6">
-        <RouterView />
+      <main ref="contentRef" class="page-host min-h-0 min-w-0 flex-1 overflow-hidden">
+        <RouterView v-slot="{ Component, route }">
+          <component :is="Component" :key="route.fullPath" />
+        </RouterView>
       </main>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { RouterView } from 'vue-router'
+import { ref, watch } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
 import Sidebar from '../components/Sidebar.vue'
 import TopBar from '../components/TopBar.vue'
+
+const route = useRoute()
+const contentRef = ref<HTMLElement | null>(null)
+
+watch(
+  () => route.fullPath,
+  () => {
+    if (contentRef.value) contentRef.value.scrollTop = 0
+  }
+)
 </script>
+
+<style scoped>
+.main-area {
+  background: transparent;
+}
+
+.page-host {
+  padding: 20px 24px 24px;
+}
+</style>

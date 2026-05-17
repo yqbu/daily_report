@@ -1,92 +1,111 @@
 <template>
-  <div class="space-y-6">
-    <div class="flex items-center justify-between">
-      <div>
-        <h2 class="text-3xl font-black tracking-tight">今日总览</h2>
-        <p class="mt-2 text-slate-500">本地采集数据与工作状态概览</p>
-      </div>
-      <DateRangeFilter v-model="app.currentDate" @refresh="load" />
-    </div>
+  <PageLayout title="今日总览" subtitle="本地采集数据与工作状态概览">
+    <template #actions>
+      <el-button class="glass-button" :icon="Refresh" @click="load">统一风格</el-button>
+      <el-button class="glass-button" :icon="Grid">概览卡片</el-button>
+      <el-button class="glass-button" :icon="Lightning">快速跳转</el-button>
+    </template>
 
-    <LoadingState v-if="dashboard.loading" />
-    <div v-else class="space-y-6">
-      <div class="grid grid-cols-5 gap-4">
-        <StatCard title="活跃时间" :value="summary.metrics.active_time" icon="◷" />
-        <StatCard title="应用记录" :value="summary.metrics.app_sessions" unit="条" icon="▦" />
-        <StatCard title="剪贴板" :value="summary.metrics.clipboard" unit="条" icon="▣" tone="purple" />
-        <StatCard title="浏览记录" :value="summary.metrics.browser" unit="条" icon="◎" tone="green" />
+    <div class="flex h-full min-h-0 min-w-0 flex-col gap-4 overflow-hidden">
+      <div class="grid shrink-0 grid-cols-5 gap-4">
+        <StatCard title="今日活跃时间" :value="summary.metrics.active_time" :icon-component="Clock" />
+        <StatCard title="应用记录" :value="summary.metrics.app_sessions" unit="条" :icon-component="Grid" />
+        <StatCard title="剪贴板" :value="summary.metrics.clipboard" unit="条" :icon-component="CopyDocument" tone="purple" />
+        <StatCard title="浏览记录" :value="summary.metrics.browser" unit="条" :icon-component="Monitor" tone="green" />
         <StatCard title="AI 提问" :value="summary.metrics.ai_prompts" unit="条" icon="AI" tone="orange" />
       </div>
 
-      <div class="grid grid-cols-2 gap-5">
-        <ChartCard title="Top 应用" subtitle="按活跃时长排序">
-          <div v-if="summary.top_apps.length" ref="topAppsRef" class="h-72"></div>
+      <div v-loading="dashboard.loading" class="grid min-h-0 min-w-0 flex-1 grid-cols-2 grid-rows-[minmax(0,.98fr)_minmax(0,1.02fr)] gap-4">
+        <ChartCard title="Top 应用（按活跃时长）">
+          <template #actions>
+            <el-select model-value="active" size="small" style="width: 118px">
+              <el-option label="按活跃时长" value="active" />
+            </el-select>
+          </template>
+          <div v-if="summary.top_apps.length" class="h-full min-h-0 overflow-auto pr-1">
+            <div v-for="item in summary.top_apps" :key="item.name" class="mb-4 flex items-center gap-3">
+              <div class="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-blue-50 text-xs font-black text-blue-600">
+                {{ item.name.slice(0, 1).toUpperCase() }}
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="mb-1 flex items-center justify-between gap-3">
+                  <span class="truncate text-sm font-bold text-slate-700">{{ item.name }}</span>
+                  <span class="shrink-0 text-sm font-bold text-slate-500">{{ secondsText(item.seconds) }}</span>
+                </div>
+                <el-progress :percentage="topPercent(item.seconds)" :show-text="false" :stroke-width="9" />
+              </div>
+            </div>
+          </div>
           <EmptyState v-else title="暂无应用记录" description="运行采集服务后会显示今日应用使用分布。" />
         </ChartCard>
 
-        <ChartCard title="今日时间分布" subtitle="按小时聚合活跃记录">
-          <div class="flex h-72 items-end gap-1.5 px-1 pb-7 pt-6">
-            <div v-for="slot in summary.time_distribution" :key="slot.label" class="group flex flex-1 flex-col items-center gap-2">
-              <div class="w-full rounded-full bg-slate-100">
-                <div class="mx-auto w-2.5 rounded-full bg-blue-600 transition-all" :style="{ height: `${slotHeight(slot.active)}px` }"></div>
+        <ChartCard title="今日时间分布（活跃 / 空闲）">
+          <div class="flex h-full min-h-0 flex-col">
+            <div class="flex min-h-0 flex-1 items-center gap-2 overflow-hidden px-1">
+              <div v-for="slot in summary.time_distribution" :key="slot.label" class="flex h-full min-w-0 flex-1 flex-col justify-center">
+                <div class="mx-auto w-3 rounded-full transition-all" :class="slot.active ? 'bg-blue-600' : 'bg-slate-200'" :style="{ height: `${slotHeight(slot.active)}px` }"></div>
               </div>
-              <span v-if="slot.label.endsWith('00') && ['00:00', '06:00', '12:00', '18:00'].includes(slot.label)" class="text-[11px] text-slate-400">{{ slot.label.slice(0, 2) }}</span>
+            </div>
+            <div class="grid shrink-0 grid-cols-5 pt-2 text-xs font-semibold text-slate-400">
+              <span>00:00</span>
+              <span>06:00</span>
+              <span>12:00</span>
+              <span>18:00</span>
+              <span class="text-right">24:00</span>
             </div>
           </div>
         </ChartCard>
-      </div>
 
-      <div class="grid grid-cols-[1.1fr_.9fr] gap-5">
         <ChartCard title="最近活动">
-          <div v-if="summary.recent_activities.length" class="divide-y divide-slate-100">
-            <div v-for="item in summary.recent_activities" :key="`${item.time}-${item.title}`" class="flex items-center gap-4 py-3">
-              <div class="w-14 text-sm font-bold text-slate-500">{{ item.time }}</div>
+          <template #actions>
+            <RouterLink to="/data" class="text-sm font-bold text-blue-600">查看全部</RouterLink>
+          </template>
+          <div v-if="summary.recent_activities.length" class="h-full min-h-0 overflow-auto">
+            <div v-for="item in summary.recent_activities" :key="`${item.time}-${item.title}`" class="flex min-w-0 items-center gap-3 border-b border-slate-100 py-3 last:border-0">
+              <div class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-50 font-bold text-emerald-600">{{ item.source.slice(0, 1) || 'D' }}</div>
               <div class="min-w-0 flex-1">
-                <div class="truncate font-semibold text-slate-800">{{ item.title || item.source }}</div>
-                <div class="text-sm text-slate-500">{{ item.source }}</div>
+                <div class="truncate text-sm font-bold text-slate-800">{{ item.title || item.source }}</div>
+                <div class="truncate text-xs text-slate-500">{{ item.source }}</div>
               </div>
-              <StatusBadge label="应用" />
+              <el-tag effect="light" round>{{ item.time }}</el-tag>
             </div>
           </div>
           <EmptyState v-else title="暂无最近活动" />
         </ChartCard>
 
-        <div class="space-y-5">
+        <div class="grid min-h-0 grid-rows-[136px_minmax(0,1fr)] gap-4">
           <ChartCard title="快捷入口">
-            <div class="grid grid-cols-3 gap-3">
-              <RouterLink class="quick-card" to="/data">数据中心<span>查看数据</span></RouterLink>
-              <RouterLink class="quick-card green" to="/workbench">日报工作台<span>生成日报</span></RouterLink>
-              <RouterLink class="quick-card purple" to="/settings">设置<span>应用偏好</span></RouterLink>
+            <div class="grid h-full grid-cols-3 gap-3">
+              <RouterLink class="quick-card" to="/data"><DataLine />数据中心<span>查看与管理数据</span></RouterLink>
+              <RouterLink class="quick-card green" to="/workbench"><Files />日报工作台<span>生成与导出日报</span></RouterLink>
+              <RouterLink class="quick-card purple" to="/settings"><Setting />设置<span>应用与偏好设置</span></RouterLink>
             </div>
           </ChartCard>
           <ChartCard title="本周趋势">
-            <div ref="trendRef" class="h-52"></div>
+            <div ref="trendRef" class="h-full min-h-0"></div>
           </ChartCard>
         </div>
       </div>
     </div>
-  </div>
+  </PageLayout>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import * as echarts from 'echarts'
+import { Clock, CopyDocument, DataLine, Files, Grid, Lightning, Monitor, Refresh, Setting } from '@element-plus/icons-vue'
 import ChartCard from '../components/ChartCard.vue'
-import DateRangeFilter from '../components/DateRangeFilter.vue'
 import EmptyState from '../components/EmptyState.vue'
-import LoadingState from '../components/LoadingState.vue'
 import StatCard from '../components/StatCard.vue'
-import StatusBadge from '../components/StatusBadge.vue'
+import PageLayout from '../layouts/PageLayout.vue'
 import { useAppStore } from '../stores/app'
 import { useDashboardStore } from '../stores/dashboard'
 import type { DashboardSummary } from '../api/types'
 
 const app = useAppStore()
 const dashboard = useDashboardStore()
-const topAppsRef = ref<HTMLElement | null>(null)
 const trendRef = ref<HTMLElement | null>(null)
-let topChart: echarts.ECharts | null = null
 let trendChart: echarts.ECharts | null = null
 
 const emptySummary: DashboardSummary = {
@@ -99,37 +118,37 @@ const emptySummary: DashboardSummary = {
 }
 
 const summary = computed(() => dashboard.summary || emptySummary)
+const maxTop = computed(() => Math.max(1, ...summary.value.top_apps.map((item) => item.seconds)))
 const maxSlot = computed(() => Math.max(1, ...summary.value.time_distribution.map((item) => item.active)))
 
+function topPercent(value: number) {
+  return Math.max(2, Math.round((value / maxTop.value) * 100))
+}
+
 function slotHeight(active: number) {
-  return Math.max(14, Math.round((active / maxSlot.value) * 160))
+  return active ? Math.max(26, Math.round((active / maxSlot.value) * 118)) : 54
+}
+
+function secondsText(value: number) {
+  if (value >= 3600) return `${Math.floor(value / 3600)}h ${Math.floor((value % 3600) / 60)}m`
+  return `${Math.floor(value / 60)}m`
 }
 
 async function load() {
   await dashboard.load(app.currentDate)
   await nextTick()
-  renderCharts()
+  renderTrend()
 }
 
-function renderCharts() {
-  if (topAppsRef.value && summary.value.top_apps.length) {
-    topChart = topChart || echarts.init(topAppsRef.value)
-    topChart.setOption({
-      grid: { top: 8, left: 80, right: 24, bottom: 24 },
-      xAxis: { type: 'value', axisLabel: { color: '#94a3b8' }, splitLine: { lineStyle: { color: '#eef2f7' } } },
-      yAxis: { type: 'category', data: summary.value.top_apps.map((item) => item.name).reverse(), axisLabel: { color: '#475569' } },
-      series: [{ type: 'bar', data: summary.value.top_apps.map((item) => item.seconds).reverse(), itemStyle: { color: '#2563eb', borderRadius: 8 }, barWidth: 12 }]
-    })
-  }
-  if (trendRef.value) {
-    trendChart = trendChart || echarts.init(trendRef.value)
-    trendChart.setOption({
-      grid: { top: 18, left: 28, right: 18, bottom: 28 },
-      xAxis: { type: 'category', data: summary.value.weekly_trend.map((item) => item.date.slice(5)), axisLabel: { color: '#94a3b8' }, axisTick: { show: false } },
-      yAxis: { type: 'value', axisLabel: { color: '#94a3b8' }, splitLine: { lineStyle: { color: '#eef2f7' } } },
-      series: [{ type: 'line', smooth: true, data: summary.value.weekly_trend.map((item) => item.count), symbolSize: 7, lineStyle: { width: 3, color: '#2563eb' }, itemStyle: { color: '#2563eb' }, areaStyle: { color: 'rgba(37,99,235,.08)' } }]
-    })
-  }
+function renderTrend() {
+  if (!trendRef.value) return
+  trendChart = trendChart || echarts.init(trendRef.value)
+  trendChart.setOption({
+    grid: { top: 12, left: 32, right: 18, bottom: 28 },
+    xAxis: { type: 'category', data: summary.value.weekly_trend.map((item) => item.date.slice(5)), axisTick: { show: false }, axisLabel: { color: '#94a3b8' } },
+    yAxis: { type: 'value', splitLine: { lineStyle: { color: '#e8eef7' } }, axisLabel: { color: '#94a3b8' } },
+    series: [{ type: 'line', smooth: true, symbolSize: 7, data: summary.value.weekly_trend.map((item) => item.count), lineStyle: { width: 3, color: '#2563eb' }, itemStyle: { color: '#2563eb' }, areaStyle: { color: 'rgba(37, 99, 235, .08)' } }]
+  })
 }
 
 onMounted(load)
@@ -139,21 +158,30 @@ watch(() => app.currentDate, load)
 <style scoped>
 .quick-card {
   display: flex;
-  min-height: 88px;
+  min-width: 0;
   flex-direction: column;
   justify-content: center;
-  border-radius: 16px;
+  gap: 5px;
+  overflow: hidden;
   border: 1px solid #dbeafe;
+  border-radius: 16px;
   background: #eff6ff;
-  padding: 16px;
-  font-weight: 800;
+  padding: 14px;
+  font-weight: 900;
   color: #1d4ed8;
 }
 
+.quick-card svg {
+  width: 24px;
+  height: 24px;
+}
+
 .quick-card span {
-  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: #64748b;
 }
 

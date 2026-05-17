@@ -1,11 +1,20 @@
 <template>
-  <div class="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2">
-    <input :value="modelValue" type="date" class="h-9 rounded-xl border border-transparent px-3 text-sm outline-none hover:border-slate-200 focus:border-blue-500" @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)" />
-    <button class="h-9 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700" @click="emit('refresh')">刷新</button>
+  <div class="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/78 p-1.5 shadow-card">
+    <el-date-picker
+      :model-value="modelValue"
+      type="date"
+      value-format="YYYY-MM-DD"
+      :clearable="false"
+      style="width: 150px"
+      @update:model-value="emit('update:modelValue', String($event))"
+    />
+    <el-button class="primary-gradient" :icon="Refresh" @click="emit('refresh')">刷新</el-button>
   </div>
 </template>
 
 <script setup lang="ts">
+import { Refresh } from '@element-plus/icons-vue'
+
 defineProps<{ modelValue: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string]; refresh: [] }>()
 </script>
