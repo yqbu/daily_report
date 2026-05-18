@@ -1,26 +1,61 @@
+<script setup lang="ts">
+import { Refresh } from '@element-plus/icons-vue'
+
+import { useAppStore } from '../stores/app'
+
+const app = useAppStore()
+</script>
+
 <template>
-  <header class="top-bar flex h-16 shrink-0 items-center justify-between border-b border-slate-200/70 bg-white/55 px-7 backdrop-blur-xl">
-    <div class="flex min-w-0 items-center gap-3">
-      <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-blue-600 text-sm font-black text-white shadow-lg shadow-blue-500/25">D</span>
-      <span class="truncate text-sm font-bold text-slate-700">Daily Reporter - 智能日报生成工具</span>
+  <header class="top-bar">
+    <div class="top-bar__brand">
+      <span class="top-bar__logo">D</span>
+      <span>Daily Reporter</span>
     </div>
-    <div class="flex shrink-0 items-center gap-2">
+    <div class="top-bar__actions">
       <el-date-picker
         v-model="app.currentDate"
         type="date"
         value-format="YYYY-MM-DD"
         :clearable="false"
-        size="default"
         style="width: 150px"
       />
-      <el-button class="glass-button" :icon="Refresh" @click="app.refreshCollectorStatus">刷新状态</el-button>
+      <el-button class="glass-button" :icon="Refresh" @click="app.refreshCollectorStatus">
+        刷新状态
+      </el-button>
     </div>
   </header>
 </template>
 
-<script setup lang="ts">
-import { Refresh } from '@element-plus/icons-vue'
-import { useAppStore } from '../stores/app'
+<style scoped>
+.top-bar {
+  display: flex;
+  height: 64px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid var(--app-border);
+  background: rgba(255, 255, 255, 0.72);
+  padding: 0 24px;
+}
 
-const app = useAppStore()
-</script>
+.top-bar__brand,
+.top-bar__actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.top-bar__logo {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--app-primary);
+  color: white;
+  font-weight: 900;
+}
+</style>

@@ -12,6 +12,8 @@ export interface PageResult<T> {
   [key: string]: unknown
 }
 
+export type RecordKind = 'app' | 'clipboard' | 'browser' | 'ai'
+
 export interface DashboardSummary {
   date: string
   metrics: {
@@ -36,6 +38,17 @@ export interface MaterialRow {
   preview: string
   source: string
   sensitive: boolean
+}
+
+export interface ReportHistoryRow {
+  id: number
+  date: string
+  model_name: string
+  prompt_text: string
+  report_markdown: string
+  material_summary?: string
+  source_counts_json?: string
+  created_at: string
 }
 
 export interface LocalSettingsPayload {
