@@ -1,12 +1,5 @@
 <template>
   <PageLayout title="数据中心" subtitle="统一查看与管理应用、剪贴板、浏览与 AI 提问记录">
-    <template #actions>
-      <el-button class="glass-button" :icon="Connection">统一入口</el-button>
-      <el-button class="glass-button" :icon="Calendar">日期范围</el-button>
-      <el-button class="glass-button" :icon="Operation">分页加载</el-button>
-      <el-button class="glass-button" :icon="ChatDotRound" @click="openCurrentDetail">详情抽屉</el-button>
-    </template>
-
     <div class="flex h-full min-h-0 min-w-0 flex-col gap-4 overflow-hidden">
       <div class="flex shrink-0 items-center justify-between gap-4">
         <div class="segmented">
@@ -130,7 +123,7 @@
       <div v-if="selectedRecord" class="flex h-full min-h-0 flex-col overflow-hidden">
         <div class="shrink-0 border-b border-slate-100 pb-4">
           <div class="flex items-start gap-3">
-            <div class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-blue-50 text-blue-600">
+            <div class="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600">
               <el-icon :size="24"><component :is="activeTabMeta.icon" /></el-icon>
             </div>
             <div class="min-w-0 flex-1">
@@ -147,7 +140,7 @@
 
         <div class="min-h-0 flex-1 overflow-auto py-4">
           <dl class="space-y-3 text-sm">
-            <div v-for="item in detailFields" :key="item.label" class="rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+            <div v-for="item in detailFields" :key="item.label" class="rounded-lg border border-slate-100 bg-slate-50/80 p-3">
               <dt class="text-xs font-bold text-slate-500">{{ item.label }}</dt>
               <dd class="safe-text mt-1 font-semibold text-slate-800">{{ item.value || '-' }}</dd>
             </div>
@@ -166,14 +159,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import {
-  Calendar,
   ChatDotRound,
-  Connection,
   CopyDocument,
   Delete,
   Grid,
   Monitor,
-  Operation,
   Refresh,
   Search
 } from '@element-plus/icons-vue'
@@ -327,10 +317,6 @@ function showDetail(row: AnyRecord) {
   detailVisible.value = true
 }
 
-function openCurrentDetail() {
-  if (selectedRecord.value) detailVisible.value = true
-}
-
 function recordKind(row: AnyRecord) {
   if (activeTab.value === 'browser') return row.is_search ? '搜索' : '浏览'
   return activeLabel.value.replace('记录', '')
@@ -369,7 +355,7 @@ onMounted(load)
   max-width: 100%;
   overflow: hidden;
   border: 1px solid #dbe3ef;
-  border-radius: 18px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.78);
   padding: 4px;
   box-shadow: var(--app-shadow);
@@ -382,7 +368,7 @@ onMounted(load)
   min-width: 150px;
   justify-content: center;
   border: 0;
-  border-radius: 14px;
+  border-radius: 6px;
   background: transparent;
   padding: 12px 18px;
   color: #475569;

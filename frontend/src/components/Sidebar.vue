@@ -12,7 +12,7 @@
       </RouterLink>
     </nav>
 
-    <div class="mt-auto rounded-2xl border border-slate-200 bg-white/88 p-4 shadow-card">
+    <div class="mt-auto rounded-lg border border-slate-200 bg-white/88 p-4 shadow-card">
       <div class="flex items-center gap-2 text-sm font-bold text-emerald-600">
         <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
         采集服务：运行中
@@ -44,7 +44,7 @@ const items = [
   display: flex;
   align-items: center;
   gap: 12px;
-  border-radius: 14px;
+  border-radius: 8px;
   padding: 12px 14px;
   color: #475569;
   font-weight: 760;

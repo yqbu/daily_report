@@ -44,7 +44,7 @@
           </div>
           <el-segmented v-model="activePanel" :options="panelOptions" />
         </div>
-        <pre v-if="detail" class="scroll-pre min-h-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-7 text-slate-800">{{ panelText }}</pre>
+        <pre v-if="detail" class="scroll-pre min-h-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm leading-7 text-slate-800">{{ panelText }}</pre>
         <EmptyState v-else title="请选择日报" description="点击左侧列表中的日期，加载日报正文、Prompt 与元数据。" />
       </section>
     </div>

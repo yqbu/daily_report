@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { callBridge, onBridgeJobFinished } from '../api/bridge'
 import type { MaterialRow } from '../api/types'
 
+let jobListenerReady: Promise<unknown> | null = null
+
 export const useReportStore = defineStore('report', {
   state: () => ({
     materials: [] as MaterialRow[],
@@ -10,7 +12,8 @@ export const useReportStore = defineStore('report', {
     generating: false,
     generatedMarkdown: '',
     prompt: '',
-    error: ''
+    error: '',
+    activeJobId: ''
   }),
   actions: {
     async loadMaterials(date: string) {
@@ -32,17 +35,26 @@ export const useReportStore = defineStore('report', {
     async generate(date: string) {
       this.generating = true
       this.error = ''
-      await onBridgeJobFinished((payload) => {
+      jobListenerReady = jobListenerReady || onBridgeJobFinished((payload) => {
+        const data = payload.data as { job_id?: string; result?: { report_markdown?: string; prompt_text?: string } } | undefined
+        if (data?.job_id && this.activeJobId && data.job_id !== this.activeJobId) return
         this.generating = false
         if (!payload.ok) {
           this.error = payload.error || '生成失败'
           return
         }
-        const result = payload.data as { result?: { report_markdown?: string; prompt_text?: string } }
-        this.generatedMarkdown = result.result?.report_markdown || ''
-        this.prompt = result.result?.prompt_text || this.prompt
+        this.generatedMarkdown = data?.result?.report_markdown || ''
+        this.prompt = data?.result?.prompt_text || this.prompt
+        this.activeJobId = ''
       })
-      await callBridge('generate_report', { date, save: true })
+      try {
+        await jobListenerReady
+        const job = await callBridge<{ job_id?: string }>('generate_report', { date, save: true })
+        this.activeJobId = job.job_id || ''
+      } catch (error) {
+        this.generating = false
+        this.error = error instanceof Error ? error.message : String(error)
+      }
     }
   }
 })

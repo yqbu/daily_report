@@ -1,6 +1,6 @@
 <template>
   <section class="app-card flex min-w-0 items-center gap-3 p-4">
-    <div class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl" :class="toneClass">
+    <div class="grid h-12 w-12 shrink-0 place-items-center rounded-lg" :class="toneClass">
       <el-icon v-if="iconComponent" :size="25"><component :is="iconComponent" /></el-icon>
       <span v-else class="text-lg font-black">{{ icon }}</span>
     </div>

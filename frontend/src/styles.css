@@ -8,8 +8,8 @@
   --el-color-primary-light-5: #93c5fd;
   --el-color-primary-light-7: #bfdbfe;
   --el-color-primary-light-9: #eff6ff;
-  --el-border-radius-base: 10px;
-  --el-border-radius-small: 8px;
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
   --el-border-radius-round: 999px;
   --el-font-family: Inter, "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
   --app-primary: #2563eb;
@@ -19,7 +19,7 @@
   --app-border: #dbe3ef;
   --app-text: #172033;
   --app-muted: #667085;
-  --app-shadow: 0 16px 38px rgba(15, 23, 42, 0.06);
+  --app-shadow: 0 12px 28px rgba(15, 23, 42, 0.055);
   color: var(--app-text);
   background: var(--app-bg);
   font-family: var(--el-font-family);
@@ -42,10 +42,7 @@ body,
 
 body {
   margin: 0;
-  background:
-    radial-gradient(circle at 18% 0%, rgba(37, 99, 235, 0.09), transparent 30%),
-    radial-gradient(circle at 82% 10%, rgba(124, 58, 237, 0.06), transparent 28%),
-    linear-gradient(180deg, #f8fbff 0%, #f3f6fb 100%);
+  background: var(--app-bg);
 }
 
 a {
@@ -87,20 +84,21 @@ select {
   height: 100vh;
   overflow: hidden;
   color: var(--app-text);
+  background: var(--app-bg);
 }
 
 .app-card {
   min-width: 0;
   min-height: 0;
   border: 1px solid rgba(219, 227, 239, 0.94);
-  border-radius: 18px;
+  border-radius: 8px;
   background: var(--app-card);
   box-shadow: var(--app-shadow);
 }
 
 .app-card-tight {
   border: 1px solid rgba(219, 227, 239, 0.94);
-  border-radius: 14px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.9);
 }
 
@@ -133,7 +131,7 @@ select {
   --el-button-hover-bg-color: #eff6ff;
   --el-button-hover-border-color: #bfdbfe;
   --el-button-hover-text-color: #1d4ed8;
-  border-radius: 12px;
+  border-radius: 8px;
   font-weight: 700;
 }
 
@@ -143,7 +141,7 @@ select {
   --el-button-hover-bg-color: #1d4ed8;
   --el-button-hover-border-color: #1d4ed8;
   --el-button-text-color: #fff;
-  border-radius: 12px;
+  border-radius: 8px;
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 52%, #1d4ed8 100%);
   font-weight: 800;
   box-shadow: 0 12px 24px rgba(37, 99, 235, 0.24);
@@ -151,7 +149,7 @@ select {
 
 .el-card {
   --el-card-border-color: #dbe3ef;
-  border-radius: 18px;
+  border-radius: 8px;
 }
 
 .el-input__wrapper,
@@ -159,7 +157,7 @@ select {
 .el-date-editor,
 .el-input-number .el-input__wrapper,
 .el-textarea__inner {
-  border-radius: 12px !important;
+  border-radius: 8px !important;
   box-shadow: 0 0 0 1px #dbe3ef inset !important;
 }
 
@@ -176,7 +174,7 @@ select {
   --el-table-row-hover-bg-color: #eff6ff;
   --el-table-current-row-bg-color: #eaf2ff;
   color: #334155;
-  border-radius: 14px;
+  border-radius: 8px;
 }
 
 .el-table th.el-table__cell {
@@ -189,8 +187,8 @@ select {
 }
 
 .el-drawer {
-  border-top-left-radius: 20px;
-  border-bottom-left-radius: 20px;
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
 }
 
 .el-drawer__header {

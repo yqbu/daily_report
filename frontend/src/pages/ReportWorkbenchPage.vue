@@ -1,20 +1,7 @@
 <template>
-  <PageLayout title="日报工作台" subtitle="筛选素材、生成日报并查看历史版本的一体化工作流">
-    <template #actions>
-      <el-button class="glass-button" :icon="Filter">范围筛选</el-button>
-      <el-button class="glass-button" :icon="Grid">结构化生成</el-button>
-      <el-button class="glass-button" :icon="Clock">版本历史</el-button>
-    </template>
-
+  <PageLayout title="日报工作台" subtitle="筛选素材并生成日报的一体化工作流">
     <div class="flex h-full min-h-0 min-w-0 flex-col gap-4 overflow-hidden">
-      <el-steps :active="1" align-center class="shrink-0">
-        <el-step title="数据筛选" />
-        <el-step title="素材确认" />
-        <el-step title="生成日报" />
-        <el-step title="历史版本" />
-      </el-steps>
-
-      <div class="grid min-h-0 min-w-0 flex-1 grid-cols-[330px_minmax(0,1fr)_390px] gap-5">
+      <div class="grid min-h-0 min-w-0 flex-1 grid-cols-[330px_minmax(0,1fr)_420px] gap-4">
         <section class="app-card flex min-h-0 min-w-0 flex-col overflow-hidden p-4">
           <div class="mb-3 flex shrink-0 items-center justify-between">
             <div>
@@ -58,7 +45,7 @@
             <template #actions>
               <el-button class="glass-button" :icon="Refresh" @click="report.buildPrompt(app.currentDate)">重新汇总素材</el-button>
             </template>
-            <pre class="scroll-pre h-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-7 text-slate-700">{{ report.prompt || '点击“重新汇总素材”生成 Prompt 预览。' }}</pre>
+            <pre class="scroll-pre h-full rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm leading-7 text-slate-700">{{ report.prompt || '点击“重新汇总素材”生成 Prompt 预览。' }}</pre>
           </ChartCard>
           <ChartCard title="Prompt（可编辑）">
             <template #actions>
@@ -74,29 +61,19 @@
           </ChartCard>
         </section>
 
-        <section class="grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_245px] gap-5">
-          <ChartCard title="日报输出">
+        <section class="min-h-0 min-w-0">
+          <ChartCard title="日报输出" class="h-full">
             <template #actions>
               <el-tag :type="report.generating ? 'warning' : 'info'" effect="light" round>{{ report.generating ? '生成中' : '待生成' }}</el-tag>
             </template>
             <div class="flex h-full min-h-0 flex-col overflow-hidden">
-              <pre class="scroll-pre min-h-0 flex-1 rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-7 text-slate-800">{{ report.generatedMarkdown || placeholderMarkdown }}</pre>
-              <p v-if="report.error" class="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-600">{{ report.error }}</p>
+              <pre class="scroll-pre min-h-0 flex-1 rounded-lg border border-slate-200 bg-white p-4 text-sm leading-7 text-slate-800">{{ report.generatedMarkdown || placeholderMarkdown }}</pre>
+              <p v-if="report.error" class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm font-bold text-red-600">{{ report.error }}</p>
               <div class="mt-3 grid shrink-0 grid-cols-2 gap-3">
                 <el-button class="primary-gradient" :loading="report.generating" @click="report.generate(app.currentDate)">生成日报</el-button>
                 <el-button class="glass-button" :disabled="!report.generatedMarkdown" @click="copyMarkdown">复制 Markdown</el-button>
               </div>
             </div>
-          </ChartCard>
-          <ChartCard title="历史日报">
-            <AppDataTable
-              :rows="historyRows"
-              :columns="historyColumns"
-              :loading="historyLoading"
-              height="100%"
-              empty-text="暂无历史日报"
-              @row-click="previewHistory"
-            />
           </ChartCard>
         </section>
       </div>
@@ -106,10 +83,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Clock, Filter, FullScreen, Grid, Refresh, Search } from '@element-plus/icons-vue'
-import { callBridge } from '../api/bridge'
-import type { AnyRecord, MaterialRow, PageResult } from '../api/types'
-import AppDataTable from '../components/AppDataTable.vue'
+import { FullScreen, Refresh, Search } from '@element-plus/icons-vue'
 import AppPagination from '../components/AppPagination.vue'
 import ChartCard from '../components/ChartCard.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -122,14 +96,7 @@ const report = useReportStore()
 const materialKeyword = ref('')
 const materialPage = ref(1)
 const materialPageSize = ref(30)
-const historyRows = ref<AnyRecord[]>([])
-const historyLoading = ref(false)
 const placeholderMarkdown = '# 日报预览\n\n确认素材后点击“生成日报”，Markdown 内容会在这里滚动显示。'
-const historyColumns = [
-  { key: 'date', label: '日期', minWidth: 96 },
-  { key: 'model_name', label: '模型', minWidth: 118 },
-  { key: 'created_at', label: '时间', minWidth: 92, formatter: (row: AnyRecord) => timeText(row.created_at) }
-]
 const filteredMaterials = computed(() => {
   const keyword = materialKeyword.value.trim().toLowerCase()
   if (!keyword) return report.materials
@@ -144,7 +111,6 @@ const materialPageText = computed(() => `${Math.min(filteredMaterials.value.leng
 async function refresh() {
   await report.loadMaterials(app.currentDate)
   await report.buildPrompt(app.currentDate)
-  await loadHistory()
 }
 
 function toggle(key: string, selected: boolean) {
@@ -160,26 +126,6 @@ function copyMarkdown() {
   navigator.clipboard?.writeText(report.generatedMarkdown)
 }
 
-async function loadHistory() {
-  historyLoading.value = true
-  try {
-    const data = await callBridge<PageResult<AnyRecord>>('get_report_history', { page: 1, page_size: 8 })
-    historyRows.value = data.items
-  } finally {
-    historyLoading.value = false
-  }
-}
-
-function previewHistory(row: AnyRecord) {
-  report.generatedMarkdown = String(row.report_markdown || '')
-  report.prompt = String(row.prompt_text || report.prompt)
-}
-
-function timeText(value: unknown) {
-  const text = String(value || '')
-  return text.length >= 19 ? text.slice(11, 19) : text || '-'
-}
-
 onMounted(refresh)
 </script>
 
@@ -189,7 +135,7 @@ onMounted(refresh)
   min-width: 0;
   gap: 10px;
   border: 1px solid #dbe3ef;
-  border-radius: 16px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, .84);
   padding: 10px;
   margin-bottom: 8px;

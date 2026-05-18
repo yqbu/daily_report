@@ -1,11 +1,5 @@
 <template>
   <PageLayout title="设置" subtitle="配置模型、采集、隐私和界面行为">
-    <template #actions>
-      <el-button class="glass-button" :icon="Files">本地配置</el-button>
-      <el-button class="glass-button" :icon="Lock">安全存储</el-button>
-      <el-button class="glass-button" :icon="Connection">即时测试</el-button>
-    </template>
-
     <div v-loading="loading" class="h-full min-h-0 overflow-auto pr-2">
       <div class="grid min-w-0 grid-cols-2 gap-5 pb-2">
         <div class="min-w-0 space-y-5">
@@ -45,7 +39,7 @@
               <SettingSwitch v-model="form.privacy.sensitive_unselected_by_default" label="敏感内容默认不入日报" />
               <SettingSwitch v-model="form.privacy.require_manual_confirm_before_llm" label="调用模型前需人工确认" />
               <SettingSwitch v-model="form.privacy.clipboard_preview_only" label="剪贴板仅保存预览" />
-              <div class="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+              <div class="rounded-lg border border-slate-100 bg-slate-50 p-3">
                 <div class="mb-2 text-sm font-bold text-slate-600">敏感关键词</div>
                 <div class="flex flex-wrap gap-2">
                   <el-tag v-for="keyword in form.privacy.sensitive_keywords" :key="keyword" closable effect="light" round>{{ keyword }}</el-tag>
@@ -72,8 +66,8 @@
                 <el-form-item label="请求超时（秒）"><el-input-number v-model="form.model.timeout_seconds" :min="5" :max="300" :step="5" class="w-full" /></el-form-item>
               </div>
               <div class="mt-2 grid grid-cols-2 gap-3">
-                <el-button class="glass-button" :icon="Connection" @click="notImplemented('测试模型连接')">测试模型连接</el-button>
-                <el-button class="primary-gradient" :icon="DocumentChecked" @click="notImplemented('保存设置')">保存设置</el-button>
+                <el-button class="glass-button" :icon="Connection" :loading="testing" @click="testModelConnection">测试模型连接</el-button>
+                <el-button class="primary-gradient" :icon="DocumentChecked" :loading="saving" @click="saveSettings">保存设置</el-button>
               </div>
             </el-form>
           </section>
@@ -105,7 +99,7 @@
             </div>
             <el-collapse class="mt-4">
               <el-collapse-item title="原始状态 JSON" name="raw">
-                <pre class="scroll-pre max-h-52 rounded-2xl bg-slate-50 p-4 text-xs leading-6">{{ JSON.stringify(status, null, 2) }}</pre>
+                <pre class="scroll-pre max-h-52 rounded-lg bg-slate-50 p-4 text-xs leading-6">{{ JSON.stringify(status, null, 2) }}</pre>
               </el-collapse-item>
             </el-collapse>
           </section>
@@ -118,13 +112,16 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, onMounted, reactive, ref, resolveComponent } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Connection, DocumentChecked, Files, Folder, FolderOpened, Lock, Plus } from '@element-plus/icons-vue'
+import { Connection, DocumentChecked, Files, Folder, FolderOpened, Plus } from '@element-plus/icons-vue'
 import { callBridge } from '../api/bridge'
+import type { LocalSettingsPayload } from '../api/types'
 import PageLayout from '../layouts/PageLayout.vue'
 
 const loading = ref(false)
+const saving = ref(false)
+const testing = ref(false)
 const status = ref<Record<string, any> | null>(null)
-const form = reactive({
+const form = reactive<LocalSettingsPayload & { settingsPath: string }>({
   settingsPath: 'data/local_settings.json',
   model: { provider: 'deepseek', model_name: 'deepseek-chat', base_url: 'https://api.deepseek.com', api_key: '', max_prompt_chars: 12000, timeout_seconds: 60, temperature: 0.3 },
   collector: { foreground_enabled: true, clipboard_enabled: true, edge_history_enabled: true, ai_prompt_enabled: true, foreground_poll_interval_sec: 2, edge_sync_interval_min: 3 },
@@ -149,7 +146,7 @@ const SettingSwitch = defineComponent({
   emits: ['update:modelValue'],
   setup(props, { emit }) {
     const ElSwitch = resolveComponent('el-switch')
-    return () => h('div', { class: 'flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3' }, [
+    return () => h('div', { class: 'flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-4 py-3' }, [
       h('span', { class: 'text-sm font-bold text-slate-700' }, props.label),
       h(ElSwitch, {
         modelValue: props.modelValue,
@@ -162,7 +159,7 @@ const SettingSwitch = defineComponent({
 const InfoTile = defineComponent({
   props: { label: String, value: String },
   setup(props) {
-    return () => h('div', { class: 'rounded-2xl border border-slate-100 bg-slate-50 p-4' }, [
+    return () => h('div', { class: 'rounded-lg border border-slate-100 bg-slate-50 p-4' }, [
       h('div', { class: 'text-xs font-bold text-slate-500' }, props.label),
       h('div', { class: 'mt-2 truncate text-2xl font-black text-slate-900' }, props.value)
     ])
@@ -172,19 +169,68 @@ const InfoTile = defineComponent({
 async function load() {
   loading.value = true
   try {
-    const settings = await callBridge<Record<string, any>>('get_settings')
-    status.value = await callBridge<Record<string, any>>('get_collector_status')
-    Object.assign(form.model, settings.model || {})
-    Object.assign(form.collector, settings.collector || {})
-    Object.assign(form.privacy, settings.privacy || {})
-    Object.assign(form.logging, settings.logging || {})
+    const [settings, collectorStatus] = await Promise.all([
+      callBridge<LocalSettingsPayload>('get_settings'),
+      callBridge<Record<string, any>>('get_collector_status')
+    ])
+    status.value = collectorStatus
+    applySettings(settings)
+  } catch (error) {
+    ElMessage.error(`加载设置失败：${errorMessage(error)}`)
   } finally {
     loading.value = false
   }
 }
 
-function notImplemented(action: string) {
-  ElMessage.info(`${action}的后端保存逻辑后续接入，当前先保留界面。`)
+async function saveSettings() {
+  saving.value = true
+  try {
+    const settings = await callBridge<LocalSettingsPayload>('save_settings', settingsPayload())
+    applySettings(settings)
+    ElMessage.success('设置已保存到本地配置文件。')
+  } catch (error) {
+    ElMessage.error(`保存设置失败：${errorMessage(error)}`)
+  } finally {
+    saving.value = false
+  }
+}
+
+async function testModelConnection() {
+  testing.value = true
+  try {
+    const result = await callBridge<{ message?: string }>('test_model_connection', settingsPayload())
+    ElMessage.success(result.message || '模型连接正常。')
+  } catch (error) {
+    ElMessage.error(`模型连接失败：${errorMessage(error)}`)
+  } finally {
+    testing.value = false
+  }
+}
+
+function applySettings(settings: Partial<LocalSettingsPayload>) {
+  form.settingsPath = String(settings.settings_path || settings.settingsPath || form.settingsPath)
+  if (settings.model) Object.assign(form.model, settings.model)
+  if (settings.collector) Object.assign(form.collector, settings.collector)
+  if (settings.privacy) {
+    Object.assign(form.privacy, settings.privacy)
+    if (Array.isArray(settings.privacy.sensitive_keywords)) {
+      form.privacy.sensitive_keywords = [...settings.privacy.sensitive_keywords]
+    }
+  }
+  if (settings.logging) Object.assign(form.logging, settings.logging)
+}
+
+function settingsPayload(): LocalSettingsPayload {
+  return {
+    model: { ...form.model },
+    collector: { ...form.collector },
+    privacy: { ...form.privacy, sensitive_keywords: [...form.privacy.sensitive_keywords] },
+    logging: { ...form.logging }
+  }
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
 }
 
 onMounted(load)

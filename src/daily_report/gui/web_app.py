@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import time
+import logging
 from contextlib import AbstractContextManager
 from pathlib import Path
 from urllib.error import URLError
@@ -12,6 +13,9 @@ from urllib.request import urlopen
 from PySide6.QtWidgets import QApplication
 
 from daily_report.gui.services.gui_service import GuiService
+
+
+logger = logging.getLogger(__name__)
 
 
 class ViteDevServer(AbstractContextManager["ViteDevServer"]):
@@ -25,11 +29,11 @@ class ViteDevServer(AbstractContextManager["ViteDevServer"]):
     def __enter__(self) -> "ViteDevServer":
         self._ensure_frontend_ready()
         if self._is_ready():
-            print(f"Vite dev server already running: {self.url}")
+            logger.info("Using existing Vite dev server: %s", self.url)
             return self
 
         npm = "npm.cmd" if os.name == "nt" else "npm"
-        print(f"Starting Vite dev server: {self.url}")
+        logger.info("Starting Vite dev server: %s", self.url)
         self.process = subprocess.Popen(
             [npm, "run", "dev", "--", "--port", str(self.port), "--strictPort"],
             cwd=self.frontend_dir,
@@ -42,7 +46,7 @@ class ViteDevServer(AbstractContextManager["ViteDevServer"]):
             return
         if self.process.poll() is not None:
             return
-        print("Stopping Vite dev server...")
+        logger.info("Stopping Vite dev server")
         if os.name == "nt":
             subprocess.run(
                 ["taskkill", "/PID", str(self.process.pid), "/T", "/F"],
@@ -71,7 +75,7 @@ class ViteDevServer(AbstractContextManager["ViteDevServer"]):
             if self.process is not None and self.process.poll() is not None:
                 raise RuntimeError(f"Vite dev server exited with code {self.process.returncode}")
             if self._is_ready():
-                print(f"Vite dev server ready: {self.url}")
+                logger.info("Vite dev server ready: %s", self.url)
                 return
             time.sleep(0.4)
         raise RuntimeError(f"Timed out waiting for Vite dev server: {self.url}")

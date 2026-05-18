@@ -2,10 +2,9 @@
   <div class="app-shell flex">
     <Sidebar />
     <div class="main-area flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      <TopBar />
       <main ref="contentRef" class="page-host min-h-0 min-w-0 flex-1 overflow-hidden">
-        <RouterView v-slot="{ Component, route }">
-          <component :is="Component" :key="route.fullPath" />
+        <RouterView v-slot="{ Component }">
+          <component :is="Component" />
         </RouterView>
       </main>
     </div>
@@ -16,7 +15,6 @@
 import { ref, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import Sidebar from '../components/Sidebar.vue'
-import TopBar from '../components/TopBar.vue'
 
 const route = useRoute()
 const contentRef = ref<HTMLElement | null>(null)
@@ -31,10 +29,11 @@ watch(
 
 <style scoped>
 .main-area {
-  background: transparent;
+  background: var(--app-bg);
 }
 
 .page-host {
-  padding: 20px 24px 24px;
+  background: var(--app-bg);
+  padding: 24px;
 }
 </style>

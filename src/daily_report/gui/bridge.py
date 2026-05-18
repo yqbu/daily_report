@@ -111,6 +111,14 @@ class PythonBridge(QObject):
         return self._call(payload, lambda _data: self.service.get_settings())
 
     @Slot(str, result=str)
+    def save_settings(self, payload: str = "") -> str:
+        return self._call(payload, self.service.save_settings)
+
+    @Slot(str, result=str)
+    def test_model_connection(self, payload: str = "") -> str:
+        return self._call(payload, self.service.test_model_connection)
+
+    @Slot(str, result=str)
     def build_report_prompt(self, payload: str = "") -> str:
         return self._call(payload, self.service.build_report_prompt)
 

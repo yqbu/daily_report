@@ -1,5 +1,5 @@
 <template>
-  <div class="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/78 p-1.5 shadow-card">
+  <div class="flex items-center gap-2 rounded-lg border border-slate-200 bg-white/78 p-1.5 shadow-card">
     <el-date-picker
       :model-value="modelValue"
       type="date"

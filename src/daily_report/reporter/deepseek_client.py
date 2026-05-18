@@ -53,4 +53,4 @@ class DeepSeekClient:
             max_tokens=8,
         )
         content = response.choices[0].message.content or 'OK'
-        return f'模型连接正常：{self.model_name}，返回：{content.strip()}'
+        return f'模型连接正常: {self.model_name}, 返回: {content.strip()}'

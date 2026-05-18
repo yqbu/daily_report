@@ -5,9 +5,9 @@
     </div>
     <el-pagination
       background
-      :small="compact"
+      :size="compact ? 'small' : 'default'"
       :layout="compact ? 'sizes, prev, pager, next' : 'sizes, prev, pager, next, jumper'"
-      :pager-count="compact ? 3 : 5"
+      :pager-count="5"
       :page-sizes="[20, 30, 50, 100]"
       :current-page="page"
       :page-size="pageSize"

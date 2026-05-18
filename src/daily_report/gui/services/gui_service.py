@@ -1,12 +1,23 @@
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, fields, is_dataclass
 from datetime import date as date_cls
 from datetime import timedelta
 from typing import Any
 
-from daily_report.config.local_settings import load_local_settings, mask_api_key
+from daily_report.config.local_settings import (
+    CollectorSettings,
+    LocalSettings,
+    LoggingSettings,
+    ModelSettings,
+    PrivacySettings,
+    YasbSettings,
+    get_model_api_key,
+    load_local_settings,
+    save_local_settings,
+)
 from daily_report.gui.data_provider import GuiDataProvider
+from daily_report.reporter.deepseek_client import DeepSeekClient
 from daily_report.service.report_service import ReportService
 
 
@@ -188,8 +199,24 @@ class GuiService:
     def get_settings(self) -> dict[str, Any]:
         settings = load_local_settings()
         data = asdict(settings)
-        data["model"]["api_key"] = mask_api_key(data["model"].get("api_key", ""))
+        data["settings_path"] = str(self._settings_path())
         return data
+
+    def save_settings(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        settings = self._settings_from_payload(params or {}, load_local_settings())
+        save_local_settings(settings)
+        return self.get_settings()
+
+    def test_model_connection(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        settings = self._settings_from_payload(params or {}, load_local_settings())
+        client = DeepSeekClient(
+            api_key=settings.model.api_key.strip() or get_model_api_key(settings),
+            model_name=settings.model.model_name,
+            base_url=settings.model.base_url,
+            temperature=settings.model.temperature,
+            timeout_seconds=settings.model.timeout_seconds,
+        )
+        return {"message": client.test()}
 
     def build_report_prompt(self, target_date: str | dict[str, Any] | None = None) -> dict[str, Any]:
         if isinstance(target_date, dict):
@@ -200,6 +227,62 @@ class GuiService:
             max_chars = None
         prompt = self.report_service.build_prompt(day, max_chars=int(max_chars) if max_chars else None)
         return {"prompt": prompt}
+
+    @staticmethod
+    def _settings_path() -> Any:
+        from daily_report.config.paths import get_runtime_paths
+
+        return get_runtime_paths().local_settings_path
+
+    @classmethod
+    def _settings_from_payload(cls, data: dict[str, Any], base: LocalSettings) -> LocalSettings:
+        return LocalSettings(
+            model=cls._merge_section(ModelSettings, base.model, data.get("model", {})),
+            collector=cls._merge_section(
+                CollectorSettings,
+                base.collector,
+                data.get("collector", {}),
+            ),
+            privacy=cls._merge_section(PrivacySettings, base.privacy, data.get("privacy", {})),
+            yasb=cls._merge_section(YasbSettings, base.yasb, data.get("yasb", {})),
+            logging=cls._merge_section(LoggingSettings, base.logging, data.get("logging", {})),
+        )
+
+    @staticmethod
+    def _merge_section(cls: type, base_obj: Any, raw: Any) -> Any:
+        data = asdict(base_obj) if is_dataclass(base_obj) else {}
+        allowed = {field.name for field in fields(cls)}
+        if isinstance(raw, dict):
+            for key, value in raw.items():
+                if key in allowed:
+                    data[key] = value
+
+        if cls is ModelSettings:
+            data["api_key"] = _preserve_masked_secret(str(data.get("api_key") or ""), base_obj.api_key)
+            data["max_prompt_chars"] = _clamp_int(data.get("max_prompt_chars"), 1000, 200000, base_obj.max_prompt_chars)
+            data["timeout_seconds"] = _clamp_int(data.get("timeout_seconds"), 5, 300, base_obj.timeout_seconds)
+            data["temperature"] = _clamp_float(data.get("temperature"), 0, 2, base_obj.temperature)
+        elif cls is CollectorSettings:
+            data["foreground_poll_interval_sec"] = _clamp_int(
+                data.get("foreground_poll_interval_sec"),
+                1,
+                60,
+                base_obj.foreground_poll_interval_sec,
+            )
+            data["edge_sync_interval_min"] = _clamp_int(
+                data.get("edge_sync_interval_min"),
+                1,
+                120,
+                base_obj.edge_sync_interval_min,
+            )
+        elif cls is LoggingSettings:
+            level = str(data.get("level") or base_obj.level).upper()
+            data["level"] = level if level in {"DEBUG", "INFO", "WARNING", "ERROR"} else base_obj.level
+            data["retention_days"] = _clamp_int(data.get("retention_days"), 1, 3650, base_obj.retention_days)
+        elif cls is PrivacySettings and not isinstance(data.get("sensitive_keywords"), list):
+            data["sensitive_keywords"] = list(base_obj.sensitive_keywords)
+
+        return cls(**data)
 
     @staticmethod
     def _day(params: dict[str, Any]) -> str:
@@ -283,3 +366,28 @@ class GuiService:
             return [dict(row) for row in rows], int(total_row["n"] if total_row else 0)
         finally:
             conn.close()
+
+
+def _clamp_int(value: Any, minimum: int, maximum: int, fallback: int) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        number = fallback
+    return max(minimum, min(maximum, number))
+
+
+def _clamp_float(value: Any, minimum: float, maximum: float, fallback: float) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        number = fallback
+    return max(minimum, min(maximum, number))
+
+
+def _preserve_masked_secret(value: str, fallback: str) -> str:
+    stripped = value.strip()
+    if not stripped:
+        return ""
+    if "*" in stripped and stripped.replace("*", "") in {"", fallback[:4] + fallback[-4:]}:
+        return fallback
+    return stripped
