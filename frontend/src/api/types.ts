@@ -1,3 +1,10 @@
+/**
+ * Frontend/backend data contracts.
+ *
+ * 这个文件只描述 QWebChannel 后端接口返回的数据形态，不承载页面布局。
+ * 后续实现页面时，优先从这里取类型，避免在组件里散落重复的字段定义。
+ */
+
 export interface BridgeResponse<T> {
   ok: boolean
   data?: T
@@ -13,6 +20,12 @@ export interface PageResult<T> {
 }
 
 export type SourceType = 'app' | 'browser' | 'clipboard' | 'ai_prompt'
+export type TemplateName = 'daily_standard' | 'daily_technical' | 'daily_brief'
+
+/**
+ * 兼容旧页面/旧 store 的来源类型。
+ * 新页面应优先使用 SourceType。
+ */
 export type RecordKind = 'app' | 'clipboard' | 'browser' | 'ai'
 
 export interface OverviewPayload {
@@ -119,6 +132,102 @@ export interface LocalSettingsPayload {
   }
 }
 
+export interface TimelineFilters {
+  source_types?: SourceType[]
+  selected?: boolean
+  sensitive?: boolean
+  keyword?: string
+  sort_order?: 'asc' | 'desc'
+  limit?: number
+}
+
+export interface EntryListFilters {
+  selected?: boolean
+  sensitive?: boolean
+  keyword?: string
+}
+
+export interface EntryAnnotationPayload {
+  category?: string | null
+  note?: string | null
+  importance?: number | null
+}
+
+export interface HealthPayload {
+  ok?: boolean
+  collector_status?: string
+  collector_states?: unknown[]
+  [key: string]: unknown
+}
+
+export interface PromptPreviewPayload {
+  date: string
+  template_name: TemplateName | string
+  prompt: string
+}
+
+export interface MaterialListPayload {
+  date?: string
+  items: MaterialCard[]
+  total?: number
+}
+
+export interface TimelineListPayload {
+  items: TimelineEvent[]
+  total: number
+}
+
+/**
+ * QWebChannel 方法契约。
+ *
+ * 页面骨架中保留这些调用点；具体 UI 完成时只需要把状态渲染出来，
+ * 不需要重新确认 Python bridge 方法名和 payload 结构。
+ */
+export interface BridgeMethodPayloadMap {
+  getOverview: { date?: string | null }
+  getTimeline: { date?: string | null; filters?: TimelineFilters }
+  listEntries: {
+    sourceType: SourceType
+    date?: string | null
+    filters?: EntryListFilters
+    page: number
+    pageSize: number
+  }
+  getEntryDetail: { sourceType: SourceType; id: number }
+  updateEntrySelection: { sourceType: SourceType; id: number; selected: boolean }
+  markEntryDeleted: { sourceType: SourceType; id: number }
+  updateEntryAnnotation: { sourceType: SourceType; id: number; payload: EntryAnnotationPayload }
+  getReportMaterials: { date?: string | null }
+  buildPrompt: { date?: string | null; templateName: TemplateName | string }
+  generateReport: { date?: string | null; templateName: TemplateName | string }
+  getLatestReport: { date?: string | null }
+  listReports: { startDate?: string | null; endDate?: string | null }
+  getSettings: Record<string, never>
+  saveSettings: LocalSettingsPayload
+  getHealth: Record<string, never>
+}
+
+export interface BridgeMethodResultMap {
+  getOverview: OverviewPayload
+  getTimeline: TimelineListPayload
+  listEntries: PageResult<AnyRecord>
+  getEntryDetail: AnyRecord | null
+  updateEntrySelection: { ok?: boolean }
+  markEntryDeleted: { ok?: boolean }
+  updateEntryAnnotation: { ok?: boolean }
+  getReportMaterials: MaterialListPayload
+  buildPrompt: PromptPreviewPayload
+  generateReport: GeneratedReport
+  getLatestReport: ReportHistoryRow | null
+  listReports: { items: ReportHistoryRow[]; total?: number }
+  getSettings: LocalSettingsPayload
+  saveSettings: LocalSettingsPayload
+  getHealth: HealthPayload
+}
+
+/**
+ * 旧页面/旧 store 兼容类型。新页面不再依赖这些类型，但先保留，避免破坏历史代码。
+ */
 export interface DashboardSummary {
   date: string
   metrics: {

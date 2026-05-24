@@ -34,3 +34,4 @@ output/
 
 # Local environment variables
 .env
+.codex
