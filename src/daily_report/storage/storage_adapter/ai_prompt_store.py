@@ -48,7 +48,7 @@ class RepositoryAiPromptEntryStore:
             self._repository = AiPromptEntryRepository(self._conn)
         return self._repository
 
-    def save_entry(self, entry: AiPromptEntryStateLike) -> int:
+    def save_entry(self, entry: AiPromptEntryStateLike) -> tuple[int, bool]:
         repository = self._get_repository()
         return repository.upsert_entry(
             date=entry.date,

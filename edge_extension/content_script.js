@@ -2,7 +2,7 @@
   "use strict";
 
   const CONFIG = {
-    endpoint: "http://127.0.0.1:8765/api/ai-prompts",
+    endpoint: "http://127.0.0.1:8765/api/ai-prompt",
     // 如果 Python 侧设置了 DAILY_REPORT_AI_PROMPT_TOKEN，这里也填同一个值。
     authToken: "",
     minPromptLength: 2,

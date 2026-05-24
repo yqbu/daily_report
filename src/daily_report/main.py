@@ -44,7 +44,11 @@ def run_status(args: argparse.Namespace) -> None:
 
 def run_build_prompt(args: argparse.Namespace) -> None:
     service = ReportService(db_path=args.db_path)
-    prompt = service.build_prompt(args.date, max_chars=args.max_chars)
+    prompt = service.build_prompt(
+        args.date,
+        template_name=args.template_name,
+        max_chars=args.max_chars,
+    )
     if args.out:
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -61,6 +65,7 @@ def run_generate_today(args: argparse.Namespace) -> None:
         target_date=args.date,
         api_key=args.api_key,
         save=not args.no_save,
+        template_name=args.template_name,
     )
 
     if args.out:
@@ -129,6 +134,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     prompt_parser.add_argument('--date', default=None, help='Target date, format: YYYY-MM-DD' )
     prompt_parser.add_argument('--max-chars', type=int, default=None)
+    prompt_parser.add_argument('--template-name', default='daily_standard')
     prompt_parser.add_argument('--out', default=None, help='Optional output txt path' )
     prompt_parser.add_argument('--db-path', default=None, help='Optional SQLite db path' )
     prompt_parser.set_defaults(func=run_build_prompt)
@@ -138,6 +144,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gen_parser.add_argument('--date', default=None, help='Target date, format: YYYY-MM-DD' )
     gen_parser.add_argument('--api-key', default=None, help='DeepSeek API key override' )
+    gen_parser.add_argument('--template-name', default='daily_standard')
     gen_parser.add_argument('--db-path', default=None, help='Optional SQLite db path' )
     gen_parser.add_argument('--out', default=None, help='Optional output markdown path' )
     gen_parser.add_argument('--no-save', action='store_true', help='Do not save to daily_reports' )

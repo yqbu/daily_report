@@ -50,6 +50,8 @@ class PrivacySettings:
             'secret',
             'sk-',
             '密码',
+            '密钥',
+            '令牌',
             '认证',
         ]
     )
@@ -133,12 +135,15 @@ def get_model_api_key(settings: LocalSettings | None = None) -> str:
     """
     API Key 获取优先级：
 
-    1. 环境变量 DEEPSEEK_API_KEY
-    2. data/local_settings.json 中的 model.api_key
+    1. 环境变量 DAILY_REPORT_API_KEY
+    2. 环境变量 DEEPSEEK_API_KEY
+    3. 环境变量 OPENAI_API_KEY
+    4. data/local_settings.json 中的 model.api_key
     """
-    env_key = os.getenv('DEEPSEEK_API_KEY', '').strip()
-    if env_key:
-        return env_key
+    for env_name in ('DAILY_REPORT_API_KEY', 'DEEPSEEK_API_KEY', 'OPENAI_API_KEY'):
+        env_key = os.getenv(env_name, '').strip()
+        if env_key:
+            return env_key
 
     settings = settings or load_local_settings()
     return settings.model.api_key.strip()

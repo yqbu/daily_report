@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,6 +28,11 @@ def get_project_root() -> Path:
     parents[3] = project root
     """
     return Path(__file__).resolve().parents[3]
+
+
+def get_installed_share_root() -> Path:
+    """Return the platform-independent data-files install location used by wheels."""
+    return Path(sys.prefix) / 'share' / 'daily-report'
 
 
 def get_runtime_paths() -> RuntimePaths:

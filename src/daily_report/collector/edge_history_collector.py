@@ -6,7 +6,6 @@ import shutil
 import sqlite3
 import tempfile
 import threading
-import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone

@@ -18,7 +18,12 @@ from daily_report.config.local_settings import (
 )
 from daily_report.gui.data_provider import GuiDataProvider
 from daily_report.reporter.deepseek_client import DeepSeekClient
+from daily_report.service.material_service import MaterialService
+from daily_report.service.overview_service import OverviewService
 from daily_report.service.report_service import ReportService
+from daily_report.service.timeline_service import TimelineService
+from daily_report.storage.database import create_connection, init_database
+from daily_report.storage.repositories.annotation_repository import AnnotationRepository
 
 
 class GuiService:
@@ -31,6 +36,163 @@ class GuiService:
     def __init__(self, provider: GuiDataProvider | None = None):
         self.provider = provider or GuiDataProvider()
         self.report_service = ReportService(self.provider.db_path)
+        self.timeline_service = TimelineService(self.provider.db_path)
+        self.material_service = MaterialService(self.provider.db_path)
+        self.overview_service = OverviewService(self.provider.db_path)
+
+    def get_overview(self, target_date: str | None = None) -> dict[str, Any]:
+        return self.overview_service.get_overview(target_date or self.provider.today())
+
+    def get_timeline(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        filters = params.get("filters") if isinstance(params.get("filters"), dict) else params
+        source_types = filters.get("source_types") or filters.get("sourceTypes")
+        if isinstance(source_types, str):
+            source_types = [source_types] if source_types else None
+        events = self.timeline_service.list_timeline(
+            date=str(params.get("date") or filters.get("date") or self.provider.today()),
+            source_types=source_types,
+            selected=_optional_bool(filters.get("selected")),
+            sensitive=_optional_bool(filters.get("sensitive")),
+            keyword=str(filters.get("keyword") or "").strip() or None,
+            limit=int(filters.get("limit") or params.get("limit") or 500),
+            sort_order=str(filters.get("sort_order") or filters.get("sortOrder") or "asc"),
+        )
+        return {"items": [event.to_dict() for event in events], "total": len(events)}
+
+    def list_entries(
+        self,
+        source_type: str,
+        target_date: str | None = None,
+        filters: dict[str, Any] | None = None,
+        page: int = 1,
+        page_size: int = 30,
+    ) -> dict[str, Any]:
+        filters = filters or {}
+        day = target_date or self.provider.today()
+        page = max(1, int(page or 1))
+        page_size = max(1, min(200, int(page_size or 30)))
+        offset = (page - 1) * page_size
+        table = self._source_table(source_type)
+        time_column = self._source_time_column(source_type)
+        clauses = ["date = ?"]
+        params: list[Any] = [day]
+        if self._table_has_column(table, "is_deleted"):
+            clauses.append("is_deleted = 0")
+        selected = _optional_bool(filters.get("selected"))
+        if selected is not None and self._table_has_column(table, "is_selected"):
+            clauses.append("is_selected = ?")
+            params.append(int(selected))
+        sensitive = _optional_bool(filters.get("sensitive"))
+        if sensitive is not None and self._table_has_column(table, "is_sensitive"):
+            clauses.append("is_sensitive = ?")
+            params.append(int(sensitive))
+        keyword = str(filters.get("keyword") or "").strip()
+        if keyword:
+            keyword_columns = self._keyword_columns(source_type)
+            like = f"%{keyword}%"
+            clauses.append("(" + " OR ".join(f"{column} LIKE ?" for column in keyword_columns) + ")")
+            params.extend([like] * len(keyword_columns))
+
+        sql_where = " AND ".join(clauses)
+        conn = self.provider.connect()
+        try:
+            total_row = conn.execute(f"SELECT COUNT(*) AS n FROM {table} WHERE {sql_where}", tuple(params)).fetchone()
+            rows = conn.execute(
+                f"""
+                SELECT *
+                FROM {table}
+                WHERE {sql_where}
+                ORDER BY {time_column} DESC, id DESC
+                LIMIT ? OFFSET ?
+                """,
+                tuple([*params, page_size, offset]),
+            ).fetchall()
+            return {
+                "items": [dict(row) for row in rows],
+                "total": int(total_row["n"] if total_row else 0),
+                "page": page,
+                "page_size": page_size,
+            }
+        finally:
+            conn.close()
+
+    def get_entry_detail(self, source_type: str, entry_id: int) -> dict[str, Any] | None:
+        return self.timeline_service.get_entry_detail(source_type, entry_id)
+
+    def update_entry_selection(self, source_type: str, entry_id: int, selected: bool) -> dict[str, Any]:
+        self.timeline_service.update_entry_selection(source_type, entry_id, selected)
+        return {"source_type": source_type, "id": entry_id, "selected": selected}
+
+    def mark_entry_deleted(self, source_type: str, entry_id: int) -> dict[str, Any]:
+        self.timeline_service.mark_entry_deleted(source_type, entry_id)
+        return {"source_type": source_type, "id": entry_id, "deleted": True}
+
+    def update_entry_annotation(
+        self,
+        source_type: str,
+        entry_id: int,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        payload = payload or {}
+        conn = create_connection(self.provider.db_path)
+        try:
+            init_database(conn)
+            row = AnnotationRepository(conn).update_annotation(
+                source_type=source_type,
+                source_id=int(entry_id),
+                category=payload.get("category"),
+                note=payload.get("note"),
+                importance=payload.get("importance"),
+            )
+            return dict(row)
+        finally:
+            conn.close()
+
+    def get_report_materials(self, target_date: str | None = None) -> dict[str, Any]:
+        day = target_date or self.provider.today()
+        materials = self.material_service.build_materials(day, include_sensitive=False)
+        return {
+            "date": day,
+            "items": [material.to_dict() for material in materials],
+            "total": len(materials),
+        }
+
+    def build_prompt(self, target_date: str | None = None, template_name: str = "daily_standard") -> dict[str, Any]:
+        day = target_date or self.provider.today()
+        prompt = self.report_service.build_prompt(day, template_name=template_name)
+        return {"date": day, "template_name": template_name, "prompt": prompt}
+
+    def generate_report_sync(
+        self,
+        target_date: str | None = None,
+        template_name: str = "daily_standard",
+        api_key: str | None = None,
+    ) -> dict[str, Any]:
+        result = self.report_service.generate_report(
+            target_date=target_date or self.provider.today(),
+            template_name=template_name,
+            api_key=api_key,
+            save=True,
+        )
+        return asdict(result)
+
+    def get_latest_report(self, target_date: str | None = None) -> dict[str, Any] | None:
+        record = self.report_service.get_latest_report(target_date or self.provider.today())
+        return asdict(record) if record else None
+
+    def list_reports(self, start_date: str | None = None, end_date: str | None = None) -> dict[str, Any]:
+        rows = self.report_service.list_reports(start_date=start_date, end_date=end_date)
+        return {"items": [asdict(row) for row in rows], "total": len(rows)}
+
+    def get_health(self) -> dict[str, Any]:
+        overview = self.get_overview(self.provider.today())
+        return {
+            "ok": True,
+            "database_path": str(self.provider.db_path),
+            "collector_status": overview.get("collector_status"),
+            "collector_states": overview.get("collector_states", []),
+        }
 
     def get_dashboard_summary(self, target_date: str | None = None) -> dict[str, Any]:
         day = target_date or self.provider.today()
@@ -367,6 +529,46 @@ class GuiService:
         finally:
             conn.close()
 
+    @staticmethod
+    def _source_table(source_type: str) -> str:
+        normalized = "ai_prompt" if source_type == "ai" else str(source_type or "")
+        mapping = {
+            "app": "app_sessions",
+            "browser": "browser_history_entries",
+            "clipboard": "clipboard_entries",
+            "ai_prompt": "ai_prompt_entries",
+        }
+        if normalized not in mapping:
+            raise ValueError(f"Unsupported source type: {source_type}")
+        return mapping[normalized]
+
+    @staticmethod
+    def _source_time_column(source_type: str) -> str:
+        normalized = "ai_prompt" if source_type == "ai" else str(source_type or "")
+        return {
+            "app": "start_time",
+            "browser": "visit_time",
+            "clipboard": "last_seen_at",
+            "ai_prompt": "timestamp",
+        }.get(normalized, "id")
+
+    @staticmethod
+    def _keyword_columns(source_type: str) -> list[str]:
+        normalized = "ai_prompt" if source_type == "ai" else str(source_type or "")
+        return {
+            "app": ["app_name", "process_name", "window_title"],
+            "browser": ["title", "url", "domain", "search_query"],
+            "clipboard": ["content_preview", "content"],
+            "ai_prompt": ["platform", "page_title", "prompt_preview", "prompt_text"],
+        }.get(normalized, ["id"])
+
+    def _table_has_column(self, table_name: str, column_name: str) -> bool:
+        conn = self.provider.connect()
+        try:
+            return column_name in {str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table_name})")}
+        finally:
+            conn.close()
+
 
 def _clamp_int(value: Any, minimum: int, maximum: int, fallback: int) -> int:
     try:
@@ -391,3 +593,18 @@ def _preserve_masked_secret(value: str, fallback: str) -> str:
     if "*" in stripped and stripped.replace("*", "") in {"", fallback[:4] + fallback[-4:]}:
         return fallback
     return stripped
+
+
+def _optional_bool(value: Any) -> bool | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes", "selected"}:
+        return True
+    if text in {"false", "0", "no", "unselected"}:
+        return False
+    return None

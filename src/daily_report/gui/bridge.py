@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import traceback
+import logging
 import uuid
 from pathlib import Path
 from typing import Any, Callable
@@ -10,6 +10,8 @@ from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from daily_report.gui.data_provider import GuiDataProvider
 from daily_report.gui.services.gui_service import GuiService
+
+logger = logging.getLogger(__name__)
 
 
 class ReportWorker(QObject):
@@ -28,7 +30,8 @@ class ReportWorker(QObject):
             data = service.generate_report(self.options)
             self.finished.emit(_json_ok({"job_id": self.job_id, "result": data}))
         except Exception as exc:
-            self.finished.emit(_json_error(str(exc), job_id=self.job_id, detail=traceback.format_exc()))
+            logger.exception('Report worker failed.')
+            self.finished.emit(_json_error(str(exc), job_id=self.job_id))
 
 
 class PythonBridge(QObject):
@@ -42,6 +45,121 @@ class PythonBridge(QObject):
     @Slot(str, result=str)
     def ping(self, payload: str = "") -> str:
         return _json_ok({"message": "pong", "payload": _payload(payload)})
+
+    @Slot(str, result=str)
+    def getOverview(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, lambda data: self.service.get_overview(_date_arg(data)))
+
+    @Slot(str, result=str)
+    def getTimeline(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, self.service.get_timeline)
+
+    @Slot(str, result=str)
+    def listEntries(self, payload: str = "") -> str:  # noqa: N802
+        def run(data: dict[str, Any]) -> dict[str, Any]:
+            return self.service.list_entries(
+                source_type=str(data.get("sourceType") or data.get("source_type") or ""),
+                target_date=str(data.get("date") or "").strip() or None,
+                filters=data.get("filters") if isinstance(data.get("filters"), dict) else {},
+                page=int(data.get("page") or 1),
+                page_size=int(data.get("pageSize") or data.get("page_size") or 30),
+            )
+
+        return self._call(payload, run)
+
+    @Slot(str, result=str)
+    def getEntryDetail(self, payload: str = "") -> str:  # noqa: N802
+        def run(data: dict[str, Any]) -> Any:
+            return self.service.get_entry_detail(
+                str(data.get("sourceType") or data.get("source_type") or ""),
+                int(data.get("id") or 0),
+            )
+
+        return self._call(payload, run)
+
+    @Slot(str, result=str)
+    def updateEntrySelection(self, payload: str = "") -> str:  # noqa: N802
+        def run(data: dict[str, Any]) -> dict[str, Any]:
+            return self.service.update_entry_selection(
+                str(data.get("sourceType") or data.get("source_type") or ""),
+                int(data.get("id") or 0),
+                bool(data.get("selected")),
+            )
+
+        return self._call(payload, run)
+
+    @Slot(str, result=str)
+    def markEntryDeleted(self, payload: str = "") -> str:  # noqa: N802
+        def run(data: dict[str, Any]) -> dict[str, Any]:
+            return self.service.mark_entry_deleted(
+                str(data.get("sourceType") or data.get("source_type") or ""),
+                int(data.get("id") or 0),
+            )
+
+        return self._call(payload, run)
+
+    @Slot(str, result=str)
+    def updateEntryAnnotation(self, payload: str = "") -> str:  # noqa: N802
+        def run(data: dict[str, Any]) -> dict[str, Any]:
+            annotation_payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+            return self.service.update_entry_annotation(
+                str(data.get("sourceType") or data.get("source_type") or ""),
+                int(data.get("id") or 0),
+                annotation_payload,
+            )
+
+        return self._call(payload, run)
+
+    @Slot(str, result=str)
+    def getReportMaterials(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, lambda data: self.service.get_report_materials(_date_arg(data)))
+
+    @Slot(str, result=str)
+    def buildPrompt(self, payload: str = "") -> str:  # noqa: N802
+        def run(data: dict[str, Any]) -> dict[str, Any]:
+            return self.service.build_prompt(
+                _date_arg(data),
+                str(data.get("templateName") or data.get("template_name") or "daily_standard"),
+            )
+
+        return self._call(payload, run)
+
+    @Slot(str, result=str)
+    def generateReport(self, payload: str = "") -> str:  # noqa: N802
+        def run(data: dict[str, Any]) -> dict[str, Any]:
+            return self.service.generate_report_sync(
+                _date_arg(data),
+                str(data.get("templateName") or data.get("template_name") or "daily_standard"),
+                str(data.get("apiKey") or data.get("api_key") or "").strip() or None,
+            )
+
+        return self._call(payload, run)
+
+    @Slot(str, result=str)
+    def getLatestReport(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, lambda data: self.service.get_latest_report(_date_arg(data)))
+
+    @Slot(str, result=str)
+    def listReports(self, payload: str = "") -> str:  # noqa: N802
+        def run(data: dict[str, Any]) -> dict[str, Any]:
+            return self.service.list_reports(
+                str(data.get("startDate") or data.get("start_date") or "").strip() or None,
+                str(data.get("endDate") or data.get("end_date") or "").strip() or None,
+            )
+
+        return self._call(payload, run)
+
+    @Slot(str, result=str)
+    def getSettings(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, lambda _data: self.service.get_settings())
+
+    @Slot(str, result=str)
+    def saveSettings(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, self.service.save_settings)
+
+    @Slot(str, result=str)
+    def getHealth(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, lambda _data: self.service.get_health())
 
     @Slot(str, result=str)
     def get_dashboard_summary(self, payload: str = "") -> str:
@@ -100,7 +218,8 @@ class PythonBridge(QObject):
             thread.start()
             return _json_ok({"job_id": job_id, "status": "started"})
         except Exception as exc:
-            return _json_error(str(exc), detail=traceback.format_exc())
+            logger.exception('Failed to start report worker.')
+            return _json_error(str(exc))
 
     @Slot(str, result=str)
     def get_collector_status(self, payload: str = "") -> str:
@@ -126,7 +245,8 @@ class PythonBridge(QObject):
         try:
             return _json_ok(fn(_payload(payload)))
         except Exception as exc:
-            return _json_error(str(exc), detail=traceback.format_exc())
+            logger.exception('Python bridge call failed.')
+            return _json_error(str(exc))
 
     @Slot(str)
     def _emit_job_finished(self, payload: str) -> None:

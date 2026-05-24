@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional, Protocol
 
 from daily_report.storage.database import SqliteConnectionFactory
-from daily_report.storage.repositories.cliboard_repository import ClipboardEntryRepository
+from daily_report.storage.repositories.clipboard_repository import ClipboardEntryRepository
 
 
 class ClipboardEntryStateLike(Protocol):

@@ -12,43 +12,77 @@ export interface PageResult<T> {
   [key: string]: unknown
 }
 
+export type SourceType = 'app' | 'browser' | 'clipboard' | 'ai_prompt'
 export type RecordKind = 'app' | 'clipboard' | 'browser' | 'ai'
 
-export interface DashboardSummary {
+export interface OverviewPayload {
   date: string
-  metrics: {
-    active_time: string
-    total_time: string
-    app_sessions: number
-    clipboard: number
-    browser: number
-    ai_prompts: number
-  }
-  top_apps: Array<{ name: string; seconds: number; session_count: number }>
-  time_distribution: Array<{ label: string; active: number }>
-  recent_activities: Array<{ time: string; title: string; source: string; duration_sec: number }>
-  weekly_trend: Array<{ date: string; count: number }>
+  collector_status: string
+  active_time: string
+  total_time: string
+  active_time_sec: number
+  total_time_sec: number
+  app_session_count: number
+  browser_count: number
+  clipboard_count: number
+  ai_prompt_count: number
+  selected_material_count: number
+  sensitive_count: number
+  report_status: string
+  top_apps: Array<{ name: string; app_name?: string; seconds: number; session_count: number }>
+  source_distribution: Array<{ source_type: SourceType; count: number }>
+  category_distribution: Array<{ category: string; count: number }>
+  hourly_activity: Array<{ hour: number; label: string; active_sec: number }>
 }
 
-export interface MaterialRow {
-  key: string
-  selected: boolean
-  time: string
-  source_type: string
-  preview: string
-  source: string
-  sensitive: boolean
+export interface TimelineEvent {
+  event_id: string
+  source_type: SourceType
+  source_id: number
+  start_time: string
+  end_time?: string | null
+  title: string
+  subtitle: string
+  content_preview: string
+  category: string
+  is_selected: boolean
+  is_sensitive: boolean
+  is_deleted: boolean
+}
+
+export interface MaterialCard {
+  source_type: SourceType
+  source_id: number
+  time_range: string
+  category: string
+  title: string
+  summary: string
+  evidence: string
+  importance: number
+  is_sensitive: boolean
+}
+
+export interface GeneratedReport {
+  report_id: number
+  prompt_text: string
+  report_markdown: string
 }
 
 export interface ReportHistoryRow {
   id: number
   date: string
+  report_type?: string
+  template_name?: string
+  model_provider?: string
   model_name: string
   prompt_text: string
   report_markdown: string
-  material_summary?: string
+  material_snapshot_json?: string | null
+  material_summary?: string | null
+  source_counts?: Record<string, unknown>
   source_counts_json?: string
   created_at: string
+  updated_at?: string
 }
 
 export interface LocalSettingsPayload {
@@ -83,6 +117,32 @@ export interface LocalSettingsPayload {
     level: string
     retention_days: number
   }
+}
+
+export interface DashboardSummary {
+  date: string
+  metrics: {
+    active_time: string
+    total_time: string
+    app_sessions: number
+    clipboard: number
+    browser: number
+    ai_prompts: number
+  }
+  top_apps: Array<{ name: string; seconds: number; session_count: number }>
+  time_distribution: Array<{ label: string; active: number }>
+  recent_activities: Array<{ time: string; title: string; source: string; duration_sec: number }>
+  weekly_trend: Array<{ date: string; count: number }>
+}
+
+export interface MaterialRow {
+  key: string
+  selected: boolean
+  time: string
+  source_type: string
+  preview: string
+  source: string
+  sensitive: boolean
 }
 
 export type AnyRecord = Record<string, unknown>

@@ -6,8 +6,8 @@ from datetime import datetime
 from typing import Any
 
 
-class BrowserHistoryEntryRepository:
-    """Repository for Edge browser history entries."""
+class ClipboardEntryRepository:
+    """Repository for clipboard text entries."""
 
     def __init__(self, conn: sqlite3.Connection):
         self.conn = conn
@@ -17,64 +17,42 @@ class BrowserHistoryEntryRepository:
         self,
         *,
         date: str,
-        browser: str,
-        profile_name: str,
-        visit_id: int,
-        visit_time: datetime,
-        visit_time_chrome: int,
-        title: str,
-        url: str,
-        domain: str,
-        transition: int | None,
-        visit_duration_sec: float,
-        is_search: bool,
-        search_engine: str | None,
-        search_query: str | None,
-        is_noise: bool,
+        first_seen_at: datetime,
+        last_seen_at: datetime,
+        content: str,
+        content_preview: str,
+        content_hash: str,
+        char_count: int,
+        is_sensitive: bool,
+        sensitivity_reason: str | None,
         is_selected: bool,
     ) -> int:
         now = _now()
         with self._lock:
             self.conn.execute(
                 """
-                INSERT INTO browser_history_entries (
-                    date, browser, profile_name, visit_id, visit_time, visit_time_chrome,
-                    title, url, domain, transition, visit_duration_sec, is_search,
-                    search_engine, search_query, is_noise, is_selected, is_deleted,
-                    created_at, updated_at
+                INSERT INTO clipboard_entries (
+                    date, first_seen_at, last_seen_at, content, content_preview,
+                    content_hash, char_count, is_sensitive, sensitivity_reason,
+                    is_selected, is_deleted, seen_count, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-                ON CONFLICT(browser, profile_name, visit_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?)
+                ON CONFLICT(date, content_hash)
                 DO UPDATE SET
-                    visit_time = excluded.visit_time,
-                    visit_time_chrome = excluded.visit_time_chrome,
-                    title = excluded.title,
-                    url = excluded.url,
-                    domain = excluded.domain,
-                    transition = excluded.transition,
-                    visit_duration_sec = excluded.visit_duration_sec,
-                    is_search = excluded.is_search,
-                    search_engine = excluded.search_engine,
-                    search_query = excluded.search_query,
-                    is_noise = excluded.is_noise,
+                    last_seen_at = excluded.last_seen_at,
+                    seen_count = clipboard_entries.seen_count + 1,
                     updated_at = excluded.updated_at
                 """,
                 (
                     date,
-                    browser,
-                    profile_name,
-                    int(visit_id),
-                    visit_time.isoformat(timespec='seconds'),
-                    int(visit_time_chrome),
-                    title,
-                    url,
-                    domain,
-                    transition,
-                    float(visit_duration_sec),
-                    int(is_search),
-                    search_engine,
-                    search_query,
-                    int(is_noise),
+                    first_seen_at.isoformat(timespec='seconds'),
+                    last_seen_at.isoformat(timespec='seconds'),
+                    content,
+                    content_preview,
+                    content_hash,
+                    int(char_count),
+                    int(is_sensitive),
+                    sensitivity_reason,
                     int(is_selected),
                     now,
                     now,
@@ -83,33 +61,15 @@ class BrowserHistoryEntryRepository:
             row = self.conn.execute(
                 """
                 SELECT id
-                FROM browser_history_entries
-                WHERE browser = ? AND profile_name = ? AND visit_id = ?
+                FROM clipboard_entries
+                WHERE date = ? AND content_hash = ?
                 """,
-                (browser, profile_name, int(visit_id)),
+                (date, content_hash),
             ).fetchone()
             self.conn.commit()
         if row is None:
-            raise RuntimeError(f'Failed to fetch browser history entry id: {visit_id}')
+            raise RuntimeError(f'Failed to fetch clipboard entry id: {date}, {content_hash}')
         return int(row['id'])
-
-    def get_latest_visit_time_chrome(
-        self,
-        *,
-        browser: str,
-        profile_name: str,
-    ) -> int | None:
-        with self._lock:
-            row = self.conn.execute(
-                """
-                SELECT MAX(visit_time_chrome) AS max_visit_time_chrome
-                FROM browser_history_entries
-                WHERE browser = ? AND profile_name = ?
-                """,
-                (browser, profile_name),
-            ).fetchone()
-        value = row['max_visit_time_chrome'] if row else None
-        return int(value) if value is not None else None
 
     def list_by_date(
         self,
@@ -125,9 +85,9 @@ class BrowserHistoryEntryRepository:
                 self.conn.execute(
                     f"""
                     SELECT *
-                    FROM browser_history_entries
+                    FROM clipboard_entries
                     WHERE {where}
-                    ORDER BY visit_time DESC, id DESC
+                    ORDER BY last_seen_at DESC, id DESC
                     LIMIT ? OFFSET ?
                     """,
                     tuple(params),
@@ -138,7 +98,7 @@ class BrowserHistoryEntryRepository:
         where, params = self._where_by_date(date, filters)
         with self._lock:
             row = self.conn.execute(
-                f"SELECT COUNT(*) AS n FROM browser_history_entries WHERE {where}",
+                f"SELECT COUNT(*) AS n FROM clipboard_entries WHERE {where}",
                 tuple(params),
             ).fetchone()
         return int(row['n'] if row else 0)
@@ -146,7 +106,7 @@ class BrowserHistoryEntryRepository:
     def get_by_id(self, entry_id: int) -> sqlite3.Row | None:
         with self._lock:
             return self.conn.execute(
-                "SELECT * FROM browser_history_entries WHERE id = ?",
+                "SELECT * FROM clipboard_entries WHERE id = ?",
                 (int(entry_id),),
             ).fetchone()
 
@@ -154,7 +114,7 @@ class BrowserHistoryEntryRepository:
         with self._lock:
             self.conn.execute(
                 """
-                UPDATE browser_history_entries
+                UPDATE clipboard_entries
                 SET is_selected = ?, updated_at = ?
                 WHERE id = ?
                 """,
@@ -166,7 +126,7 @@ class BrowserHistoryEntryRepository:
         with self._lock:
             self.conn.execute(
                 """
-                UPDATE browser_history_entries
+                UPDATE clipboard_entries
                 SET is_deleted = 1, updated_at = ?
                 WHERE id = ?
                 """,
@@ -209,21 +169,13 @@ class BrowserHistoryEntryRepository:
         if 'deleted' in filters and filters['deleted'] is not None:
             clauses.append('is_deleted = ?')
             params.append(int(bool(filters['deleted'])))
-        if 'noise' in filters and filters['noise'] is not None:
-            clauses.append('is_noise = ?')
-            params.append(int(bool(filters['noise'])))
-        if 'is_search' in filters and filters['is_search'] is not None:
-            clauses.append('is_search = ?')
-            params.append(int(bool(filters['is_search'])))
-        if domain := str(filters.get('domain') or '').strip():
-            clauses.append('domain = ?')
-            params.append(domain)
+        if 'sensitive' in filters and filters['sensitive'] is not None:
+            clauses.append('is_sensitive = ?')
+            params.append(int(bool(filters['sensitive'])))
         if keyword := str(filters.get('keyword') or '').strip():
             like = f'%{keyword}%'
-            clauses.append(
-                '(title LIKE ? OR url LIKE ? OR domain LIKE ? OR search_query LIKE ? OR profile_name LIKE ?)'
-            )
-            params.extend([like, like, like, like, like])
+            clauses.append('(content_preview LIKE ? OR content LIKE ? OR sensitivity_reason LIKE ?)')
+            params.extend([like, like, like])
 
         return ' AND '.join(clauses), params
 

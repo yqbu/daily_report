@@ -1,16 +1,20 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 import re
 import threading
-import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, Protocol
 
 import win32clipboard
 import win32con
+
+from daily_report.service.sensitivity import (
+    detect_sensitive_text,
+    hash_text,
+    make_preview as make_text_preview,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -133,29 +137,15 @@ def normalize_clipboard_text(text: str) -> str:
 
 
 def make_content_hash(text: str) -> str:
-    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+    return hash_text(text)
 
 
 def make_preview(text: str, max_chars: int = 160) -> str:
-    preview = re.sub(r'\s+', ' ', text).strip()
-    if len(preview) <= max_chars:
-        return preview
-    return preview[:max_chars] + '...'
+    return make_text_preview(text, max_chars)
 
 
 def detect_sensitive(text: str) -> tuple[bool, Optional[str]]:
-    for reason, pattern in SENSITIVE_PATTERNS:
-        if pattern.search(text):
-            return True, reason
-
-    stripped = text.strip()
-
-    # 单独复制的一长串 token / hash / key,也默认认为可疑
-    if 32 <= len(stripped) <= 300:
-        if re.fullmatch(r'[A-Za-z0-9_./+=:-]{32,}', stripped):
-            return True, 'possible_secret_token'
-
-    return False, None
+    return detect_sensitive_text(text)
 
 
 class ClipboardCollector:

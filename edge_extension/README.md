@@ -1,35 +1,47 @@
 # Daily Report AI Prompt Collector Edge Extension
 
-## 安装方式
+This extension captures only user-submitted prompts on:
 
-1. 打开 Edge：`edge://extensions/`
-2. 开启“开发人员模式”
-3. 点击“加载解压缩的扩展”
-4. 选择本目录 `edge_extension`
-5. 启动 Python receiver：
+- `https://chatgpt.com/*`
+- `https://chat.openai.com/*`
+- `https://chat.deepseek.com/*`
 
-```powershell
-python -m daily_report.collector.ai_prompt_receiver
+It posts the prompt text to the local receiver:
+
+```text
+http://127.0.0.1:8765/api/ai-prompt
 ```
 
-或启动整个服务：
+It does not capture model responses.
+
+## Install
+
+1. Open `edge://extensions/`.
+2. Enable developer mode.
+3. Click "Load unpacked".
+4. Select this `edge_extension` directory.
+5. Start the local collector:
 
 ```powershell
 daily-report run
 ```
 
-## Token 可选配置
+For receiver-only debugging:
 
-如果 Python 侧设置了：
+```powershell
+python -m daily_report.collector.ai_prompt_receiver
+```
+
+## Optional Token
+
+If Python is started with:
 
 ```powershell
 $env:DAILY_REPORT_AI_PROMPT_TOKEN="your-local-token"
 ```
 
-则需要在 `content_script.js` 中同步设置：
+set the same token in `content_script.js`:
 
 ```js
 authToken: "your-local-token"
 ```
-
-MVP 阶段可以先留空；只要 receiver 也没有设置环境变量 token，就能正常联通。

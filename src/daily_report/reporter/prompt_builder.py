@@ -1,10 +1,21 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
+import os
+from pathlib import Path
+from typing import Any
+
+from daily_report.config.paths import get_installed_share_root, get_runtime_paths
+from daily_report.reporter.material_card import MaterialCard
+
+DEFAULT_TEMPLATE_NAME = 'daily_standard'
 
 
 @dataclass(frozen=True)
 class ReportMaterialBundle:
+    """Compatibility bundle used by older callers."""
+
     date: str
     total_time: str = '0m'
     active_time: str = '0m'
@@ -15,63 +26,163 @@ class ReportMaterialBundle:
     ai_prompts: list[str] = field(default_factory=list)
 
 
-def _section(title: str, items: list[str], *, empty_text: str = '无') -> str:
-    if not items:
-        return f'## {title}\n{empty_text}\n'
-    lines = [f'## {title}']
-    lines.extend(f'- {item}' for item in items if item)
-    return '\n'.join(lines) + '\n'
+class PromptBuilder:
+    def __init__(self, template_dir: str | Path | None = None):
+        if template_dir:
+            self.template_dir = Path(template_dir)
+            return
+
+        env_template_dir = os.getenv('DAILY_REPORT_TEMPLATE_DIR')
+        candidates = [
+            Path(env_template_dir) if env_template_dir else None,
+            get_runtime_paths().project_root / 'configs' / 'report_templates',
+            get_installed_share_root() / 'configs' / 'report_templates',
+        ]
+        self.template_dir = next(
+            (candidate for candidate in candidates if candidate and candidate.exists()),
+            get_runtime_paths().project_root / 'configs' / 'report_templates',
+        )
+
+    def build_prompt(
+        self,
+        *,
+        date: str,
+        materials: list[MaterialCard],
+        stats: dict[str, Any] | None = None,
+        template_name: str = DEFAULT_TEMPLATE_NAME,
+        max_chars: int = 12000,
+    ) -> str:
+        stats = stats or {}
+        template_text = self.load_template(template_name)
+        material_text = self._format_materials(materials)
+        if not materials:
+            material_text = '今日有效素材不足。请只基于已有统计进行保守总结，不要补充不存在的事项。'
+
+        prompt = f"""你是一名严谨的个人工作日报写作助手。请根据用户本地采集并人工筛选后的素材，生成中文 Markdown 日报。
+
+# 日期
+{date}
+
+# 今日统计
+- 有效工作时长：{stats.get('active_time', '0m')}
+- 总记录时长：{stats.get('total_time', '0m')}
+- 前台应用素材：{stats.get('app', 0)}
+- 浏览器素材：{stats.get('browser', 0)}
+- 剪切板素材：{stats.get('clipboard', 0)}
+- AI 提问素材：{stats.get('ai_prompt', 0)}
+
+# 输出模板
+{template_text}
+
+# 已筛选素材
+{material_text}
+
+# 写作要求
+- 只根据“已筛选素材”和“今日统计”写作。
+- 禁止编造没有出现在素材中的项目、会议、客户、提交记录、邮件或日程。
+- 禁止输出 API Key、密码、令牌、Cookie、Authorization、手机号、邮箱、身份证、银行卡等敏感内容。
+- 对剪切板素材只引用摘要含义，不展开完整原文。
+- 输出必须是 Markdown，直接给日报正文，不解释生成过程。
+"""
+        if max_chars > 0 and len(prompt) > max_chars:
+            prompt = prompt[: max_chars - 80].rstrip() + '\n\n[提示：由于长度限制，后续素材已截断。]'
+        return prompt
+
+    def load_template(self, template_name: str) -> str:
+        safe_name = template_name if template_name in {
+            'daily_standard',
+            'daily_technical',
+            'daily_brief',
+        } else DEFAULT_TEMPLATE_NAME
+        path = self.template_dir / f'{safe_name}.md'
+        if path.exists():
+            return path.read_text(encoding='utf-8').strip()
+        return (
+            '## 今日工作概述\n\n'
+            '## 主要工作内容\n\n'
+            '## 问题与处理\n\n'
+            '## 明日计划\n\n'
+            '## 备注'
+        )
+
+    @staticmethod
+    def _format_materials(materials: list[MaterialCard]) -> str:
+        grouped: dict[str, list[MaterialCard]] = defaultdict(list)
+        for material in materials:
+            grouped[material.category or '其他'].append(material)
+
+        lines: list[str] = []
+        for category in sorted(grouped):
+            lines.append(f'## {category}')
+            for material in grouped[category]:
+                sensitive_label = '，敏感素材已过滤' if material.is_sensitive else ''
+                lines.append(
+                    f"- [{material.time_range}] ({material.source_type}) {material.title}"
+                    f"{sensitive_label}\n"
+                    f"  - 摘要：{material.summary}\n"
+                    f"  - 证据：{material.evidence}"
+                )
+        return '\n'.join(lines).strip()
+
+
+def build_prompt_from_materials(
+    *,
+    date: str,
+    materials: list[MaterialCard],
+    stats: dict[str, Any] | None = None,
+    template_name: str = DEFAULT_TEMPLATE_NAME,
+    max_chars: int = 12000,
+) -> str:
+    return PromptBuilder().build_prompt(
+        date=date,
+        materials=materials,
+        stats=stats,
+        template_name=template_name,
+        max_chars=max_chars,
+    )
 
 
 def build_daily_report_prompt(bundle: ReportMaterialBundle, *, max_chars: int = 12000) -> str:
-    prompt = f"""
-你需要根据用户本地采集的工作痕迹, 生成一份中文 Markdown 工作日报。
-
-要求:
-1. 不要编造没有出现在素材中的具体事项
-2. 可以对窗口标题、搜索词、AI 提问进行归纳, 但要保持克制
-3. 输出结构建议包含: 今日概览、主要工作内容、问题与处理、明日计划
-4. 语气正式、简洁, 适合作为个人工作日报初稿
-5. 如素材不足, 请明确写成“根据已采集素材, 今日主要活动为……”, 不要硬凑
-
-# 日期
-{bundle.date}
-
-# 时间概览
-- 总记录时长: {bundle.total_time}
-- 活跃工作时长: {bundle.active_time}
-
-{_section('Top 应用', bundle.top_apps)}
-{_section(f'已选前台窗口记录({len(bundle.app_sessions)}条)', bundle.app_sessions)}
-{_section(f'已选剪贴板素材({len(bundle.clipboard_items)}条)', bundle.clipboard_items)}
-{_section(f'已选浏览/搜索记录({len(bundle.browser_items)}条)', bundle.browser_items)}
-{_section(f'已选 AI 提问记录({len(bundle.ai_prompts)}条)', bundle.ai_prompts)}
-
-请直接输出日报 Markdown, 不要解释你的生成过程。
- """.strip()
-
-    if max_chars > 0 and len(prompt) > max_chars:
-        prompt = prompt[:max_chars] + '\n\n[提示: 由于长度限制, 后续素材已截断]'
-    return prompt
+    materials: list[MaterialCard] = []
+    for source_type, category, items in (
+        ('app', '开发编码', bundle.app_sessions),
+        ('clipboard', '其他', bundle.clipboard_items),
+        ('browser', '资料调研', bundle.browser_items),
+        ('ai_prompt', 'AI 辅助', bundle.ai_prompts),
+    ):
+        for index, item in enumerate(items, start=1):
+            materials.append(
+                MaterialCard(
+                    source_type=source_type,
+                    source_id=index,
+                    time_range='',
+                    category=category,
+                    title=item[:80],
+                    summary=item,
+                    evidence=item,
+                    importance=0,
+                    is_sensitive=False,
+                )
+            )
+    stats = {
+        'active_time': bundle.active_time,
+        'total_time': bundle.total_time,
+        'app': len(bundle.app_sessions),
+        'clipboard': len(bundle.clipboard_items),
+        'browser': len(bundle.browser_items),
+        'ai_prompt': len(bundle.ai_prompts),
+    }
+    return build_prompt_from_materials(
+        date=bundle.date,
+        materials=materials,
+        stats=stats,
+        max_chars=max_chars,
+    )
 
 
 def build_material_summary(bundle: ReportMaterialBundle) -> str:
-    lines: list[str] = [
-        f"日期：{bundle.date}",
-        f"总时长：{bundle.total_time}",
-        f"活跃时间：{bundle.active_time}",
-        "",
-        "Top 应用：",
-    ]
-    lines.extend([f"- {item}" for item in bundle.top_apps] or ["- 暂无"])
-
-    sections = [
-        ("应用使用记录", bundle.app_sessions),
-        ("剪贴板素材", bundle.clipboard_items),
-        ("浏览记录与搜索", bundle.browser_items),
-        ("AI 提问记录", bundle.ai_prompts),
-    ]
-    for title, items in sections:
-        lines.extend(["", f"{title}："])
-        lines.extend([f"- {item}" for item in items] or ["- 暂无"])
-    return "\n".join(lines)
+    return (
+        f'date={bundle.date}; active_time={bundle.active_time}; total_time={bundle.total_time}; '
+        f'app={len(bundle.app_sessions)}; clipboard={len(bundle.clipboard_items)}; '
+        f'browser={len(bundle.browser_items)}; ai_prompt={len(bundle.ai_prompts)}'
+    )

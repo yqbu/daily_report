@@ -31,8 +31,8 @@ class DailyReportService:
 
     def __init__(self) -> None:
         self.db_path = default_db_path()
-        self.manager = CollectorManager()
         self.connection_factory = SqliteConnectionFactory(self.db_path)
+        self.manager = CollectorManager(self.connection_factory)
         # self._connections = []
 
         self.lock_path = self.db_path.parent / 'daily_report_collector.lock'
@@ -91,7 +91,7 @@ class DailyReportService:
                 store=ai_prompt_store,
                 host='127.0.0.1',
                 port=8765,
-                endpoint='/api/ai-prompts',
+                endpoint='/api/ai-prompt',
                 sensitive_unselected_by_default=settings.privacy.sensitive_unselected_by_default,
                 sensitive_keywords=settings.privacy.sensitive_keywords,
             )

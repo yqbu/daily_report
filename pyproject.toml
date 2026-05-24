@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "daily-report"
 version = "0.1.0"
-description = "Windows desktop tool for collecting local activity traces and generating daily reports."
+description = "Local Windows activity timeline collector and AI Markdown daily report generator."
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
@@ -14,7 +14,7 @@ dependencies = [
     "pywin32>=306; sys_platform == 'win32'",
     "PySide6>=6.9,<6.12"
 ]
-keywords = ["daily-report", "productivity", "windows"]
+keywords = ["daily-report", "productivity", "windows", "sqlite", "pyside6", "vue"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Win32 (MS Windows)",
@@ -26,6 +26,11 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 
+[project.urls]
+Homepage = "https://github.com/yqbu/daily_report"
+Repository = "https://github.com/yqbu/daily_report"
+Issues = "https://github.com/yqbu/daily_report/issues"
+
 [project.optional-dependencies]
 dev = [
     "build>=1.2",
@@ -36,12 +41,49 @@ dev = [
 [project.scripts]
 daily-report = "daily_report.main:main"
 
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+zip-safe = false
+
 [tool.setuptools.packages.find]
 where = ["src"]
+exclude = ["tests*"]
 
 [tool.setuptools.package-data]
 daily_report = ["storage/*.sql"]
 
+[tool.setuptools.data-files]
+"share/daily-report/configs" = ["configs/*.yaml"]
+"share/daily-report/configs/report_templates" = ["configs/report_templates/*.md"]
+"share/daily-report/edge_extension" = [
+    "edge_extension/*.js",
+    "edge_extension/*.json",
+    "edge_extension/*.md",
+]
+"share/daily-report/frontend/dist" = ["frontend/dist/index.html"]
+"share/daily-report/frontend/dist/assets" = ["frontend/dist/assets/*"]
+"share/daily-report/scripts" = ["scripts/*.cmd", "scripts/*.ps1"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+src = ["src", "tests"]
+exclude = [
+    ".git",
+    ".idea",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "build",
+    "data",
+    "dist",
+    "frontend/dist",
+    "frontend/node_modules",
+    "logs",
+    "output",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

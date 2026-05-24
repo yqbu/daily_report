@@ -8,6 +8,7 @@ from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QMainWindow
 
+from daily_report.config.paths import get_installed_share_root
 from daily_report.gui.bridge import PythonBridge
 from daily_report.gui.services.gui_service import GuiService
 
@@ -45,14 +46,17 @@ class WebMainWindow(QMainWindow):
     def _frontend_index() -> Path:
         gui_dir = Path(__file__).resolve().parent
         repo_root = gui_dir.parents[2]
+        env_dist = os.getenv("DAILY_REPORT_FRONTEND_DIST")
         candidates = [
+            Path(env_dist) / "index.html" if env_dist else None,
             Path.cwd() / "frontend" / "dist" / "index.html",
             repo_root / "frontend" / "dist" / "index.html",
+            get_installed_share_root() / "frontend" / "dist" / "index.html",
         ]
         for candidate in candidates:
-            if candidate.exists():
+            if candidate and candidate.exists():
                 return candidate
-        return candidates[0]
+        return Path.cwd() / "frontend" / "dist" / "index.html"
 
     @staticmethod
     def _missing_frontend_html(index: Path) -> str:

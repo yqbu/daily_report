@@ -275,6 +275,97 @@ Print the latest saved report for a date:
 daily-report latest-report --date 2026-05-18
 ```
 
+## MVP Scope
+
+The current MVP intentionally focuses on four local-first data sources:
+
+- Foreground application usage records
+- Edge browser history
+- Clipboard text
+- ChatGPT / DeepSeek user prompts captured by the Edge extension
+
+The report flow is:
+
+1. Collect local traces into SQLite.
+2. Review the timeline and select useful materials in the GUI.
+3. Filter sensitive records before any model call.
+4. Build a structured prompt from selected `MaterialCard` records.
+5. Generate and save a Markdown report in `daily_reports`.
+
+The MVP does not collect Git commits, screenshots, OCR, visual model data,
+mail, calendar events, team timesheets, customer billing, cloud sync, or mobile
+data.
+
+## Report Templates
+
+Templates live in `configs/report_templates/`:
+
+- `daily_standard.md`
+- `daily_technical.md`
+- `daily_brief.md`
+
+Build a prompt with a specific template:
+
+```powershell
+daily-report build-prompt --date 2026-05-23 --template-name daily_technical --out output\prompt.txt
+```
+
+Generate a report with a specific template:
+
+```powershell
+daily-report generate-report --date 2026-05-23 --template-name daily_standard --out output\daily-report.md
+```
+
+API key lookup order is:
+
+1. `--api-key`
+2. `DAILY_REPORT_API_KEY`
+3. `DEEPSEEK_API_KEY`
+4. `OPENAI_API_KEY`
+5. `data/local_settings.json` model settings
+
+## YASB Status Example
+
+Use the lightweight status command from YASB:
+
+```yaml
+label: "{data[active_time]} · {data[top_apps_inline]}"
+tooltip: "{data[tooltip]}"
+exec: "D:\\CodeProgramming\\PYTHON\\pythoncode\\daily_report\\scripts\\yasb_status.cmd"
+interval: 30
+return-type: json
+```
+
+The command is safe for frequent polling:
+
+```powershell
+daily-report status --json
+```
+
+It does not call the model and returns reasonable JSON even when the collector
+is not running.
+
+## Self Check
+
+Run the local MVP checks:
+
+```powershell
+python -m pytest tests
+daily-report status --json
+daily-report build-prompt --date 2026-05-23
+daily-report latest-report --date 2026-05-23
+ruff check .
+cd frontend
+npm install
+npm run build
+```
+
+Or run the bundled script:
+
+```powershell
+.\scripts\self_check.ps1
+```
+
 ## Troubleshooting
 
 ### `python` points to WindowsApps

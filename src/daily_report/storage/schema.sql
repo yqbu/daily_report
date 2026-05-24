@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS app_sessions (
 
     is_active INTEGER NOT NULL DEFAULT 1,
     is_selected INTEGER NOT NULL DEFAULT 1,
+    is_deleted INTEGER NOT NULL DEFAULT 0,
 
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -31,6 +32,9 @@ ON app_sessions(start_time);
 
 CREATE INDEX IF NOT EXISTS idx_app_sessions_process_name
 ON app_sessions(process_name);
+
+CREATE INDEX IF NOT EXISTS idx_app_sessions_selected
+ON app_sessions(date, is_selected, is_deleted);
 
 CREATE TABLE IF NOT EXISTS clipboard_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -135,8 +139,8 @@ CREATE TABLE IF NOT EXISTS ai_prompt_entries (
     prompt_text TEXT NOT NULL,
     prompt_preview TEXT NOT NULL,
     prompt_hash TEXT NOT NULL,
-    dedupe_key TEXT NOT NULL UNIQUE,
-    char_count INTEGER NOT NULL,
+    dedupe_key TEXT UNIQUE,
+    char_count INTEGER NOT NULL DEFAULT 0,
 
     is_sensitive INTEGER NOT NULL DEFAULT 0,
     sensitivity_reason TEXT,
@@ -147,7 +151,9 @@ CREATE TABLE IF NOT EXISTS ai_prompt_entries (
     source TEXT NOT NULL DEFAULT 'edge_extension',
 
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+
+    UNIQUE(date, platform, prompt_hash)
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_prompt_entries_date
@@ -166,14 +172,19 @@ CREATE INDEX IF NOT EXISTS idx_ai_prompt_entries_sensitive
 ON ai_prompt_entries(date, is_sensitive, is_deleted);
 
 CREATE TABLE IF NOT EXISTS daily_reports (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  date TEXT NOT NULL,
-  model_name TEXT NOT NULL,
-  prompt_text TEXT NOT NULL,
-  report_markdown TEXT NOT NULL,
-  material_summary TEXT,
-  source_counts_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    report_type TEXT NOT NULL DEFAULT 'daily',
+    template_name TEXT NOT NULL DEFAULT 'daily_standard',
+    model_provider TEXT NOT NULL DEFAULT 'deepseek',
+    model_name TEXT NOT NULL,
+    prompt_text TEXT NOT NULL,
+    report_markdown TEXT NOT NULL,
+    material_snapshot_json TEXT,
+    material_summary TEXT,
+    source_counts_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_daily_reports_date
@@ -182,3 +193,28 @@ ON daily_reports(date);
 CREATE INDEX IF NOT EXISTS idx_daily_reports_created_at
 ON daily_reports(created_at);
 
+CREATE TABLE IF NOT EXISTS collector_state (
+    collector_name TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'unknown',
+    last_success_at TEXT,
+    last_error_at TEXT,
+    last_error_message TEXT,
+    records_collected INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS entry_annotations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_type TEXT NOT NULL CHECK(source_type IN ('app', 'browser', 'clipboard', 'ai_prompt')),
+    source_id INTEGER NOT NULL,
+    category TEXT,
+    note TEXT,
+    importance INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(source_type, source_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_entry_annotations_source
+ON entry_annotations(source_type, source_id);
