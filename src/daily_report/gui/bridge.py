@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import subprocess
 import uuid
 from pathlib import Path
 from typing import Any, Callable
@@ -226,6 +228,14 @@ class PythonBridge(QObject):
         return self._call(payload, self.service.get_collector_status)
 
     @Slot(str, result=str)
+    def start_collector_service(self, payload: str = "") -> str:
+        return self._call(payload, lambda _data: _run_collector_script("start"))
+
+    @Slot(str, result=str)
+    def stop_collector_service(self, payload: str = "") -> str:
+        return self._call(payload, lambda _data: _run_collector_script("stop"))
+
+    @Slot(str, result=str)
     def get_settings(self, payload: str = "") -> str:
         return self._call(payload, lambda _data: self.service.get_settings())
 
@@ -251,6 +261,56 @@ class PythonBridge(QObject):
     @Slot(str)
     def _emit_job_finished(self, payload: str) -> None:
         self.jobFinished.emit(payload)
+
+
+def _run_collector_script(action: str) -> dict[str, Any]:
+    repo_root = Path(__file__).resolve().parents[3]
+    script = _collector_script(repo_root, action)
+    command = _script_command(script)
+    kwargs = _subprocess_window_kwargs()
+
+    process = subprocess.Popen(
+        command,
+        cwd=repo_root,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        **kwargs,
+    )
+    return {"ok": True, "action": action, "pid": process.pid}
+
+
+def _collector_script(repo_root: Path, action: str) -> Path:
+    scripts_dir = repo_root / "scripts"
+    candidates = [
+        scripts_dir / f"{action}_collector.cmd",
+        scripts_dir / f"{action}_collector.ps1",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(f"Collector {action} script not found in {scripts_dir}")
+
+
+def _script_command(script: Path) -> list[str]:
+    suffix = script.suffix.lower()
+    if os.name == "nt" and suffix in {".cmd", ".bat"}:
+        return ["cmd.exe", "/c", str(script)]
+    if suffix == ".ps1":
+        return ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)]
+    return [str(script)]
+
+
+def _subprocess_window_kwargs() -> dict[str, Any]:
+    if os.name != "nt":
+        return {}
+
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    return {
+        "creationflags": subprocess.CREATE_NO_WINDOW,
+        "startupinfo": startupinfo,
+    }
 
 
 def _payload(payload: str) -> dict[str, Any]:

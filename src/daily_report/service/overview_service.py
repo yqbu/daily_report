@@ -58,7 +58,8 @@ class OverviewService:
         return {
             'date': day,
             'collector_status': collector_payload.get('collector_status', 'unknown'),
-            'collector_status_label': collector_payload.get('collector_status_label', ''),
+            'collector_status_label': collector_payload.get('collector_status_label', '未知'),
+            'collector_status_icon': collector_payload.get('collector_status_icon', '❓'),
             'collector_states': collector_payload.get('collector_states', []),
             'active_time_sec': active_time_sec,
             'total_time_sec': total_time_sec,
@@ -81,11 +82,12 @@ class OverviewService:
         try:
             payload = build_collector_status_payload()
         except Exception:
-            payload = {'collector_status': 'unknown', 'collector_status_label': '未知'}
+            payload = {'collector_status': 'unknown', 'collector_status_label': '未知', 'collector_status_icon': '❓'}
         try:
             payload['collector_states'] = CollectorStateRepository(conn).list_states()
         except sqlite3.Error:
             payload['collector_states'] = []
+
         return payload
 
     @staticmethod

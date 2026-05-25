@@ -142,6 +142,11 @@ def _run_safe_migrations(conn: sqlite3.Connection) -> None:
 
 
 def _ensure_indexes(conn: sqlite3.Connection) -> None:
+    try:
+        conn.execute('DROP INDEX IF EXISTS idx_ai_prompt_entries_unique_prompt')
+    except sqlite3.Error:
+        logger.debug('Failed to drop obsolete ai prompt prompt_hash unique index.', exc_info=True)
+
     statements = [
         """
         CREATE INDEX IF NOT EXISTS idx_app_sessions_selected
@@ -181,13 +186,14 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
     try:
         conn.execute(
             """
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_prompt_entries_unique_prompt
-            ON ai_prompt_entries(date, platform, prompt_hash)
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_prompt_entries_unique_dedupe
+            ON ai_prompt_entries(date, platform, dedupe_key)
+            WHERE dedupe_key IS NOT NULL AND dedupe_key <> ''
             """
         )
     except sqlite3.IntegrityError:
         logger.warning(
-            'Skipped unique ai_prompt_entries(date, platform, prompt_hash) index because '
+            'Skipped unique ai_prompt_entries(date, platform, dedupe_key) index because '
             'existing duplicate rows are present.'
         )
     except sqlite3.Error:

@@ -20,14 +20,24 @@ class AiPromptEntryRepository:
 
         now = _now()
         with self._lock:
-            existing = self.conn.execute(
-                """
-                SELECT id
-                FROM ai_prompt_entries
-                WHERE date = ? AND platform = ? AND prompt_hash = ?
-                """,
-                (values['date'], values['platform'], values['prompt_hash']),
-            ).fetchone()
+            if values['dedupe_key'] is not None:
+                existing = self.conn.execute(
+                    """
+                    SELECT id
+                    FROM ai_prompt_entries
+                    WHERE date = ? AND platform = ? AND dedupe_key = ?
+                    """,
+                    (values['date'], values['platform'], values['dedupe_key']),
+                ).fetchone()
+            else:
+                existing = self.conn.execute(
+                    """
+                    SELECT id
+                    FROM ai_prompt_entries
+                    WHERE date = ? AND platform = ? AND prompt_hash = ?
+                    """,
+                    (values['date'], values['platform'], values['prompt_hash']),
+                ).fetchone()
 
             if existing is not None:
                 self.conn.execute(
@@ -38,6 +48,8 @@ class AiPromptEntryRepository:
                         page_title = ?,
                         prompt_text = ?,
                         prompt_preview = ?,
+                        prompt_hash = ?,
+                        dedupe_key = ?,
                         char_count = ?,
                         is_sensitive = ?,
                         sensitivity_reason = ?,
@@ -52,6 +64,8 @@ class AiPromptEntryRepository:
                         values['page_title'],
                         values['prompt_text'],
                         values['prompt_preview'],
+                        values['prompt_hash'],
+                        values['dedupe_key'],
                         int(values['char_count']),
                         int(values['is_sensitive']),
                         values['sensitivity_reason'],

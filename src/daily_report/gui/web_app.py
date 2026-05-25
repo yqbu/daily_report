@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import os
 import subprocess
 import sys
@@ -10,8 +11,10 @@ from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
+from daily_report.gui.assets import find_app_icon_path
 from daily_report.gui.services.gui_service import GuiService
 
 
@@ -110,7 +113,21 @@ def run_gui(
 def _run_qt_app() -> int:
     from daily_report.gui.web_window import WebMainWindow
 
+    _set_windows_app_user_model_id()
     app = QApplication.instance() or QApplication(sys.argv)
+    icon_path = find_app_icon_path(128)
+    if icon_path:
+        app.setWindowIcon(QIcon(str(icon_path)))
     window = WebMainWindow(GuiService())
     window.show()
     return app.exec()
+
+
+def _set_windows_app_user_model_id() -> None:
+    if sys.platform != "win32":
+        return
+
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("yqbu.daily_report")
+    except (AttributeError, OSError):
+        logger.debug("Failed to set Windows AppUserModelID.", exc_info=True)

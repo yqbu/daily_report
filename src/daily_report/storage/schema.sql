@@ -139,7 +139,7 @@ CREATE TABLE IF NOT EXISTS ai_prompt_entries (
     prompt_text TEXT NOT NULL,
     prompt_preview TEXT NOT NULL,
     prompt_hash TEXT NOT NULL,
-    dedupe_key TEXT UNIQUE,
+    dedupe_key TEXT,
     char_count INTEGER NOT NULL DEFAULT 0,
 
     is_sensitive INTEGER NOT NULL DEFAULT 0,
@@ -151,10 +151,12 @@ CREATE TABLE IF NOT EXISTS ai_prompt_entries (
     source TEXT NOT NULL DEFAULT 'edge_extension',
 
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-
-    UNIQUE(date, platform, prompt_hash)
+    updated_at TEXT NOT NULL
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_prompt_entries_unique_dedupe
+ON ai_prompt_entries(date, platform, dedupe_key)
+WHERE dedupe_key IS NOT NULL AND dedupe_key <> '';
 
 CREATE INDEX IF NOT EXISTS idx_ai_prompt_entries_date
 ON ai_prompt_entries(date);

@@ -99,11 +99,11 @@ def build_collector_status_payload() -> dict[str, Any]:
     if is_running:
         collector_status = 'running'
         collector_status_label = '采集中'
-        collector_status_icon = 'running'
+        collector_status_icon = '🟢'
     else:
         collector_status = 'stopped'
         collector_status_label = '未运行'
-        collector_status_icon = 'stopped'
+        collector_status_icon = '🟧'
 
     pids = ','.join(str(item['pid']) for item in processes)
 

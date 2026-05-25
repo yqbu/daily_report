@@ -4,11 +4,13 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import QUrl
+from PySide6.QtGui import QIcon
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QMainWindow
 
 from daily_report.config.paths import get_installed_share_root
+from daily_report.gui.assets import find_app_icon_path
 from daily_report.gui.bridge import PythonBridge
 from daily_report.gui.services.gui_service import GuiService
 
@@ -17,6 +19,9 @@ class WebMainWindow(QMainWindow):
     def __init__(self, service: GuiService | None = None):
         super().__init__()
         self.setWindowTitle("Daily Reporter")
+        icon_path = find_app_icon_path(128)
+        if icon_path:
+            self.setWindowIcon(QIcon(str(icon_path)))
         self.resize(1365, 820)
 
         self.view = QWebEngineView(self)
