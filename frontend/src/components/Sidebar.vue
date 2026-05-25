@@ -8,6 +8,7 @@ import {
   Connection,
   DataAnalysis,
   Document,
+  MagicStick,
   Search,
   Setting
 } from '@element-plus/icons-vue'
@@ -45,6 +46,12 @@ const navItems = [
     name: 'data-center',
     label: '数据中心',
     icon: DataAnalysis
+  },
+  {
+    to: '/apps',
+    name: 'app-profiles',
+    label: '应用配置',
+    icon: MagicStick
   },
   {
     to: '/reports',

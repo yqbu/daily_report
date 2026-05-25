@@ -18,6 +18,7 @@ from daily_report.config.local_settings import (
 )
 from daily_report.gui.data_provider import GuiDataProvider
 from daily_report.reporter.deepseek_client import DeepSeekClient
+from daily_report.service.app_profile_service import AppProfileService
 from daily_report.service.material_service import MaterialService
 from daily_report.service.overview_service import OverviewService
 from daily_report.service.report_service import ReportService
@@ -39,6 +40,7 @@ class GuiService:
         self.timeline_service = TimelineService(self.provider.db_path)
         self.material_service = MaterialService(self.provider.db_path)
         self.overview_service = OverviewService(self.provider.db_path)
+        self.app_profile_service = AppProfileService(self.provider.db_path)
 
     def get_overview(self, target_date: str | None = None) -> dict[str, Any]:
         return self.overview_service.get_overview(target_date or self.provider.today())
@@ -148,6 +150,27 @@ class GuiService:
             return dict(row)
         finally:
             conn.close()
+
+    def list_app_profiles(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self.app_profile_service.list_profiles(params)
+
+    def save_app_profile(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self.app_profile_service.save_profile(params)
+
+    def reset_app_profile(self, params: dict[str, Any] | str | None = None) -> dict[str, Any]:
+        return self.app_profile_service.reset_profile(params)
+
+    def delete_app_records(self, params: dict[str, Any] | str | None = None) -> dict[str, Any]:
+        return self.app_profile_service.delete_app_records(params)
+
+    def list_app_categories(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self.app_profile_service.list_categories(params)
+
+    def save_app_category(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self.app_profile_service.save_category(params)
+
+    def delete_app_category(self, params: dict[str, Any] | str | None = None) -> dict[str, Any]:
+        return self.app_profile_service.delete_category(params)
 
     def get_report_materials(self, target_date: str | None = None) -> dict[str, Any]:
         day = target_date or self.provider.today()

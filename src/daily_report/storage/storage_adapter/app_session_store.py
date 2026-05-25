@@ -5,7 +5,16 @@ from datetime import datetime
 from typing import Optional, Protocol
 
 from daily_report.storage.database import SqliteConnectionFactory
+from daily_report.storage.repositories.app_profile_repository import AppProfileRepository, normalize_app_key
 from daily_report.storage.repositories.app_session_repository import AppSessionRepository
+
+
+class ForegroundSnapshotLike(Protocol):
+    process_name: str
+    app_name: str
+    exe_path: Optional[str]
+    window_title: str
+    track_enabled: bool
 
 
 class AppSessionStateLike(Protocol):
@@ -22,6 +31,7 @@ class AppSessionStateLike(Protocol):
     duration_sec: float
     active_duration_sec: float
     is_active: bool
+    track_enabled: bool
 
 
 class RepositoryForegroundSessionStore:
@@ -43,7 +53,26 @@ class RepositoryForegroundSessionStore:
 
         return self._repository
 
+    def prepare_snapshot(self, snapshot: ForegroundSnapshotLike) -> ForegroundSnapshotLike:
+        repository = self._get_repository()
+        profile = AppProfileRepository(repository.conn).get_profile(
+            normalize_app_key(snapshot.process_name, snapshot.exe_path)
+        )
+        if profile is None:
+            return snapshot
+
+        display_name = str(profile.get('display_name') or '').strip()
+        if display_name:
+            snapshot.app_name = display_name
+        if not bool(profile.get('capture_title_enabled', True)):
+            snapshot.window_title = ''
+        snapshot.track_enabled = bool(profile.get('track_enabled', True))
+        return snapshot
+
     def open_session(self, session: AppSessionStateLike) -> int:
+        if not session.track_enabled:
+            return 0
+
         repository = self._get_repository()
 
         return repository.open_session(
@@ -62,7 +91,7 @@ class RepositoryForegroundSessionStore:
         )
 
     def update_session(self, session: AppSessionStateLike) -> None:
-        if session.id is None:
+        if session.id is None or session.id <= 0:
             return
 
         repository = self._get_repository()

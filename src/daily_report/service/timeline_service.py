@@ -110,22 +110,29 @@ class TimelineService:
     ) -> list[TimelineEvent]:
         if sensitive is True or not _table_exists(conn, 'app_sessions'):
             return []
-        clauses = ['date = ?']
+        clauses = ['a.date = ?']
         params: list[Any] = [day]
         if selected is not None:
-            clauses.append('is_selected = ?')
+            clauses.append('a.is_selected = ?')
             params.append(int(selected))
-        clauses.append('is_deleted = 0')
+        clauses.append('a.is_deleted = 0')
         if keyword:
             like = f'%{keyword}%'
-            clauses.append('(app_name LIKE ? OR window_title LIKE ? OR process_name LIKE ?)')
-            params.extend([like, like, like])
+            clauses.append('(a.app_name LIKE ? OR a.window_title LIKE ? OR a.process_name LIKE ? OR p.display_name LIKE ?)')
+            params.extend([like, like, like, like])
         rows = conn.execute(
             f"""
-            SELECT *
-            FROM app_sessions
+            SELECT
+                a.*,
+                p.display_name AS profile_display_name,
+                p.category AS profile_category,
+                p.color AS profile_color,
+                p.track_enabled AS profile_track_enabled,
+                p.capture_title_enabled AS profile_capture_title_enabled
+            FROM app_sessions a
+            LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name))
             WHERE {' AND '.join(clauses)}
-            ORDER BY start_time ASC
+            ORDER BY a.start_time ASC
             """,
             tuple(params),
         ).fetchall()
@@ -133,7 +140,16 @@ class TimelineService:
         events = []
         for row in rows:
             annotation = annotation_map.get(int(row['id']), {})
-            category = annotation.get('category') or infer_category_for_app(row['process_name'], row['window_title'])
+            category = (
+                annotation.get('category')
+                or _row_optional_text(row, 'profile_category')
+                or infer_category_for_app(row['process_name'], row['window_title'])
+            )
+            title = (
+                _row_optional_text(row, 'profile_display_name')
+                or str(row['app_name'] or row['process_name'] or '前台应用')
+            )
+            subtitle = str(row['window_title'] or '') if _row_bool(row, 'profile_capture_title_enabled', True) else ''
             events.append(
                 TimelineEvent(
                     event_id=f"app:{row['id']}",
@@ -141,9 +157,9 @@ class TimelineService:
                     source_id=int(row['id']),
                     start_time=str(row['start_time'] or ''),
                     end_time=str(row['end_time']) if row['end_time'] else None,
-                    title=str(row['app_name'] or row['process_name'] or '前台应用'),
-                    subtitle=str(row['window_title'] or ''),
-                    content_preview=str(row['window_title'] or ''),
+                    title=title,
+                    subtitle=subtitle,
+                    content_preview=subtitle,
                     category=category,
                     is_selected=bool(row['is_selected']),
                     is_sensitive=False,
@@ -368,3 +384,15 @@ def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
 
 def _row_get(row: sqlite3.Row, key: str, default: Any = None) -> Any:
     return row[key] if key in row.keys() else default
+
+
+def _row_optional_text(row: sqlite3.Row, key: str) -> str | None:
+    value = str(_row_get(row, key, '') or '').strip()
+    return value or None
+
+
+def _row_bool(row: sqlite3.Row, key: str, default: bool) -> bool:
+    value = _row_get(row, key, int(default))
+    if value is None:
+        value = int(default)
+    return bool(value)

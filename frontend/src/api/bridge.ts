@@ -155,6 +155,30 @@ function getBrowserFallback<T>(method: string, payload: unknown): T {
     case 'markEntryDeleted':
     case 'updateEntryAnnotation':
       return { ok: true } as T
+    case 'listAppProfiles':
+      return {
+        items: [],
+        total: 0,
+        page: getPayloadNumber(payload, 'page', 1),
+        page_size: getPayloadNumber(payload, 'pageSize', 100),
+        counts: emptyAppProfileCounts(),
+        categories: []
+      } as T
+    case 'saveAppProfile':
+    case 'resetAppProfile':
+      return emptyAppProfileConfig(payload) as T
+    case 'deleteAppRecords':
+      return { app_key: String(getPayloadValue(payload, 'app_key') || ''), deleted_count: 0 } as T
+    case 'listAppCategories':
+      return { items: [], total: 0 } as T
+    case 'saveAppCategory':
+      return emptyAppCategoryConfig(payload) as T
+    case 'deleteAppCategory':
+      return {
+        name: String(getPayloadValue(payload, 'name') || ''),
+        deleted: true,
+        fallback_category: '其他'
+      } as T
     case 'getReportMaterials':
       return { date, items: [], total: 0 } as T
     case 'buildPrompt':
@@ -252,6 +276,57 @@ function emptyDashboardSummary(date: string): DashboardSummary {
     time_distribution: [],
     recent_activities: [],
     weekly_trend: []
+  }
+}
+
+function emptyAppProfileCounts() {
+  return {
+    all: 0,
+    classified: 0,
+    unclassified: 0,
+    configured: 0,
+    excluded: 0
+  }
+}
+
+function emptyAppProfileConfig(payload: unknown) {
+  const appKey = String(getPayloadValue(payload, 'app_key') || '')
+  const processName = String(getPayloadValue(payload, 'process_name') || appKey)
+
+  return {
+    app_key: appKey,
+    process_name: processName,
+    exe_path: null,
+    default_display_name: processName,
+    display_name: null,
+    effective_display_name: processName,
+    category: '其他',
+    category_color: '#8F98A8',
+    color: null,
+    effective_color: '#8F98A8',
+    icon_base64: null,
+    track_enabled: true,
+    capture_title_enabled: true,
+    session_count: 0,
+    total_duration_sec: 0,
+    total_active_duration_sec: 0,
+    last_seen_at: null,
+    sample_window_title: null,
+    is_configured: false,
+    is_classified: false,
+    created_at: null,
+    updated_at: null
+  }
+}
+
+function emptyAppCategoryConfig(payload: unknown) {
+  return {
+    name: String(getPayloadValue(payload, 'name') || ''),
+    color: String(getPayloadValue(payload, 'color') || '#8F98A8'),
+    sort_order: Number(getPayloadValue(payload, 'sort_order') || 100),
+    is_builtin: false,
+    is_deleted: false,
+    profile_count: 0
   }
 }
 

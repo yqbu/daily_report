@@ -42,7 +42,15 @@ export interface OverviewPayload {
   selected_material_count: number
   sensitive_count: number
   report_status: string
-  top_apps: Array<{ name: string; app_name?: string; seconds: number; session_count: number }>
+  top_apps: Array<{
+    name: string
+    app_name?: string
+    app_key?: string
+    category?: string
+    color?: string
+    seconds: number
+    session_count: number
+  }>
   source_distribution: Array<{ source_type: SourceType; count: number }>
   category_distribution: Array<{ category: string; count: number }>
   hourly_activity: Array<{ hour: number; label: string; active_sec: number }>
@@ -153,6 +161,77 @@ export interface EntryAnnotationPayload {
   importance?: number | null
 }
 
+export type AppProfileClassificationFilter = 'all' | 'classified' | 'unclassified' | 'configured'
+
+export interface AppProfileListFilters {
+  keyword?: string
+  category?: string
+  classification?: AppProfileClassificationFilter
+  track_enabled?: boolean | null
+}
+
+export interface AppCategoryConfig {
+  id?: number
+  name: string
+  color: string
+  sort_order: number
+  is_builtin: boolean
+  is_deleted: boolean
+  profile_count: number
+  created_at?: string
+  updated_at?: string
+}
+
+export interface AppProfileConfig {
+  app_key: string
+  process_name: string
+  exe_path?: string | null
+  default_display_name: string
+  display_name?: string | null
+  effective_display_name: string
+  category: string
+  category_color: string
+  color?: string | null
+  effective_color: string
+  icon_base64?: string | null
+  track_enabled: boolean
+  capture_title_enabled: boolean
+  session_count: number
+  total_duration_sec: number
+  total_active_duration_sec: number
+  last_seen_at?: string | null
+  sample_window_title?: string | null
+  is_configured: boolean
+  is_classified: boolean
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface AppProfileCounts {
+  all: number
+  classified: number
+  unclassified: number
+  configured: number
+  excluded: number
+}
+
+export interface AppProfileListPayload extends PageResult<AppProfileConfig> {
+  counts: AppProfileCounts
+  categories: AppCategoryConfig[]
+}
+
+export interface SaveAppProfilePayload {
+  app_key: string
+  process_name?: string
+  exe_path?: string | null
+  display_name?: string | null
+  category?: string | null
+  color?: string | null
+  icon_base64?: string | null
+  track_enabled?: boolean
+  capture_title_enabled?: boolean
+}
+
 export interface HealthPayload {
   ok?: boolean
   collector_status?: string
@@ -197,6 +276,18 @@ export interface BridgeMethodPayloadMap {
   updateEntrySelection: { sourceType: SourceType; id: number; selected: boolean }
   markEntryDeleted: { sourceType: SourceType; id: number }
   updateEntryAnnotation: { sourceType: SourceType; id: number; payload: EntryAnnotationPayload }
+  listAppProfiles: {
+    filters?: AppProfileListFilters
+    page?: number
+    pageSize?: number
+    include_unobserved?: boolean
+  }
+  saveAppProfile: SaveAppProfilePayload
+  resetAppProfile: { app_key: string }
+  deleteAppRecords: { app_key: string; date?: string | null; hard_delete?: boolean }
+  listAppCategories: { include_deleted?: boolean }
+  saveAppCategory: { name: string; color?: string | null; sort_order?: number }
+  deleteAppCategory: { name: string; fallback_category?: string }
   getReportMaterials: { date?: string | null }
   buildPrompt: { date?: string | null; templateName: TemplateName | string }
   generateReport: { date?: string | null; templateName: TemplateName | string }
@@ -215,6 +306,13 @@ export interface BridgeMethodResultMap {
   updateEntrySelection: { ok?: boolean }
   markEntryDeleted: { ok?: boolean }
   updateEntryAnnotation: { ok?: boolean }
+  listAppProfiles: AppProfileListPayload
+  saveAppProfile: AppProfileConfig
+  resetAppProfile: AppProfileConfig
+  deleteAppRecords: { app_key: string; deleted_count: number }
+  listAppCategories: { items: AppCategoryConfig[]; total: number }
+  saveAppCategory: AppCategoryConfig
+  deleteAppCategory: { name: string; deleted: boolean; fallback_category: string }
   getReportMaterials: MaterialListPayload
   buildPrompt: PromptPreviewPayload
   generateReport: GeneratedReport

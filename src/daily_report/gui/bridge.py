@@ -113,6 +113,34 @@ class PythonBridge(QObject):
         return self._call(payload, run)
 
     @Slot(str, result=str)
+    def listAppProfiles(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, self.service.list_app_profiles)
+
+    @Slot(str, result=str)
+    def saveAppProfile(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, self.service.save_app_profile)
+
+    @Slot(str, result=str)
+    def resetAppProfile(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, self.service.reset_app_profile)
+
+    @Slot(str, result=str)
+    def deleteAppRecords(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, self.service.delete_app_records)
+
+    @Slot(str, result=str)
+    def listAppCategories(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, self.service.list_app_categories)
+
+    @Slot(str, result=str)
+    def saveAppCategory(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, self.service.save_app_category)
+
+    @Slot(str, result=str)
+    def deleteAppCategory(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, self.service.delete_app_category)
+
+    @Slot(str, result=str)
     def getReportMaterials(self, payload: str = "") -> str:  # noqa: N802
         return self._call(payload, lambda data: self.service.get_report_materials(_date_arg(data)))
 

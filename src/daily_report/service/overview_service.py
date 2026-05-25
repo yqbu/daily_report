@@ -96,11 +96,14 @@ class OverviewService:
             row = conn.execute(
                 """
                 SELECT
-                    COALESCE(SUM(active_duration_sec), 0) AS active_sec,
-                    COALESCE(SUM(duration_sec), 0) AS total_sec,
-                    COUNT(*) AS n
-                FROM app_sessions
-                WHERE date = ? AND is_deleted = 0
+                    COALESCE(SUM(a.active_duration_sec), 0) AS active_sec,
+                    COALESCE(SUM(a.duration_sec), 0) AS total_sec,
+                    COUNT(a.id) AS n
+                FROM app_sessions a
+                LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name))
+                WHERE a.date = ?
+                  AND a.is_deleted = 0
+                  AND COALESCE(p.track_enabled, 1) = 1
                 """,
                 (day,),
             ).fetchone()
@@ -117,10 +120,24 @@ class OverviewService:
         try:
             rows = conn.execute(
                 """
-                SELECT app_name, SUM(active_duration_sec) AS seconds, COUNT(*) AS session_count
-                FROM app_sessions
-                WHERE date = ? AND is_deleted = 0
-                GROUP BY app_name
+                SELECT
+                    COALESCE(NULLIF(p.display_name, ''), a.app_name) AS app_name,
+                    LOWER(TRIM(a.process_name)) AS app_key,
+                    COALESCE(NULLIF(p.category, ''), '') AS category,
+                    COALESCE(NULLIF(p.color, ''), c.color, '') AS color,
+                    SUM(a.active_duration_sec) AS seconds,
+                    COUNT(*) AS session_count
+                FROM app_sessions a
+                LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name))
+                LEFT JOIN app_categories c ON c.name = p.category AND c.is_deleted = 0
+                WHERE a.date = ?
+                  AND a.is_deleted = 0
+                  AND COALESCE(p.track_enabled, 1) = 1
+                GROUP BY
+                    LOWER(TRIM(a.process_name)),
+                    COALESCE(NULLIF(p.display_name, ''), a.app_name),
+                    COALESCE(NULLIF(p.category, ''), ''),
+                    COALESCE(NULLIF(p.color, ''), c.color, '')
                 ORDER BY seconds DESC
                 LIMIT 8
                 """,
@@ -132,6 +149,9 @@ class OverviewService:
             {
                 'name': str(row['app_name'] or ''),
                 'app_name': str(row['app_name'] or ''),
+                'app_key': str(row['app_key'] or ''),
+                'category': str(row['category'] or ''),
+                'color': str(row['color'] or ''),
                 'seconds': int(row['seconds'] or 0),
                 'session_count': int(row['session_count'] or 0),
             }
@@ -144,9 +164,12 @@ class OverviewService:
         try:
             rows = conn.execute(
                 """
-                SELECT start_time, active_duration_sec, duration_sec
-                FROM app_sessions
-                WHERE date = ? AND is_deleted = 0
+                SELECT a.start_time, a.active_duration_sec, a.duration_sec
+                FROM app_sessions a
+                LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name))
+                WHERE a.date = ?
+                  AND a.is_deleted = 0
+                  AND COALESCE(p.track_enabled, 1) = 1
                 """,
                 (day,),
             ).fetchall()
@@ -169,7 +192,15 @@ class OverviewService:
     @staticmethod
     def _selected_count(conn: sqlite3.Connection, day: str) -> int:
         queries = (
-            "SELECT COUNT(*) AS n FROM app_sessions WHERE date = ? AND is_selected = 1 AND is_deleted = 0",
+            """
+            SELECT COUNT(*) AS n
+            FROM app_sessions a
+            LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name))
+            WHERE a.date = ?
+              AND a.is_selected = 1
+              AND a.is_deleted = 0
+              AND COALESCE(p.track_enabled, 1) = 1
+            """,
             "SELECT COUNT(*) AS n FROM browser_history_entries WHERE date = ? AND is_selected = 1 AND is_deleted = 0",
             "SELECT COUNT(*) AS n FROM clipboard_entries WHERE date = ? AND is_selected = 1 AND is_deleted = 0",
             "SELECT COUNT(*) AS n FROM ai_prompt_entries WHERE date = ? AND is_selected = 1 AND is_deleted = 0",

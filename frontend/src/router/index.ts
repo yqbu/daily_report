@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 
+import AppProfiles from '../pages/AppProfiles.vue'
 import DataCenter from '../pages/DataCenter.vue'
 import ReportWorkbench from '../pages/ReportWorkbench.vue'
 import Settings from '../pages/Settings.vue'
@@ -22,6 +23,14 @@ const router = createRouter({
       component: DataCenter,
       meta: {
         title: '数据中心'
+      }
+    },
+    {
+      path: '/apps',
+      name: 'app-profiles',
+      component: AppProfiles,
+      meta: {
+        title: '应用配置'
       }
     },
     {

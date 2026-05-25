@@ -61,7 +61,15 @@ class MaterialService:
             return {
                 'app': _count(
                     conn,
-                    "SELECT COUNT(*) AS n FROM app_sessions WHERE date = ? AND is_selected = 1 AND is_deleted = 0",
+                    """
+                    SELECT COUNT(*) AS n
+                    FROM app_sessions a
+                    LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name))
+                    WHERE a.date = ?
+                      AND a.is_selected = 1
+                      AND a.is_deleted = 0
+                      AND COALESCE(p.track_enabled, 1) = 1
+                    """,
                     (day,),
                 ),
                 'browser': _count(
@@ -100,18 +108,28 @@ class MaterialService:
             return []
         rows = conn.execute(
             """
-            SELECT *
-            FROM app_sessions
-            WHERE date = ? AND is_selected = 1 AND is_deleted = 0
-              AND COALESCE(active_duration_sec, duration_sec, 0) >= 10
-            ORDER BY start_time ASC
+            SELECT
+                a.*,
+                p.display_name AS profile_display_name,
+                p.category AS profile_category,
+                p.color AS profile_color,
+                p.track_enabled AS profile_track_enabled,
+                p.capture_title_enabled AS profile_capture_title_enabled
+            FROM app_sessions a
+            LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name))
+            WHERE a.date = ?
+              AND a.is_selected = 1
+              AND a.is_deleted = 0
+              AND COALESCE(p.track_enabled, 1) = 1
+              AND COALESCE(a.active_duration_sec, a.duration_sec, 0) >= 10
+            ORDER BY a.start_time ASC
             """,
             (day,),
         ).fetchall()
         annotations = AnnotationRepository(conn).get_annotations_for_ids('app', [int(row['id']) for row in rows])
         grouped: dict[tuple[str, str], list[sqlite3.Row]] = defaultdict(list)
         for row in rows:
-            grouped[(str(row['app_name'] or ''), str(row['window_title'] or ''))].append(row)
+            grouped[(_profile_display_name(row), _profile_window_title(row))].append(row)
 
         materials: list[MaterialCard] = []
         for group_rows in grouped.values():
@@ -119,12 +137,12 @@ class MaterialService:
             source_ids = [int(row['id']) for row in group_rows]
             active_sec = sum(float(row['active_duration_sec'] or row['duration_sec'] or 0) for row in group_rows)
             annotation = annotations.get(source_ids[0], {})
-            category = annotation.get('category') or infer_category_for_app(
+            category = annotation.get('category') or _profile_category(first) or infer_category_for_app(
                 first['process_name'],
                 first['window_title'],
             )
-            title = str(first['app_name'] or first['process_name'] or '前台应用')
-            evidence = str(first['window_title'] or title)
+            title = _profile_display_name(first)
+            evidence = _profile_window_title(first) or title
             materials.append(
                 MaterialCard(
                     source_type='app',
@@ -313,3 +331,30 @@ def _format_seconds(value: float) -> str:
     if minutes:
         return f'{minutes}m'
     return f'{seconds}s'
+
+
+def _profile_display_name(row: sqlite3.Row) -> str:
+    return str(
+        _row_get(row, 'profile_display_name')
+        or row['app_name']
+        or row['process_name']
+        or '前台应用'
+    )
+
+
+def _profile_category(row: sqlite3.Row) -> str | None:
+    category = str(_row_get(row, 'profile_category') or '').strip()
+    return category or None
+
+
+def _profile_window_title(row: sqlite3.Row) -> str:
+    value = _row_get(row, 'profile_capture_title_enabled', 1)
+    if value is None:
+        value = 1
+    if not bool(value):
+        return ''
+    return str(row['window_title'] or '')
+
+
+def _row_get(row: sqlite3.Row, key: str, default: Any = None) -> Any:
+    return row[key] if key in row.keys() else default

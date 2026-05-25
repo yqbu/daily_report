@@ -62,6 +62,7 @@ class ForegroundSnapshot:
     captured_at: datetime
     idle_seconds: float
     is_active: bool
+    track_enabled: bool = True
 
 
 @dataclass
@@ -79,6 +80,7 @@ class AppSessionState:
     duration_sec: float
     active_duration_sec: float
     is_active: bool
+    track_enabled: bool = True
 
 
 # =========================
@@ -86,6 +88,9 @@ class AppSessionState:
 # =========================
 
 class ForegroundSessionStore(Protocol):
+    def prepare_snapshot(self, snapshot: ForegroundSnapshot) -> ForegroundSnapshot:
+        ...
+
     def open_session(self, session: AppSessionState) -> int:
         ...
 
@@ -285,6 +290,8 @@ class ForegroundCollector:
         snapshot = read_foreground_snapshot(
             idle_threshold_sec=self.idle_threshold_sec,
         )
+        if snapshot is not None:
+            snapshot = self._prepare_snapshot(snapshot)
         # logger.info(
         #     'snapshot: %s | %s',
         #     snapshot.app_name,
@@ -337,6 +344,12 @@ class ForegroundCollector:
 
         self._last_monotonic = now_mono
 
+    def _prepare_snapshot(self, snapshot: ForegroundSnapshot) -> ForegroundSnapshot:
+        prepare = getattr(self.store, 'prepare_snapshot', None)
+        if callable(prepare):
+            return prepare(snapshot)
+        return snapshot
+
     def _open_new_session(self, snapshot: ForegroundSnapshot) -> None:
         now = snapshot.captured_at
 
@@ -354,6 +367,7 @@ class ForegroundCollector:
             duration_sec=0.0,
             active_duration_sec=0.0,
             is_active=snapshot.is_active,
+            track_enabled=snapshot.track_enabled,
         )
 
         logger.info(

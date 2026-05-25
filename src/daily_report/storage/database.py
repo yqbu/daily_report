@@ -153,6 +153,18 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
         ON app_sessions(date, is_selected, is_deleted)
         """,
         """
+        CREATE INDEX IF NOT EXISTS idx_app_categories_visible
+        ON app_categories(is_deleted, sort_order, name)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_app_profiles_category
+        ON app_profiles(category)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_app_profiles_process_name
+        ON app_profiles(process_name)
+        """,
+        """
         CREATE INDEX IF NOT EXISTS idx_ai_prompt_entries_date
         ON ai_prompt_entries(date)
         """,

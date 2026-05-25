@@ -29,6 +29,15 @@ class AiPromptEntryRepository:
                     """,
                     (values['date'], values['platform'], values['dedupe_key']),
                 ).fetchone()
+                if existing is None:
+                    existing = self.conn.execute(
+                        """
+                        SELECT id
+                        FROM ai_prompt_entries
+                        WHERE date = ? AND platform = ? AND prompt_hash = ?
+                        """,
+                        (values['date'], values['platform'], values['prompt_hash']),
+                    ).fetchone()
             else:
                 existing = self.conn.execute(
                     """
