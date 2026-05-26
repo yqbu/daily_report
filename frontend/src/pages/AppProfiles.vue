@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue'
-import { Refresh } from '@element-plus/icons-vue'
 
 import { callTypedBridge } from '../api/bridge'
 import type {
   AppCategoryConfig,
   AppProfileClassificationFilter,
   AppProfileConfig,
+  AppProfileCounts,
   AppProfileListFilters,
   AppProfileListPayload,
   SaveAppProfilePayload
@@ -14,11 +14,15 @@ import type {
 import AppCategoryPanel from '../components/app-profiles/AppCategoryPanel.vue'
 import AppProfileListPanel from '../components/app-profiles/AppProfileListPanel.vue'
 import AppProfileOverview from '../components/app-profiles/AppProfileOverview.vue'
-import PageLayout from '../layouts/PageLayout.vue'
 import { useAppStore } from '../stores/app'
 
 type FilterPatch = Partial<AppProfileListFilters>
 type AppProfileListPanelInstance = InstanceType<typeof AppProfileListPanel>
+
+const appProfileCollator = new Intl.Collator('zh-CN', {
+  numeric: true,
+  sensitivity: 'base'
+})
 
 const appStore = useAppStore()
 const profileListPanel = useTemplateRef<AppProfileListPanelInstance>('profileListPanel')
@@ -26,10 +30,12 @@ const appProfileFilters = shallowRef<AppProfileListFilters>({
   classification: 'all',
   keyword: '',
   category: '',
-  track_enabled: null
+  track_enabled: null,
+  sort_by: 'last_seen',
+  sort_direction: 'desc'
 })
 const appProfilePage = shallowRef(1)
-const appProfilePageSize = shallowRef(200)
+const appProfilePageSize = shallowRef(500)
 const appProfiles = shallowRef<AppProfileListPayload>(emptyAppProfileList())
 const appCategories = shallowRef<AppCategoryConfig[]>([])
 const appProfileLoading = shallowRef(false)
@@ -39,9 +45,19 @@ const savingAppKey = shallowRef('')
 const categorySaving = shallowRef(false)
 const appProfileDirty = shallowRef(false)
 const bulkSaving = shallowRef(false)
+const categoryDrawerVisible = shallowRef(false)
+let appProfileLoadRequestId = 0
 
-const appProfileSummary = computed(() => appProfiles.value.counts)
-const appProfileRows = computed(() => appProfiles.value.items)
+const appProfileRows = computed(() => {
+  return paginateProfiles(
+    sortProfiles(filterProfiles(appProfiles.value.items, normalizedFilters.value), normalizedFilters.value),
+    appProfilePage.value,
+    appProfilePageSize.value
+  )
+})
+const appProfileSummary = computed(() => {
+  return countProfiles(filterProfiles(appProfiles.value.items, normalizedCountFilters.value))
+})
 const selectedCategory = computed(() => appProfileFilters.value.category || '')
 const topBarSaveStatus = computed(() => {
   if (bulkSaving.value) {
@@ -72,24 +88,27 @@ const topBarSaveStatus = computed(() => {
 })
 
 async function loadAppProfileBootstrap(): Promise<void> {
+  const requestId = appProfileLoadRequestId + 1
+  appProfileLoadRequestId = requestId
   appProfileLoading.value = true
   appProfileError.value = ''
   try {
-    const [profilesPayload, categoriesPayload] = await Promise.all([
-      callTypedBridge('listAppProfiles', {
-        filters: normalizedFilters.value,
-        page: appProfilePage.value,
-        pageSize: appProfilePageSize.value,
-        include_unobserved: true
-      }),
-      callTypedBridge('listAppCategories', { include_deleted: false })
-    ])
+    const profilesPayload = await callTypedBridge('listAppProfiles', {
+      filters: normalizedCatalogFilters.value,
+      page: 1,
+      pageSize: appProfilePageSize.value,
+      include_unobserved: true
+    })
+    if (requestId !== appProfileLoadRequestId) return
     appProfiles.value = profilesPayload
-    appCategories.value = categoriesPayload.items
+    appCategories.value = profilesPayload.categories
   } catch (error) {
+    if (requestId !== appProfileLoadRequestId) return
     appProfileError.value = error instanceof Error ? error.message : String(error)
   } finally {
-    appProfileLoading.value = false
+    if (requestId === appProfileLoadRequestId) {
+      appProfileLoading.value = false
+    }
   }
 }
 
@@ -99,22 +118,41 @@ const normalizedFilters = computed<AppProfileListFilters>(() => {
     classification: filters.classification ?? 'all',
     keyword: filters.keyword?.trim() ?? '',
     category: filters.category?.trim() || undefined,
-    track_enabled: filters.track_enabled ?? null
+    track_enabled: filters.track_enabled ?? null,
+    sort_by: filters.sort_by ?? 'last_seen',
+    sort_direction: filters.sort_direction ?? 'desc'
   }
 })
 
-async function updateFilters(patch: FilterPatch): Promise<void> {
+const normalizedCountFilters = computed<AppProfileListFilters>(() => {
+  return {
+    ...normalizedFilters.value,
+    classification: 'all'
+  }
+})
+
+const normalizedCatalogFilters = computed<AppProfileListFilters>(() => {
+  return {
+    classification: 'all',
+    keyword: '',
+    category: undefined,
+    track_enabled: null,
+    sort_by: normalizedFilters.value.sort_by,
+    sort_direction: normalizedFilters.value.sort_direction
+  }
+})
+
+function updateFilters(patch: FilterPatch): void {
   appProfileFilters.value = {
     ...appProfileFilters.value,
     ...patch,
     classification: normalizeClassification(patch.classification ?? appProfileFilters.value.classification)
   }
   appProfilePage.value = 1
-  await loadAppProfileBootstrap()
 }
 
-async function clearCategoryFilter(): Promise<void> {
-  await updateFilters({ category: '' })
+function clearCategoryFilter(): void {
+  updateFilters({ category: '' })
 }
 
 async function saveAppProfileDraft(payload: SaveAppProfilePayload): Promise<void> {
@@ -291,21 +329,122 @@ function emptyAppProfileList(): AppProfileListPayload {
     items: [],
     total: 0,
     page: 1,
-    page_size: 200,
-    counts: {
-      all: 0,
-      classified: 0,
-      unclassified: 0,
-      configured: 0,
-      excluded: 0
-    },
+    page_size: 500,
+    counts: emptyAppProfileCounts(),
     categories: []
   }
+}
+
+function emptyAppProfileCounts(): AppProfileCounts {
+  return {
+    all: 0,
+    classified: 0,
+    unclassified: 0,
+    configured: 0,
+    excluded: 0
+  }
+}
+
+function filterProfiles(
+  profiles: readonly AppProfileConfig[],
+  filters: AppProfileListFilters
+): AppProfileConfig[] {
+  const keyword = filters.keyword?.trim().toLocaleLowerCase() ?? ''
+  const category = filters.category?.trim() ?? ''
+  const classification = filters.classification ?? 'all'
+  const trackEnabled = filters.track_enabled ?? null
+
+  return profiles.filter((profile) => {
+    if (keyword && !profileMatchesKeyword(profile, keyword)) return false
+    if (category && profile.category !== category) return false
+    if (classification === 'classified' && !profile.is_classified) return false
+    if (classification === 'unclassified' && profile.is_classified) return false
+    if (classification === 'configured' && !profile.is_configured) return false
+    if (trackEnabled !== null && profile.track_enabled !== trackEnabled) return false
+    return true
+  })
+}
+
+function sortProfiles(
+  profiles: readonly AppProfileConfig[],
+  filters: AppProfileListFilters
+): AppProfileConfig[] {
+  const sortBy = filters.sort_by ?? 'last_seen'
+  const sortDirection = filters.sort_direction ?? (sortBy === 'name' ? 'asc' : 'desc')
+  const direction = sortDirection === 'asc' ? 1 : -1
+
+  return [...profiles].sort((left, right) => {
+    const primary = compareProfiles(left, right, sortBy)
+    if (primary !== 0) return primary * direction
+    return compareProfileNames(left, right) || appProfileCollator.compare(left.app_key, right.app_key)
+  })
+}
+
+function paginateProfiles(
+  profiles: readonly AppProfileConfig[],
+  page: number,
+  pageSize: number
+): AppProfileConfig[] {
+  const safePage = Math.max(1, page)
+  const safePageSize = Math.max(1, pageSize)
+  const start = (safePage - 1) * safePageSize
+  return profiles.slice(start, start + safePageSize)
+}
+
+function countProfiles(profiles: readonly AppProfileConfig[]): AppProfileCounts {
+  return {
+    all: profiles.length,
+    classified: profiles.filter((profile) => profile.is_classified).length,
+    unclassified: profiles.filter((profile) => !profile.is_classified).length,
+    configured: profiles.filter((profile) => profile.is_configured).length,
+    excluded: profiles.filter((profile) => !profile.track_enabled).length
+  }
+}
+
+function profileMatchesKeyword(profile: AppProfileConfig, keyword: string): boolean {
+  const haystack = [
+    profile.app_key,
+    profile.process_name,
+    profile.display_name,
+    profile.effective_display_name,
+    profile.default_display_name,
+    profile.category
+  ]
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    .join(' ')
+    .toLocaleLowerCase()
+
+  return haystack.includes(keyword)
+}
+
+function compareProfiles(
+  left: AppProfileConfig,
+  right: AppProfileConfig,
+  sortBy: NonNullable<AppProfileListFilters['sort_by']>
+): number {
+  if (sortBy === 'name') {
+    return compareProfileNames(left, right)
+  }
+
+  if (sortBy === 'duration') {
+    return left.total_active_duration_sec - right.total_active_duration_sec
+  }
+
+  return String(left.last_seen_at ?? '').localeCompare(String(right.last_seen_at ?? ''))
+}
+
+function compareProfileNames(left: AppProfileConfig, right: AppProfileConfig): number {
+  return appProfileCollator.compare(profileDisplayName(left), profileDisplayName(right))
+}
+
+function profileDisplayName(profile: AppProfileConfig): string {
+  return profile.effective_display_name || profile.display_name || profile.default_display_name || profile.process_name
 }
 </script>
 
 <template>
-  <PageLayout title="应用配置" subtitle="维护应用名称、分类颜色、采集开关和历史记录策略。">
+  <div class="app-profiles-root">
+
     <div class="app-profiles-page">
       <section class="app-profiles-pinned" aria-label="应用配置筛选与分类">
         <AppProfileOverview
@@ -315,18 +454,8 @@ function emptyAppProfileList(): AppProfileListPayload {
           :message="operationMessage"
           :error="appProfileError"
           @refresh="loadAppProfileBootstrap"
+          @manage-categories="categoryDrawerVisible = true"
           @update-filters="updateFilters"
-        />
-
-        <AppCategoryPanel
-          :categories="appCategories"
-          :selected-category="selectedCategory"
-          :loading="appProfileLoading"
-          :saving="categorySaving"
-          @create="saveAppCategoryDraft"
-          @delete="deleteAppCategoryDraft"
-          @select="updateFilters({ category: $event })"
-          @clear="clearCategoryFilter"
         />
       </section>
 
@@ -335,7 +464,6 @@ function emptyAppProfileList(): AppProfileListPayload {
         class="app-profiles-scroll-region"
         :profiles="appProfileRows"
         :categories="appCategories"
-        :total="appProfiles.total"
         :loading="appProfileLoading"
         :saving-app-key="savingAppKey"
         :error="appProfileError"
@@ -343,77 +471,66 @@ function emptyAppProfileList(): AppProfileListPayload {
         @reset="resetAppProfileDraft"
         @delete-records="deleteAppProfileRecords"
         @dirty-change="updateAppProfileDirtyState"
-      >
-        <template #actions>
-          <button class="refresh-button" type="button" :disabled="appProfileLoading" @click="loadAppProfileBootstrap">
-            <Refresh class="refresh-button-icon" />
-            <span>刷新</span>
-          </button>
-        </template>
-      </AppProfileListPanel>
+      />
     </div>
-  </PageLayout>
+
+    <el-drawer
+      v-model="categoryDrawerVisible"
+      title="应用分类管理"
+      direction="rtl"
+      size="420px"
+      class="category-drawer"
+    >
+      <AppCategoryPanel
+        class="drawer-category-panel"
+        :categories="appCategories"
+        :selected-category="selectedCategory"
+        :loading="appProfileLoading"
+        :saving="categorySaving"
+        @create="saveAppCategoryDraft"
+        @delete="deleteAppCategoryDraft"
+        @select="updateFilters({ category: $event })"
+        @clear="clearCategoryFilter"
+      />
+    </el-drawer>
+  </div>
 </template>
 
 <style scoped>
+.app-profiles-root {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+}
+
 .app-profiles-page {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: 232px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 16px;
+  overflow: hidden;
 }
 
 .app-profiles-pinned {
   min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
-  gap: 16px;
 }
 
 .app-profiles-scroll-region {
   min-height: 0;
 }
 
-.refresh-button {
-  height: 36px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 12px;
-  border: 1px solid #c9dcff;
-  border-radius: 8px;
-  color: #1d4ed8;
-  background: #eff6ff;
-  font-size: 13px;
-  font-weight: 720;
-  line-height: 1;
-  cursor: pointer;
+.drawer-category-panel {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
 }
 
-.refresh-button:hover {
-  border-color: #93c5fd;
-  background: #dbeafe;
-}
-
-.refresh-button:disabled {
-  cursor: wait;
-  opacity: 0.62;
-}
-
-.refresh-button-icon {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-}
-
-@media (max-width: 980px) {
-  .app-profiles-page {
-    grid-template-rows: auto minmax(0, 1fr);
-  }
-
-  .app-profiles-pinned {
-    grid-template-columns: minmax(0, 1fr);
-  }
+:deep(.category-drawer .el-drawer__body) {
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
 }
 </style>

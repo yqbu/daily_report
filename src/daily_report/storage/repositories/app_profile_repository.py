@@ -191,16 +191,10 @@ class AppProfileRepository:
             for profile in profiles.values():
                 items.append(self._merge_profile(observed_row=None, profile=profile))
 
+        count_filters = {**filters, 'classification': 'all'}
+        counts = _profile_counts(self._filter_profiles(items, count_filters))
         items = self._filter_profiles(items, filters)
-        counts = _profile_counts(items)
-        items.sort(
-            key=lambda item: (
-                str(item.get('last_seen_at') or ''),
-                float(item.get('total_active_duration_sec') or 0),
-                str(item.get('effective_display_name') or ''),
-            ),
-            reverse=True,
-        )
+        _sort_profiles(items, filters)
 
         page = max(1, int(page or 1))
         page_size = max(1, min(500, int(page_size or 100)))
@@ -483,7 +477,9 @@ class AppProfileRepository:
                 return False
             if classification in {'unclassified', 'other'} and item.get('is_classified'):
                 return False
-            if classification in {'classified', 'configured'} and not item.get('is_classified'):
+            if classification == 'classified' and not item.get('is_classified'):
+                return False
+            if classification == 'configured' and not item.get('is_configured'):
                 return False
             if track_enabled is not None and bool(item.get('track_enabled')) != track_enabled:
                 return False
@@ -573,6 +569,31 @@ def _profile_counts(items: list[dict[str, Any]]) -> dict[str, int]:
         'configured': sum(1 for item in items if item.get('is_configured')),
         'excluded': sum(1 for item in items if not item.get('track_enabled')),
     }
+
+
+def _sort_profiles(items: list[dict[str, Any]], filters: dict[str, Any]) -> None:
+    sort_by = str(filters.get('sort_by') or filters.get('sortBy') or 'last_seen').strip().lower()
+    sort_direction = str(filters.get('sort_direction') or filters.get('sortDirection') or '').strip().lower()
+    if sort_by not in {'last_seen', 'name', 'duration'}:
+        sort_by = 'last_seen'
+    if sort_direction not in {'asc', 'desc'}:
+        sort_direction = 'asc' if sort_by == 'name' else 'desc'
+
+    def sort_key(item: dict[str, Any]) -> tuple[Any, ...]:
+        name = str(item.get('effective_display_name') or item.get('default_display_name') or item.get('process_name') or '')
+        app_key = str(item.get('app_key') or '')
+        if sort_by == 'name':
+            return (name.casefold(), app_key)
+        if sort_by == 'duration':
+            return (float(item.get('total_active_duration_sec') or 0), name.casefold(), app_key)
+        return (
+            str(item.get('last_seen_at') or ''),
+            float(item.get('total_active_duration_sec') or 0),
+            name.casefold(),
+            app_key,
+        )
+
+    items.sort(key=sort_key, reverse=sort_direction == 'desc')
 
 
 def _optional_bool(value: Any) -> bool | None:

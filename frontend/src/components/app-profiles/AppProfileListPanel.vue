@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue'
-import { Check, Delete, RefreshLeft } from '@element-plus/icons-vue'
+import { Check, Close, Delete, RefreshLeft } from '@element-plus/icons-vue'
 
 import type { AppCategoryConfig, AppProfileConfig, SaveAppProfilePayload } from '../../api/types'
 
@@ -20,10 +20,21 @@ interface AppProfileSnapshot {
   captureTitleEnabled: boolean
 }
 
+interface AppProfileCardState {
+  key: string
+  profile: AppProfileConfig
+  draft: AppProfileDraft
+  dirty: boolean
+  excluded: boolean
+  displayName: string
+  iconSrc: string
+  initial: string
+  cardStyle: Record<string, string>
+}
+
 const props = defineProps<{
   profiles: AppProfileConfig[]
   categories: AppCategoryConfig[]
-  total: number
   loading: boolean
   savingAppKey: string
   error?: string
@@ -59,7 +70,28 @@ const categoryOptions = computed(() => {
   return options.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
 })
 
+const categoryColorMap = computed(() => {
+  return new Map(categoryOptions.value.map((category) => [category.name, normalizeColor(category.color)]))
+})
+
 const hasUnsavedChanges = computed(() => props.profiles.some((profile) => profileHasChanges(profile)))
+
+const profileCards = computed<AppProfileCardState[]>(() => {
+  return props.profiles.map((profile) => {
+    const draft = readDraftFor(profile)
+    return {
+      key: profile.app_key,
+      profile,
+      draft,
+      dirty: profileHasChanges(profile),
+      excluded: !draft.trackEnabled,
+      displayName: displayNameFor(profile, draft),
+      iconSrc: iconSource(profile),
+      initial: appInitial(profile, draft),
+      cardStyle: profileCardStyle(draft)
+    }
+  })
+})
 
 watch(
   () => props.profiles,
@@ -104,6 +136,10 @@ function draftFor(profile: AppProfileConfig): AppProfileDraft {
   return drafts[profile.app_key]
 }
 
+function readDraftFor(profile: AppProfileConfig): AppProfileDraft {
+  return drafts[profile.app_key] ?? createDraft(profile)
+}
+
 function saveProfile(profile: AppProfileConfig): void {
   if (!profileHasChanges(profile)) return
 
@@ -112,14 +148,16 @@ function saveProfile(profile: AppProfileConfig): void {
 
 function createSavePayload(profile: AppProfileConfig): SaveAppProfilePayload {
   const draft = draftFor(profile)
+  const category = normalizeOptionalText(draft.category)
+  const color = normalizeColor(draft.color)
 
   return {
     app_key: profile.app_key,
     process_name: profile.process_name,
     exe_path: profile.exe_path,
     display_name: draft.displayName.trim() || null,
-    category: draft.category || null,
-    color: draft.color || null,
+    category,
+    color: color === resolveCategoryColor(category) ? null : color,
     track_enabled: draft.trackEnabled,
     capture_title_enabled: draft.captureTitleEnabled
   }
@@ -143,7 +181,7 @@ function profileHasChanges(profile: AppProfileConfig): boolean {
   const draft = drafts[profile.app_key]
   if (!draft) return false
 
-  return serializeSnapshot(createDraftSnapshot(draft)) !== serializeSnapshot(createProfileSnapshot(profile))
+  return !snapshotsEqual(createDraftSnapshot(draft), createProfileSnapshot(profile))
 }
 
 function createDraftSnapshot(draft: AppProfileDraft): AppProfileSnapshot {
@@ -166,8 +204,14 @@ function createProfileSnapshot(profile: AppProfileConfig): AppProfileSnapshot {
   }
 }
 
-function serializeSnapshot(snapshot: AppProfileSnapshot): string {
-  return JSON.stringify(snapshot)
+function snapshotsEqual(left: AppProfileSnapshot, right: AppProfileSnapshot): boolean {
+  return (
+    left.displayName === right.displayName &&
+    left.category === right.category &&
+    left.color === right.color &&
+    left.trackEnabled === right.trackEnabled &&
+    left.captureTitleEnabled === right.captureTitleEnabled
+  )
 }
 
 function normalizeOptionalText(value?: string | null): string | null {
@@ -177,6 +221,51 @@ function normalizeOptionalText(value?: string | null): string | null {
 
 function normalizeColor(value?: string | null): string {
   return (value?.trim() || '#8F98A8').toUpperCase()
+}
+
+function resolveCategoryColor(categoryName?: string | null): string {
+  if (!categoryName) return '#8F98A8'
+  return categoryColorMap.value.get(categoryName) ?? '#8F98A8'
+}
+
+function handleCategoryChange(profile: AppProfileConfig, event: Event): void {
+  const target = event.target as HTMLSelectElement | null
+  if (!target) return
+
+  const draft = draftFor(profile)
+  draft.category = target.value
+  draft.color = resolveCategoryColor(target.value)
+}
+
+function displayNameFor(profile: AppProfileConfig, draft: AppProfileDraft): string {
+  return draft.displayName.trim() || profile.effective_display_name || profile.default_display_name || profile.process_name
+}
+
+function profileCardStyle(draft: AppProfileDraft): Record<string, string> {
+  const color = normalizeColor(draft.color)
+  return {
+    '--profile-color': color,
+    '--profile-color-soft': hexToRgba(color, 0.1)
+  }
+}
+
+function iconSource(profile: AppProfileConfig): string {
+  const icon = profile.icon_base64?.trim()
+  if (!icon) return ''
+  return icon.startsWith('data:') ? icon : `data:image/png;base64,${icon}`
+}
+
+function appInitial(profile: AppProfileConfig, draft: AppProfileDraft): string {
+  const name = displayNameFor(profile, draft) || profile.process_name || profile.app_key
+  return name.trim().slice(0, 1).toUpperCase() || 'A'
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = normalizeColor(hex).replace('#', '')
+  const red = Number.parseInt(normalized.slice(0, 2), 16)
+  const green = Number.parseInt(normalized.slice(2, 4), 16)
+  const blue = Number.parseInt(normalized.slice(4, 6), 16)
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`
 }
 
 function formatDuration(seconds: number): string {
@@ -214,105 +303,97 @@ defineExpose({
 
 <template>
   <section class="list-panel">
-    <header class="list-header">
-      <div class="list-heading">
-        <p class="list-kicker">配置展示</p>
-        <h2 class="list-title">应用配置列表</h2>
-        <p class="list-subtitle">共 {{ total }} 个应用，列表区域独立滚动。</p>
-      </div>
-
-      <div v-if="$slots.actions" class="list-actions">
-        <slot name="actions" />
-      </div>
-    </header>
-
-    <div class="list-scroll" v-loading="loading">
-      <table v-if="profiles.length > 0" class="profile-table">
-        <thead>
-          <tr>
-            <th class="column-app">应用</th>
-            <th class="column-name">显示名</th>
-            <th class="column-category">分类</th>
-            <th class="column-color">颜色</th>
-            <th class="column-switches">采集</th>
-            <th class="column-usage">记录</th>
-            <th class="column-actions">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="profile in profiles"
-            :key="profile.app_key"
-            :class="{
-              'profile-row--excluded': !draftFor(profile).trackEnabled,
-              'profile-row--dirty': profileHasChanges(profile)
-            }"
-          >
-            <td class="app-cell">
+    <div class="list-scroll" :class="{ 'list-scroll--loading': loading }" :aria-busy="loading">
+      <div v-if="profileCards.length > 0" class="profile-card-grid">
+        <el-card
+          v-for="card in profileCards"
+          :key="card.key"
+          class="profile-card"
+          :class="{
+            'profile-card--excluded': card.excluded,
+            'profile-card--dirty': card.dirty
+          }"
+          shadow="never"
+          :body-style="{ padding: '0' }"
+          :style="card.cardStyle"
+        >
+          <div class="profile-card-body">
+            <header class="profile-card-header">
               <div class="app-identity">
-                <span class="app-swatch" :style="{ backgroundColor: draftFor(profile).color }"></span>
+                <span class="app-avatar">
+                  <img v-if="card.iconSrc" class="app-icon" :src="card.iconSrc" alt="" />
+                  <span v-else class="app-initial">{{ card.initial }}</span>
+                </span>
+
                 <div class="app-copy">
-                  <strong class="app-name">{{ profile.effective_display_name }}</strong>
-                  <span class="app-process">{{ profile.process_name }}</span>
-                  <span class="app-title">{{ profile.sample_window_title || '未采集窗口标题' }}</span>
+                  <strong class="app-name">{{ card.displayName }}</strong>
+                  <span class="app-process">{{ card.profile.process_name }}</span>
                 </div>
               </div>
-            </td>
 
-            <td>
-              <input
-                v-model="draftFor(profile).displayName"
-                class="text-input"
-                type="text"
-                autocomplete="off"
-                :placeholder="profile.default_display_name"
-                @keydown.enter.prevent="saveProfile(profile)"
-              />
-            </td>
+              <el-tag
+                class="status-tag"
+                :type="card.draft.trackEnabled ? 'success' : 'info'"
+                effect="light"
+                round
+                disable-transitions
+              >
+                {{ card.draft.trackEnabled ? '统计中' : '已排除' }}
+              </el-tag>
+            </header>
 
-            <td>
-              <select v-model="draftFor(profile).category" class="select-input">
-                <option v-for="category in categoryOptions" :key="category.name" :value="category.name">
-                  {{ category.name }}
-                </option>
-              </select>
-            </td>
+            <div class="config-grid">
+              <label class="field">
+                <span class="field-label">分类</span>
+                <select :value="card.draft.category" class="select-input" @change="handleCategoryChange(card.profile, $event)">
+                  <option v-for="category in categoryOptions" :key="category.name" :value="category.name">
+                    {{ category.name }}
+                  </option>
+                </select>
+              </label>
 
-            <td>
-              <div class="color-editor">
-                <input v-model="draftFor(profile).color" class="color-input" type="color" />
-                <span class="color-value">{{ draftFor(profile).color }}</span>
+              <label class="field">
+                <span class="field-label">颜色</span>
+                <div class="color-editor">
+                  <input v-model="card.draft.color" class="color-input" type="color" />
+                  <span class="color-value">{{ normalizeColor(card.draft.color) }}</span>
+                </div>
+              </label>
+
+              <div class="field switch-field">
+                <span class="field-label">采集选项</span>
+                <div class="switch-inline-group">
+                  <label class="switch-row">
+                    <span>统计</span>
+                    <el-switch v-model="card.draft.trackEnabled" size="small" inline-prompt active-text="开" inactive-text="关" />
+                  </label>
+                  <label class="switch-row">
+                    <span>标题</span>
+                    <el-switch
+                      v-model="card.draft.captureTitleEnabled"
+                      size="small"
+                      inline-prompt
+                      active-text="开"
+                      inactive-text="关"
+                    />
+                  </label>
+                </div>
               </div>
-            </td>
+            </div>
 
-            <td>
-              <div class="switch-stack">
-                <label class="toggle-row">
-                  <input v-model="draftFor(profile).trackEnabled" type="checkbox" />
-                  <span>统计</span>
-                </label>
-                <label class="toggle-row">
-                  <input v-model="draftFor(profile).captureTitleEnabled" type="checkbox" />
-                  <span>标题</span>
-                </label>
-              </div>
-            </td>
-
-            <td>
+            <footer class="profile-card-footer">
               <div class="usage-copy">
-                <strong>{{ formatDuration(profile.total_active_duration_sec) }}</strong>
-                <span>{{ profile.session_count }} 次 · {{ formatLastSeen(profile.last_seen_at) }}</span>
+                <strong>{{ formatDuration(card.profile.total_active_duration_sec) }}</strong>
+                <span>{{ card.profile.session_count }} 次 · {{ formatLastSeen(card.profile.last_seen_at) }}</span>
               </div>
-            </td>
 
-            <td>
               <div class="row-actions">
                 <button
                   class="row-button row-button--primary"
                   type="button"
                   title="保存配置"
-                  :disabled="savingAppKey === profile.app_key || !profileHasChanges(profile)"
-                  @click="saveProfile(profile)"
+                  :disabled="savingAppKey === card.profile.app_key || !card.dirty"
+                  @click="saveProfile(card.profile)"
                 >
                   <Check class="row-button-icon" />
                 </button>
@@ -320,8 +401,8 @@ defineExpose({
                   class="row-button"
                   type="button"
                   title="恢复默认配置"
-                  :disabled="savingAppKey === profile.app_key"
-                  @click="emit('reset', profile.app_key)"
+                  :disabled="savingAppKey === card.profile.app_key"
+                  @click="emit('reset', card.profile.app_key)"
                 >
                   <RefreshLeft class="row-button-icon" />
                 </button>
@@ -329,25 +410,25 @@ defineExpose({
                   class="row-button row-button--danger"
                   type="button"
                   title="移除该应用历史记录"
-                  :disabled="savingAppKey === profile.app_key"
-                  @click="emit('delete-records', profile.app_key)"
+                  :disabled="savingAppKey === card.profile.app_key"
+                  @click="emit('delete-records', card.profile.app_key)"
                 >
                   <Delete class="row-button-icon" />
                 </button>
                 <button
                   class="row-button"
                   type="button"
-                  title="放弃本行未保存修改"
-                  :disabled="savingAppKey === profile.app_key || !profileHasChanges(profile)"
-                  @click="resetDraft(profile)"
+                  title="放弃本卡片未保存修改"
+                  :disabled="savingAppKey === card.profile.app_key || !card.dirty"
+                  @click="resetDraft(card.profile)"
                 >
-                  重置
+                  <Close class="row-button-icon" />
                 </button>
               </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+            </footer>
+          </div>
+        </el-card>
+      </div>
 
       <div v-else class="empty-state">
         <p class="empty-title">暂无应用配置</p>
@@ -359,165 +440,127 @@ defineExpose({
 
 <style scoped>
 .list-panel {
+  height: 100%;
   min-width: 0;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: block;
   border: 1px solid #dce3ee;
   border-radius: 8px;
   background: #ffffff;
   overflow: hidden;
 }
 
-.list-header {
-  min-width: 0;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 16px 18px;
-  border-bottom: 1px solid #e6ebf3;
-  background: #fbfdff;
-}
-
-.list-heading {
-  min-width: 0;
-}
-
-.list-kicker,
-.list-title,
-.list-subtitle,
 .empty-title,
 .empty-description {
   margin: 0;
 }
 
-.list-kicker {
-  color: #16a34a;
-  font-size: 12px;
-  font-weight: 780;
-  line-height: 1.2;
-}
-
-.list-title {
-  margin-top: 4px;
-  color: #172033;
-  font-size: 19px;
-  font-weight: 820;
-  line-height: 1.2;
-}
-
-.list-subtitle {
-  margin-top: 5px;
-  color: #667085;
-  font-size: 13px;
-}
-
-.list-actions {
-  flex: 0 0 auto;
-}
-
 .list-scroll {
+  height: 100%;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
+  contain: layout paint style;
+  isolation: isolate;
 }
 
-.profile-table {
-  width: 100%;
-  min-width: 1120px;
-  border-collapse: separate;
-  border-spacing: 0;
+.list-scroll--loading {
+  cursor: progress;
 }
 
-.profile-table th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  height: 42px;
-  padding: 0 14px;
-  border-bottom: 1px solid #e6ebf3;
-  color: #667085;
-  background: #f8fafc;
-  font-size: 12px;
-  font-weight: 780;
-  text-align: left;
-}
-
-.profile-table td {
+.profile-card-grid {
   min-width: 0;
-  padding: 12px 14px;
-  border-bottom: 1px solid #eef2f7;
-  vertical-align: middle;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 14px;
+  padding: 16px;
 }
 
-.profile-table tr:hover td {
-  background: #fbfdff;
+.profile-card {
+  --profile-color: #8F98A8;
+  --profile-color-soft: rgba(143, 152, 168, 0.1);
+  min-width: 0;
+  border-color: #e1e7f0;
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, var(--profile-color-soft), rgba(255, 255, 255, 0) 42%),
+    #ffffff;
+  contain: layout paint;
+  overflow: hidden;
 }
 
-.profile-row--excluded td {
-  background: #fcfcfd;
-}
-
-.profile-row--dirty td {
-  background: #fffdf5;
-}
-
-.profile-row--dirty td:first-child {
+.profile-card--dirty {
+  border-color: #f59e0b;
   box-shadow: inset 3px 0 0 #f59e0b;
 }
 
-.column-app {
-  width: 280px;
+.profile-card--excluded {
+  background:
+    linear-gradient(90deg, rgba(148, 163, 184, 0.1), rgba(255, 255, 255, 0) 42%),
+    #fbfcfe;
 }
 
-.column-name {
-  width: 190px;
+.profile-card-body {
+  min-width: 0;
+  display: grid;
+  gap: 13px;
+  padding: 15px;
 }
 
-.column-category {
-  width: 150px;
+.profile-card-header,
+.profile-card-footer {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.column-color {
-  width: 150px;
-}
-
-.column-switches {
-  width: 124px;
-}
-
-.column-usage {
-  width: 190px;
-}
-
-.column-actions {
-  width: 172px;
+.profile-card-footer {
+  align-items: flex-end;
+  padding-top: 2px;
 }
 
 .app-identity {
   min-width: 0;
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-columns: 38px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
 }
 
-.app-swatch {
-  width: 36px;
-  height: 36px;
+.app-avatar {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
   border-radius: 8px;
+  color: #ffffff;
+  background: var(--profile-color);
   box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.12);
+  overflow: hidden;
+}
+
+.app-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.app-initial {
+  font-size: 15px;
+  font-weight: 820;
+  line-height: 1;
 }
 
 .app-copy {
   min-width: 0;
   display: grid;
-  gap: 3px;
+  gap: 4px;
 }
 
 .app-name,
 .app-process,
-.app-title,
 .usage-copy span,
 .color-value {
   min-width: 0;
@@ -528,18 +571,46 @@ defineExpose({
 
 .app-name {
   color: #172033;
-  font-size: 14px;
-  font-weight: 780;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
 }
 
 .app-process,
-.app-title,
 .usage-copy span {
   color: #667085;
   font-size: 12px;
 }
 
-.text-input,
+.status-tag {
+  flex: 0 0 auto;
+}
+
+.config-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(148px, 0.45fr);
+  gap: 11px;
+}
+
+.field,
+.switch-field {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.switch-field {
+  grid-column: 1 / -1;
+}
+
+.field-label {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 740;
+  line-height: 1;
+}
+
 .select-input {
   width: 100%;
   min-width: 0;
@@ -553,7 +624,6 @@ defineExpose({
   font-size: 13px;
 }
 
-.text-input:focus,
 .select-input:focus {
   border-color: #93c5fd;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
@@ -583,25 +653,25 @@ defineExpose({
   font-family: "Segoe UI Mono", "Consolas", monospace;
 }
 
-.switch-stack {
+.switch-inline-group {
+  min-width: 0;
+  height: 34px;
   display: grid;
-  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: 8px;
 }
 
-.toggle-row {
-  display: inline-flex;
+.switch-row {
+  min-width: 0;
+  display: flex;
   align-items: center;
-  gap: 7px;
+  justify-content: space-between;
+  gap: 10px;
   color: #344054;
   font-size: 12px;
   font-weight: 700;
   line-height: 1;
-}
-
-.toggle-row input {
-  width: 15px;
-  height: 15px;
-  accent-color: #2563eb;
 }
 
 .usage-copy {
@@ -619,6 +689,8 @@ defineExpose({
 .row-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -656,13 +728,29 @@ defineExpose({
 }
 
 .row-button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.54;
+}
+
+.row-button:disabled:hover {
+  color: #526179;
+  border-color: #dce3ee;
+  background: #ffffff;
+}
+
+.row-button--primary:disabled:hover {
+  color: #047857;
+  border-color: #bbf7d0;
+  background: #ecfdf5;
 }
 
 .row-button-icon {
   width: 15px;
   height: 15px;
+}
+
+:deep(.el-switch__core) {
+  min-width: 42px;
 }
 
 .empty-state {
@@ -690,9 +778,29 @@ defineExpose({
 }
 
 @media (max-width: 760px) {
-  .list-header {
-    align-items: flex-start;
+  .profile-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px;
+  }
+
+  .profile-card-footer {
+    align-items: stretch;
     flex-direction: column;
+  }
+
+  .row-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  .config-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .switch-inline-group {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
   }
 }
 </style>

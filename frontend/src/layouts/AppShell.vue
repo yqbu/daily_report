@@ -28,12 +28,14 @@ function toggleSidebar(): void {
 
 <style scoped>
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
   display: grid;
   grid-template-columns: 84px minmax(0, 1fr);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(246, 248, 252, 0.92)),
     #edf1f7;
+  overflow: hidden;
   transition: grid-template-columns 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -43,14 +45,17 @@ function toggleSidebar(): void {
 
 .app-main {
   min-width: 0;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;
   padding: 14px 16px 16px 16px;
+  overflow: hidden;
 }
 
 .app-workspace {
+  height: 100%;
   min-height: 0;
   overflow: hidden;
 }

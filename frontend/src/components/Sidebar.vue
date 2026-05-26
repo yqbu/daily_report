@@ -33,6 +33,9 @@ const searchKeyword = shallowRef('')
 const collectorStatus = shallowRef<CollectorStatus>('checking')
 const collectorBusy = shallowRef(false)
 let statusTimer: number | undefined
+let statusRefreshInFlight = false
+
+const STATUS_REFRESH_INTERVAL_MS = 60000
 
 const navItems = [
   {
@@ -106,12 +109,18 @@ function openSearchMatch(to: string): void {
   searchKeyword.value = ''
 }
 
-async function refreshCollectorStatus(): Promise<void> {
+async function refreshCollectorStatus(options: { force?: boolean } = {}): Promise<void> {
+  if (statusRefreshInFlight) return
+  if (!options.force && typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+
+  statusRefreshInFlight = true
   try {
     const payload = await callBridge<CollectorStatusPayload>('get_collector_status', {})
     collectorStatus.value = isCollectorRunning(payload) ? 'running' : 'stopped'
   } catch {
     collectorStatus.value = 'stopped'
+  } finally {
+    statusRefreshInFlight = false
   }
 }
 
@@ -123,7 +132,8 @@ async function toggleCollectorService(): Promise<void> {
     const targetRunning = !collectorRunning.value
     const method = targetRunning ? 'start_collector_service' : 'stop_collector_service'
     await callBridge(method, {})
-    await waitForCollectorStatus(targetRunning)
+    collectorStatus.value = targetRunning ? 'running' : 'stopped'
+    scheduleStatusRefresh(2500)
   } finally {
     collectorBusy.value = false
   }
@@ -165,29 +175,33 @@ function isRunningStatusText(value: string): boolean {
   return /(running|started|online|active|healthy|enabled|ok)/.test(text)
 }
 
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
+function scheduleStatusRefresh(delay = STATUS_REFRESH_INTERVAL_MS): void {
+  if (statusTimer !== undefined) {
+    window.clearTimeout(statusTimer)
+  }
+
+  statusTimer = window.setTimeout(() => {
+    void refreshCollectorStatus().finally(() => scheduleStatusRefresh())
+  }, delay)
 }
 
-async function waitForCollectorStatus(targetRunning: boolean): Promise<void> {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    await wait(700)
-    await refreshCollectorStatus()
-    if (collectorRunning.value === targetRunning) {
-      return
-    }
+function handleVisibilityChange(): void {
+  if (document.visibilityState === 'visible') {
+    void refreshCollectorStatus({ force: true })
   }
 }
 
 onMounted(() => {
-  refreshCollectorStatus()
-  statusTimer = window.setInterval(refreshCollectorStatus, 12000)
+  void refreshCollectorStatus({ force: true })
+  scheduleStatusRefresh()
+  document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
 onBeforeUnmount(() => {
   if (statusTimer !== undefined) {
-    window.clearInterval(statusTimer)
+    window.clearTimeout(statusTimer)
   }
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 

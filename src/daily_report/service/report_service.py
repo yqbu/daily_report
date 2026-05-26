@@ -165,10 +165,13 @@ class ReportService:
             total = conn.execute(
                 """
                 SELECT
-                    COALESCE(SUM(duration_sec), 0) AS total_duration_sec,
-                    COALESCE(SUM(active_duration_sec), 0) AS total_active_duration_sec
-                FROM app_sessions
-                WHERE date = ? AND is_deleted = 0
+                    COALESCE(SUM(a.duration_sec), 0) AS total_duration_sec,
+                    COALESCE(SUM(a.active_duration_sec), 0) AS total_active_duration_sec
+                FROM app_sessions a
+                LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name))
+                WHERE a.date = ?
+                  AND a.is_deleted = 0
+                  AND COALESCE(p.track_enabled, 1) = 1
                 """,
                 (day,),
             ).fetchone()

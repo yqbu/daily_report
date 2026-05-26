@@ -533,22 +533,41 @@ class GuiService:
         limit: int,
         offset: int,
     ) -> tuple[list[dict[str, Any]], int]:
-        sql = "FROM app_sessions WHERE date = ?"
+        sql = """
+            FROM app_sessions a
+            LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name))
+            WHERE a.date = ?
+              AND a.is_deleted = 0
+              AND COALESCE(p.track_enabled, 1) = 1
+        """
         params: list[Any] = [day]
         if app_name:
-            sql += " AND app_name = ?"
+            sql += " AND COALESCE(NULLIF(p.display_name, ''), a.app_name) = ?"
             params.append(app_name)
-        sql += " AND (app_name LIKE ? OR process_name LIKE ? OR window_title LIKE ?)"
+        sql += " AND (a.app_name LIKE ? OR a.process_name LIKE ? OR a.window_title LIKE ? OR p.display_name LIKE ?)"
         like = f"%{keyword}%"
-        params.extend([like, like, like])
+        params.extend([like, like, like, like])
         conn = self.provider.connect()
         try:
             total_row = conn.execute(f"SELECT COUNT(*) AS n {sql}", tuple(params)).fetchone()
             rows = conn.execute(
-                f"SELECT * {sql} ORDER BY start_time ASC LIMIT ? OFFSET ?",
+                f"""
+                SELECT a.*,
+                       COALESCE(NULLIF(p.display_name, ''), a.app_name) AS display_app_name
+                {sql}
+                ORDER BY a.start_time ASC
+                LIMIT ? OFFSET ?
+                """,
                 tuple([*params, limit, offset]),
             ).fetchall()
-            return [dict(row) for row in rows], int(total_row["n"] if total_row else 0)
+            items = []
+            for row in rows:
+                item = dict(row)
+                display_name = str(item.pop("display_app_name", "") or "").strip()
+                if display_name:
+                    item["app_name"] = display_name
+                items.append(item)
+            return items, int(total_row["n"] if total_row else 0)
         finally:
             conn.close()
 

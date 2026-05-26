@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from daily_report.storage.database import create_connection, default_db_path, init_database
-from daily_report.yasb_bridge.usage_status import build_status_payload, fmt_seconds
+from daily_report.yasb_bridge.collector_status import build_collector_status_payload
+from daily_report.yasb_bridge.usage_status import fmt_seconds
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,14 @@ class MaterialRow:
     preview: str
     source: str
     sensitive: bool
+
+
+def _app_session_dict(row: sqlite3.Row) -> dict[str, Any]:
+    data = dict(row)
+    display_name = str(data.pop("display_app_name", "") or "").strip()
+    if display_name:
+        data["app_name"] = display_name
+    return data
 
 
 class GuiDataProvider:
@@ -41,7 +50,9 @@ class GuiDataProvider:
         return date_cls.today().isoformat()
 
     def status(self, day: str | None = None) -> dict[str, Any]:
-        return build_status_payload(target_date=day, limit=5)
+        payload = build_collector_status_payload()
+        payload["date"] = day or self.today()
+        return payload
 
     def dashboard(self, day: str | None = None) -> dict[str, Any]:
         day = day or self.today()
@@ -49,20 +60,28 @@ class GuiDataProvider:
         try:
             total = conn.execute(
                 """
-                SELECT COALESCE(SUM(duration_sec), 0) AS total_duration_sec,
-                       COALESCE(SUM(active_duration_sec), 0) AS total_active_duration_sec,
-                       COUNT(*) AS session_count
-                FROM app_sessions
-                WHERE date = ?
+                SELECT COALESCE(SUM(a.duration_sec), 0) AS total_duration_sec,
+                       COALESCE(SUM(a.active_duration_sec), 0) AS total_active_duration_sec,
+                       COUNT(a.id) AS session_count
+                FROM app_sessions a
+                LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name))
+                WHERE a.date = ?
+                  AND a.is_deleted = 0
+                  AND COALESCE(p.track_enabled, 1) = 1
                 """,
                 (day,),
             ).fetchone()
             top = conn.execute(
                 """
-                SELECT app_name, SUM(active_duration_sec) AS active_sec, COUNT(*) AS session_count
-                FROM app_sessions
-                WHERE date = ?
-                GROUP BY app_name
+                SELECT COALESCE(NULLIF(p.display_name, ''), a.app_name) AS app_name,
+                       SUM(a.active_duration_sec) AS active_sec,
+                       COUNT(*) AS session_count
+                FROM app_sessions a
+                LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name))
+                WHERE a.date = ?
+                  AND a.is_deleted = 0
+                  AND COALESCE(p.track_enabled, 1) = 1
+                GROUP BY COALESCE(NULLIF(p.display_name, ''), a.app_name)
                 ORDER BY active_sec DESC
                 LIMIT 5
                 """,
@@ -97,17 +116,24 @@ class GuiDataProvider:
         app_name: str | None = None,
         limit: int | None = None,
         offset: int = 0,
+        include_excluded: bool = False,
     ) -> list[dict[str, Any]]:
         day = day or self.today()
         sql = """
-            SELECT * FROM app_sessions
-            WHERE date = ?
+            SELECT a.*,
+                   COALESCE(NULLIF(p.display_name, ''), a.app_name) AS display_app_name
+            FROM app_sessions a
+            LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name))
+            WHERE a.date = ?
+              AND a.is_deleted = 0
         """
         params: list[Any] = [day]
         if app_name and app_name != "全部":
-            sql += " AND app_name = ?"
+            sql += " AND COALESCE(NULLIF(p.display_name, ''), a.app_name) = ?"
             params.append(app_name)
-        sql += " ORDER BY start_time ASC"
+        if not include_excluded:
+            sql += " AND COALESCE(p.track_enabled, 1) = 1"
+        sql += " ORDER BY a.start_time ASC"
         if limit is not None:
             sql += " LIMIT ? OFFSET ?"
             params.extend([int(limit), int(offset)])
@@ -115,17 +141,31 @@ class GuiDataProvider:
         conn = self.connect()
         try:
             rows = conn.execute(sql, tuple(params)).fetchall()
-            return [dict(r) for r in rows]
+            return [_app_session_dict(r) for r in rows]
         finally:
             conn.close()
 
-    def count_app_sessions(self, day: str | None = None, *, app_name: str | None = None) -> int:
+    def count_app_sessions(
+        self,
+        day: str | None = None,
+        *,
+        app_name: str | None = None,
+        include_excluded: bool = False,
+    ) -> int:
         day = day or self.today()
-        sql = "SELECT COUNT(*) AS n FROM app_sessions WHERE date = ?"
+        sql = """
+            SELECT COUNT(*) AS n
+            FROM app_sessions a
+            LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name))
+            WHERE a.date = ?
+              AND a.is_deleted = 0
+        """
         params: list[Any] = [day]
         if app_name and app_name != "全部":
-            sql += " AND app_name = ?"
+            sql += " AND COALESCE(NULLIF(p.display_name, ''), a.app_name) = ?"
             params.append(app_name)
+        if not include_excluded:
+            sql += " AND COALESCE(p.track_enabled, 1) = 1"
         conn = self.connect()
         try:
             row = conn.execute(sql, tuple(params)).fetchone()
@@ -139,9 +179,14 @@ class GuiDataProvider:
         try:
             rows = conn.execute(
                 """
-                SELECT DISTINCT app_name
-                FROM app_sessions
-                WHERE date = ? AND app_name IS NOT NULL AND app_name != ''
+                SELECT DISTINCT COALESCE(NULLIF(p.display_name, ''), a.app_name) AS app_name
+                FROM app_sessions a
+                LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name))
+                WHERE a.date = ?
+                  AND a.is_deleted = 0
+                  AND COALESCE(p.track_enabled, 1) = 1
+                  AND COALESCE(NULLIF(p.display_name, ''), a.app_name) IS NOT NULL
+                  AND COALESCE(NULLIF(p.display_name, ''), a.app_name) != ''
                 ORDER BY app_name ASC
                 """,
                 (day,),

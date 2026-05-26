@@ -162,12 +162,16 @@ export interface EntryAnnotationPayload {
 }
 
 export type AppProfileClassificationFilter = 'all' | 'classified' | 'unclassified' | 'configured'
+export type AppProfileSortBy = 'last_seen' | 'name' | 'duration'
+export type SortDirection = 'asc' | 'desc'
 
 export interface AppProfileListFilters {
   keyword?: string
   category?: string
   classification?: AppProfileClassificationFilter
   track_enabled?: boolean | null
+  sort_by?: AppProfileSortBy
+  sort_direction?: SortDirection
 }
 
 export interface AppCategoryConfig {
