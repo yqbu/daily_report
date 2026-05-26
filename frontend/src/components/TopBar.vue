@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Calendar, Connection, Search } from '@element-plus/icons-vue'
+import { Calendar, Check, Close, Connection, Search } from '@element-plus/icons-vue'
+
+import { useAppStore } from '../stores/app'
 
 const route = useRoute()
+const appStore = useAppStore()
 
 const pageTitle = computed(() => String(route.meta.title || 'Daily Report'))
+const showConfigActions = computed(() => appStore.topBar.mode === 'app-config')
+const topBarStatusClass = computed(() => `save-status--${appStore.topBar.statusTone}`)
+const topBarStatusText = computed(() => appStore.topBar.statusText || '已保存')
 const todayLabel = new Intl.DateTimeFormat('zh-CN', {
   month: '2-digit',
   day: '2-digit',
@@ -20,7 +26,30 @@ const todayLabel = new Intl.DateTimeFormat('zh-CN', {
       <h1 class="page-title">{{ pageTitle }}</h1>
     </div>
 
-    <div class="top-actions">
+    <div v-if="showConfigActions" class="top-actions top-actions--config">
+      <span class="save-status" :class="topBarStatusClass">{{ topBarStatusText }}</span>
+      <span class="top-action-divider" aria-hidden="true"></span>
+      <button
+        class="top-button"
+        type="button"
+        :disabled="!appStore.topBar.canCancel || appStore.topBar.saving"
+        @click="appStore.requestTopBarCancel()"
+      >
+        <Close class="action-icon" />
+        <span>取消</span>
+      </button>
+      <button
+        class="top-button top-button--primary"
+        type="button"
+        :disabled="!appStore.topBar.canSave || appStore.topBar.saving"
+        @click="appStore.requestTopBarSave()"
+      >
+        <Check class="action-icon" />
+        <span>保存</span>
+      </button>
+    </div>
+
+    <div v-else class="top-actions">
       <div class="search-pill" title="全局检索入口">
         <Search class="action-icon" />
         <span class="search-text">本地数据工作台</span>
@@ -80,8 +109,14 @@ const todayLabel = new Intl.DateTimeFormat('zh-CN', {
   gap: 10px;
 }
 
+.top-actions--config {
+  gap: 8px;
+}
+
 .search-pill,
-.info-pill {
+.info-pill,
+.save-status,
+.top-button {
   height: 38px;
   display: inline-flex;
   align-items: center;
@@ -93,6 +128,70 @@ const todayLabel = new Intl.DateTimeFormat('zh-CN', {
   background: #ffffff;
   font-size: 13px;
   white-space: nowrap;
+}
+
+.save-status {
+  color: #526179;
+  background: #f8fafc;
+}
+
+.save-status--dirty {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.save-status--saving {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.save-status--saved {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+}
+
+.save-status--error {
+  color: #b42318;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.top-action-divider {
+  width: 1px;
+  height: 24px;
+  flex: 0 0 auto;
+  background: #dce3ee;
+}
+
+.top-button {
+  color: #526179;
+  cursor: pointer;
+}
+
+.top-button:hover {
+  color: #2563eb;
+  border-color: #c9dcff;
+  background: #eff6ff;
+}
+
+.top-button--primary {
+  color: #ffffff;
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+.top-button--primary:hover {
+  color: #ffffff;
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+}
+
+.top-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .search-pill {
