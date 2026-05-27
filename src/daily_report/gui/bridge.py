@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from PySide6.QtCore import QObject, QThread, Signal, Slot
+from PySide6.QtWidgets import QFileDialog
 
 from daily_report.gui.data_provider import GuiDataProvider
 from daily_report.gui.services.gui_service import GuiService
@@ -279,6 +280,33 @@ class PythonBridge(QObject):
     def build_report_prompt(self, payload: str = "") -> str:
         return self._call(payload, self.service.build_report_prompt)
 
+    @Slot(str, result=str)
+    def select_directory(self, payload: str = "") -> str:
+        def run(data: dict[str, Any]) -> dict[str, Any]:
+            title = str(data.get("title") or "选择目录")
+            current_path = str(data.get("currentPath") or data.get("current_path") or "").strip()
+            selected = QFileDialog.getExistingDirectory(None, title, current_path)
+            return {"path": selected or ""}
+
+        return self._call(payload, run)
+
+    @Slot(str, result=str)
+    def select_json_file(self, payload: str = "") -> str:
+        def run(data: dict[str, Any]) -> dict[str, Any]:
+            title = str(data.get("title") or "选择 JSON 文件")
+            current_path = str(data.get("currentPath") or data.get("current_path") or "").strip()
+            default_file_name = str(data.get("defaultFileName") or data.get("default_file_name") or "settings.json")
+            initial_path = _dialog_initial_json_path(current_path, default_file_name)
+            selected, _selected_filter = QFileDialog.getSaveFileName(
+                None,
+                title,
+                str(initial_path),
+                "JSON Files (*.json);;All Files (*)",
+            )
+            return {"path": selected or ""}
+
+        return self._call(payload, run)
+
     def _call(self, payload: str, fn: Callable[[dict[str, Any]], Any]) -> str:
         try:
             return _json_ok(fn(_payload(payload)))
@@ -326,6 +354,15 @@ def _script_command(script: Path) -> list[str]:
     if suffix == ".ps1":
         return ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)]
     return [str(script)]
+
+
+def _dialog_initial_json_path(current_path: str, default_file_name: str) -> Path:
+    if current_path:
+        path = Path(current_path).expanduser()
+        if path.suffix.lower() == ".json":
+            return path
+        return path / default_file_name
+    return Path(default_file_name)
 
 
 def _subprocess_window_kwargs() -> dict[str, Any]:

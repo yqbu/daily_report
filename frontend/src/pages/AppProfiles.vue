@@ -277,14 +277,16 @@ function normalizeClassification(
 }
 
 watch(
-  topBarSaveStatus,
-  (status) => {
+  [topBarSaveStatus, appProfileDirty, bulkSaving, appProfileLoading],
+  ([status]) => {
     appStore.setTopBarState({
       mode: 'app-config',
       statusText: status.text,
       statusTone: status.tone,
       canCancel: appProfileDirty.value && !bulkSaving.value,
+      canRefresh: !bulkSaving.value,
       canSave: appProfileDirty.value && !bulkSaving.value,
+      refreshing: appProfileLoading.value,
       saving: bulkSaving.value
     })
   },
@@ -304,6 +306,14 @@ watch(
   () => {
     if (appStore.topBar.mode !== 'app-config') return
     cancelAllAppProfileDrafts()
+  }
+)
+
+watch(
+  () => appStore.topBar.refreshRequestId,
+  () => {
+    if (appStore.topBar.mode !== 'app-config') return
+    void loadAppProfileBootstrap()
   }
 )
 

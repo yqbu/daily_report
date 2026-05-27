@@ -9,6 +9,9 @@ from typing import Any
 
 from daily_report.config.paths import get_runtime_paths
 
+SETTINGS_PATH_ENV = 'DAILY_REPORT_SETTINGS_PATH'
+SETTINGS_PATH_POINTER_FILE = 'local_settings_path.txt'
+
 
 @dataclass
 class ModelSettings:
@@ -80,12 +83,20 @@ class LocalSettings:
 
 def get_settings_path() -> Path:
     # 与当前项目的 data/daily_report.db 放在同级目录，便于本地单机部署。
-    return get_runtime_paths().db_path.parent / "local_settings.json"
+    env_path = os.getenv(SETTINGS_PATH_ENV, '').strip()
+    if env_path:
+        return _normalize_settings_path(Path(env_path).expanduser())
+
+    pointer_path = _read_settings_path_pointer()
+    if pointer_path is not None:
+        return pointer_path
+
+    return get_runtime_paths().local_settings_path
 
 
 def load_local_settings(path: Path | None = None) -> LocalSettings:
     paths = get_runtime_paths()
-    settings_path = path or paths.local_settings_path
+    settings_path = _normalize_settings_path(path) if path is not None else get_settings_path()
 
     settings = LocalSettings()
 
@@ -93,7 +104,7 @@ def load_local_settings(path: Path | None = None) -> LocalSettings:
         settings.yasb.status_json_path = str(paths.status_json_path)
 
     if not settings_path.exists():
-        save_local_settings(settings, settings_path)
+        save_local_settings(settings, settings_path, remember_path=path is None)
         return settings
 
     with settings_path.open('r', encoding='utf-8') as f:
@@ -105,10 +116,10 @@ def load_local_settings(path: Path | None = None) -> LocalSettings:
 def save_local_settings(
         settings: LocalSettings,
         path: Path | None = None,
-        save_api_key: bool = True
+        save_api_key: bool = True,
+        remember_path: bool = True
 ) -> None:
-    paths = get_runtime_paths()
-    settings_path = path or paths.local_settings_path
+    settings_path = _normalize_settings_path(path) if path is not None else get_settings_path()
     settings_path.parent.mkdir(parents=True, exist_ok=True)
 
     data = asdict(settings)
@@ -129,6 +140,9 @@ def save_local_settings(
         tmp_path = Path(tmp_name)
         if tmp_path.exists():
             tmp_path.unlink(missing_ok=True)
+
+    if path is not None and remember_path:
+        _write_settings_path_pointer(settings_path)
 
 
 def get_model_api_key(settings: LocalSettings | None = None) -> str:
@@ -176,3 +190,43 @@ def _merge_dataclass(cls, default_obj, raw: dict[str, Any]):
             if key in data:
                 data[key] = value
     return cls(**data)
+
+
+def _normalize_settings_path(path: Path) -> Path:
+    path = Path(path).expanduser()
+    if path.suffix.lower() != '.json':
+        path = path / 'local_settings.json'
+    return path.resolve()
+
+
+def _settings_path_pointer_path() -> Path:
+    return get_runtime_paths().data_dir / SETTINGS_PATH_POINTER_FILE
+
+
+def _read_settings_path_pointer() -> Path | None:
+    pointer_file = _settings_path_pointer_path()
+    if not pointer_file.exists():
+        return None
+
+    try:
+        raw_path = pointer_file.read_text(encoding='utf-8').strip()
+    except OSError:
+        return None
+
+    if not raw_path:
+        return None
+
+    return _normalize_settings_path(Path(raw_path))
+
+
+def _write_settings_path_pointer(path: Path) -> None:
+    default_path = get_runtime_paths().local_settings_path.resolve()
+    pointer_file = _settings_path_pointer_path()
+    pointer_file.parent.mkdir(parents=True, exist_ok=True)
+
+    resolved_path = _normalize_settings_path(path)
+    if resolved_path == default_path:
+        pointer_file.unlink(missing_ok=True)
+        return
+
+    pointer_file.write_text(str(resolved_path), encoding='utf-8')

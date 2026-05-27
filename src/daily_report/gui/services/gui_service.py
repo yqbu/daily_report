@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, fields, is_dataclass
 from datetime import date as date_cls
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 from daily_report.config.local_settings import (
@@ -12,6 +13,7 @@ from daily_report.config.local_settings import (
     ModelSettings,
     PrivacySettings,
     YasbSettings,
+    get_settings_path,
     get_model_api_key,
     load_local_settings,
     save_local_settings,
@@ -383,14 +385,14 @@ class GuiService:
 
     def get_settings(self) -> dict[str, Any]:
         settings = load_local_settings()
-        data = asdict(settings)
-        data["settings_path"] = str(self._settings_path())
-        return data
+        return self._settings_payload(settings, self._settings_path())
 
     def save_settings(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        settings = self._settings_from_payload(params or {}, load_local_settings())
-        save_local_settings(settings)
-        return self.get_settings()
+        params = params or {}
+        settings = self._settings_from_payload(params, load_local_settings())
+        settings_path = self._settings_path_from_payload(params) or self._settings_path()
+        save_local_settings(settings, settings_path)
+        return self._settings_payload(settings, self._settings_path())
 
     def test_model_connection(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         settings = self._settings_from_payload(params or {}, load_local_settings())
@@ -414,10 +416,22 @@ class GuiService:
         return {"prompt": prompt}
 
     @staticmethod
-    def _settings_path() -> Any:
-        from daily_report.config.paths import get_runtime_paths
+    def _settings_path() -> Path:
+        return get_settings_path()
 
-        return get_runtime_paths().local_settings_path
+    @staticmethod
+    def _settings_payload(settings: LocalSettings, settings_path: Path) -> dict[str, Any]:
+        data = asdict(settings)
+        data["settings_path"] = str(settings_path)
+        return data
+
+    @staticmethod
+    def _settings_path_from_payload(data: dict[str, Any]) -> Path | None:
+        raw_path = str(data.get("settings_path") or data.get("settingsPath") or "").strip()
+        if not raw_path:
+            return None
+        path = Path(raw_path).expanduser()
+        return path if path.suffix.lower() == ".json" else path / "local_settings.json"
 
     @classmethod
     def _settings_from_payload(cls, data: dict[str, Any], base: LocalSettings) -> LocalSettings:

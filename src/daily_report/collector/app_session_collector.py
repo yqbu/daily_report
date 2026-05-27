@@ -8,7 +8,7 @@ from ctypes import wintypes
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Protocol
+from typing import Callable, Optional, Protocol
 
 import psutil
 import win32gui
@@ -220,6 +220,8 @@ class ForegroundCollector:
         split_on_title_change: bool = True,
         min_title_change_interval_sec: float = 2.0,
         flush_interval_sec: float = 10.0,
+        enabled_getter: Callable[[], bool] | None = None,
+        poll_interval_getter: Callable[[], float] | None = None,
     ):
         self.store = store
         self.poll_interval_sec = poll_interval_sec
@@ -227,6 +229,8 @@ class ForegroundCollector:
         self.split_on_title_change = split_on_title_change
         self.min_title_change_interval_sec = min_title_change_interval_sec
         self.flush_interval_sec = flush_interval_sec
+        self.enabled_getter = enabled_getter
+        self.poll_interval_getter = poll_interval_getter
 
         self._stop_event = threading.Event()
         self._current: Optional[AppSessionState] = None
@@ -266,17 +270,53 @@ class ForegroundCollector:
 
         try:
             while not self._stop_event.is_set():
+                loop_started = time.monotonic()
                 try:
-                    self.poll_once()
+                    was_enabled = self._is_enabled()
+                    if was_enabled:
+                        self.poll_once()
+                    else:
+                        self._close_current_session()
+                        self._last_monotonic = time.monotonic()
                 except Exception:
+                    was_enabled = True
                     logger.exception('ForegroundCollector poll failed.')
 
-                self._stop_event.wait(self.poll_interval_sec)
+                self._wait_until_next_poll(loop_started, was_enabled)
 
         finally:
             self._close_current_session()
             self._close_store()
             logger.info('ForegroundCollector stopped.')
+
+    def _is_enabled(self) -> bool:
+        if self.enabled_getter is None:
+            return True
+        try:
+            return bool(self.enabled_getter())
+        except Exception:
+            logger.debug('Failed to read ForegroundCollector enabled setting.', exc_info=True)
+            return True
+
+    def _current_poll_interval(self) -> float:
+        if self.poll_interval_getter is None:
+            return max(float(self.poll_interval_sec), 0.2)
+        try:
+            value = float(self.poll_interval_getter())
+        except Exception:
+            logger.debug('Failed to read ForegroundCollector poll interval.', exc_info=True)
+            value = float(self.poll_interval_sec)
+        self.poll_interval_sec = max(value, 0.2)
+        return self.poll_interval_sec
+
+    def _wait_until_next_poll(self, loop_started: float, was_enabled: bool) -> None:
+        while not self._stop_event.is_set():
+            if self._is_enabled() != was_enabled:
+                return
+            remaining = self._current_poll_interval() - (time.monotonic() - loop_started)
+            if remaining <= 0:
+                return
+            self._stop_event.wait(min(remaining, 1.0))
 
     def poll_once(self) -> None:
         now_wall = datetime.now()

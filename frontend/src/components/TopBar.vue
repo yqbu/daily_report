@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Calendar, Check, Close, Connection, Search } from '@element-plus/icons-vue'
+import { Calendar, Check, Close, Connection, Refresh, Search } from '@element-plus/icons-vue'
 
 import { useAppStore } from '../stores/app'
 
@@ -27,6 +27,17 @@ const todayLabel = new Intl.DateTimeFormat('zh-CN', {
     </div>
 
     <div v-if="showConfigActions" class="top-actions top-actions--config">
+      <button
+        v-if="appStore.topBar.canRefresh"
+        class="top-button"
+        type="button"
+        :disabled="appStore.topBar.refreshing || appStore.topBar.saving"
+        title="刷新当前页面数据"
+        @click="appStore.requestTopBarRefresh()"
+      >
+        <Refresh class="action-icon" :class="{ 'action-icon--spin': appStore.topBar.refreshing }" />
+        <span>刷新</span>
+      </button>
       <span class="save-status" :class="topBarStatusClass">{{ topBarStatusText }}</span>
       <span class="top-action-divider" aria-hidden="true"></span>
       <button
@@ -209,6 +220,16 @@ const todayLabel = new Intl.DateTimeFormat('zh-CN', {
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
+}
+
+.action-icon--spin {
+  animation: topbar-spin 900ms linear infinite;
+}
+
+@keyframes topbar-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 760px) {

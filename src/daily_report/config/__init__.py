@@ -7,6 +7,7 @@ from daily_report.config.local_settings import (
     PrivacySettings,
     YasbSettings,
     get_model_api_key,
+    get_settings_path,
     load_local_settings,
     mask_api_key,
     save_local_settings,
@@ -23,6 +24,7 @@ __all__ = [
     'LoggingSettings',
     'load_local_settings',
     'save_local_settings',
+    'get_settings_path',
     'get_model_api_key',
     'mask_api_key',
 ]

@@ -9,8 +9,11 @@ interface TopBarState {
   statusText: string
   statusTone: TopBarStatusTone
   canCancel: boolean
+  canRefresh: boolean
   canSave: boolean
+  refreshing: boolean
   saving: boolean
+  refreshRequestId: number
   saveRequestId: number
   cancelRequestId: number
 }
@@ -20,7 +23,9 @@ interface TopBarPatch {
   statusText?: string
   statusTone?: TopBarStatusTone
   canCancel?: boolean
+  canRefresh?: boolean
   canSave?: boolean
+  refreshing?: boolean
   saving?: boolean
 }
 
@@ -30,8 +35,11 @@ function defaultTopBarState(): TopBarState {
     statusText: '',
     statusTone: 'idle',
     canCancel: false,
+    canRefresh: false,
     canSave: false,
+    refreshing: false,
     saving: false,
+    refreshRequestId: 0,
     saveRequestId: 0,
     cancelRequestId: 0
   }
@@ -69,6 +77,10 @@ export const useAppStore = defineStore('app', {
     requestTopBarCancel() {
       if (!this.topBar.canCancel || this.topBar.saving) return
       this.topBar.cancelRequestId += 1
+    },
+    requestTopBarRefresh() {
+      if (!this.topBar.canRefresh || this.topBar.refreshing || this.topBar.saving) return
+      this.topBar.refreshRequestId += 1
     }
   }
 })

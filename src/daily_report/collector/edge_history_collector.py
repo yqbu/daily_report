@@ -6,11 +6,12 @@ import shutil
 import sqlite3
 import tempfile
 import threading
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterator, Optional, Protocol
+from typing import Callable, Iterator, Optional, Protocol
 from urllib.parse import parse_qs, unquote, urlparse
 
 from daily_report.storage.database import (
@@ -372,6 +373,8 @@ class EdgeHistoryCollector:
         max_rows_per_profile: int = 500,
         edge_user_data_dir: Optional[str | Path] = None,
         profile_names: Optional[list[str]] = None,
+        enabled_getter: Callable[[], bool] | None = None,
+        poll_interval_getter: Callable[[], float] | None = None,
     ):
         self.store = store
         self.poll_interval_sec = poll_interval_sec
@@ -379,6 +382,8 @@ class EdgeHistoryCollector:
         self.max_rows_per_profile = max_rows_per_profile
         self.edge_user_data_dir = Path(edge_user_data_dir) if edge_user_data_dir else None
         self.profile_names = profile_names
+        self.enabled_getter = enabled_getter
+        self.poll_interval_getter = poll_interval_getter
 
         self._stop_event = threading.Event()
         self._last_visit_time_by_profile: dict[str, int] = {}
@@ -404,15 +409,48 @@ class EdgeHistoryCollector:
 
         try:
             while not self._stop_event.is_set():
+                loop_started = time.monotonic()
                 try:
-                    self.poll_once()
+                    was_enabled = self._is_enabled()
+                    if was_enabled:
+                        self.poll_once()
                 except Exception:
+                    was_enabled = True
                     logger.exception('EdgeHistoryCollector poll failed.')
 
-                self._stop_event.wait(self.poll_interval_sec)
+                self._wait_until_next_poll(loop_started, was_enabled)
         finally:
             self._close_store()
             logger.info('EdgeHistoryCollector stopped.')
+
+    def _is_enabled(self) -> bool:
+        if self.enabled_getter is None:
+            return True
+        try:
+            return bool(self.enabled_getter())
+        except Exception:
+            logger.debug('Failed to read EdgeHistoryCollector enabled setting.', exc_info=True)
+            return True
+
+    def _current_poll_interval(self) -> float:
+        if self.poll_interval_getter is None:
+            return max(float(self.poll_interval_sec), 1.0)
+        try:
+            value = float(self.poll_interval_getter())
+        except Exception:
+            logger.debug('Failed to read EdgeHistoryCollector poll interval.', exc_info=True)
+            value = float(self.poll_interval_sec)
+        self.poll_interval_sec = max(value, 1.0)
+        return self.poll_interval_sec
+
+    def _wait_until_next_poll(self, loop_started: float, was_enabled: bool) -> None:
+        while not self._stop_event.is_set():
+            if self._is_enabled() != was_enabled:
+                return
+            remaining = self._current_poll_interval() - (time.monotonic() - loop_started)
+            if remaining <= 0:
+                return
+            self._stop_event.wait(min(remaining, 5.0))
 
     def poll_once(self) -> None:
         profiles = find_edge_history_files(

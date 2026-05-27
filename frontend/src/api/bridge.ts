@@ -197,6 +197,9 @@ function getBrowserFallback<T>(method: string, payload: unknown): T {
       return defaultSettings() as T
     case 'saveSettings':
       return payload as T
+    case 'select_directory':
+    case 'select_json_file':
+      return { path: '' } as T
     case 'getHealth':
       return emptyHealth() as T
     case 'get_dashboard_summary':

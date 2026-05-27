@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 from urllib.parse import urlparse
 
 from daily_report.service.sensitivity import detect_sensitive_text, hash_text, make_preview
@@ -138,6 +138,9 @@ class AiPromptReceiver:
         min_prompt_chars: int = 2,
         sensitive_unselected_by_default: bool = True,
         sensitive_keywords: list[str] | None = None,
+        enabled_getter: Callable[[], bool] | None = None,
+        sensitive_unselected_getter: Callable[[], bool] | None = None,
+        sensitive_keywords_getter: Callable[[], list[str]] | None = None,
     ):
         self.store = store
         self.host = host
@@ -150,6 +153,9 @@ class AiPromptReceiver:
         self.min_prompt_chars = int(min_prompt_chars)
         self.sensitive_unselected_by_default = sensitive_unselected_by_default
         self.sensitive_keywords = [kw.strip() for kw in (sensitive_keywords or []) if kw.strip()]
+        self.enabled_getter = enabled_getter
+        self.sensitive_unselected_getter = sensitive_unselected_getter
+        self.sensitive_keywords_getter = sensitive_keywords_getter
 
         self._stop_event = threading.Event()
         self._server: HTTPServer | None = None
@@ -217,6 +223,10 @@ class AiPromptReceiver:
                 if self.path not in receiver.accepted_endpoints:
                     self._send_json(404, {'ok': False, 'error': 'not_found'})
                     return
+                receiver.refresh_runtime_settings()
+                if not receiver.is_enabled():
+                    self._send_json(503, {'ok': False, 'error': 'collector_disabled'})
+                    return
                 if receiver.auth_token:
                     request_token = self.headers.get('X-Daily-Report-Token', '')
                     if request_token != receiver.auth_token:
@@ -283,7 +293,35 @@ class AiPromptReceiver:
 
         return RequestHandler
 
+    def is_enabled(self) -> bool:
+        if self.enabled_getter is None:
+            return True
+        try:
+            return bool(self.enabled_getter())
+        except Exception:
+            logger.debug('Failed to read AiPromptReceiver enabled setting.', exc_info=True)
+            return True
+
+    def refresh_runtime_settings(self) -> None:
+        if self.sensitive_unselected_getter is not None:
+            try:
+                self.sensitive_unselected_by_default = bool(self.sensitive_unselected_getter())
+            except Exception:
+                logger.debug('Failed to refresh AI prompt sensitivity selection setting.', exc_info=True)
+
+        if self.sensitive_keywords_getter is not None:
+            try:
+                keywords = self.sensitive_keywords_getter()
+                self.sensitive_keywords = [
+                    str(keyword).strip()
+                    for keyword in keywords
+                    if str(keyword).strip()
+                ]
+            except Exception:
+                logger.debug('Failed to refresh AI prompt sensitive keywords.', exc_info=True)
+
     def _entry_from_payload(self, payload: dict[str, Any]) -> AiPromptEntryState:
+        self.refresh_runtime_settings()
         prompt_text = normalize_prompt(payload.get('prompt_text'))
         if len(prompt_text) < self.min_prompt_chars:
             raise ValueError('prompt_too_short')

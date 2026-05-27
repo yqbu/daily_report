@@ -1,0 +1,16 @@
+include README.md
+include pyproject.toml
+
+recursive-include configs *.yaml *.md
+recursive-include edge_extension *.js *.json *.md
+include frontend/index.html
+include frontend/package-lock.json
+include frontend/package.json
+include frontend/postcss.config.js
+include frontend/tailwind.config.ts
+include frontend/tsconfig.json
+include frontend/vite.config.ts
+recursive-include frontend/src *.css *.ts *.vue
+recursive-include frontend/dist *.css *.html *.js
+recursive-include scripts *.cmd *.ps1
+recursive-include tests *.py

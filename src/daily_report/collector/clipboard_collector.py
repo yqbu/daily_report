@@ -5,7 +5,7 @@ import re
 import threading
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Protocol
+from typing import Callable, Optional, Protocol
 
 import win32clipboard
 import win32con
@@ -172,6 +172,10 @@ class ClipboardCollector:
         sensitive_unselected_by_default: bool = True,
         sensitive_keywords: list[str] | None = None,
         clipboard_preview_only: bool = False,
+        enabled_getter: Callable[[], bool] | None = None,
+        sensitive_unselected_getter: Callable[[], bool] | None = None,
+        sensitive_keywords_getter: Callable[[], list[str]] | None = None,
+        clipboard_preview_only_getter: Callable[[], bool] | None = None,
     ):
         self.store = store
         self.poll_interval_sec = poll_interval_sec
@@ -181,6 +185,10 @@ class ClipboardCollector:
         self.sensitive_unselected_by_default = sensitive_unselected_by_default
         self.sensitive_keywords = [kw.strip() for kw in (sensitive_keywords or []) if kw.strip()]
         self.clipboard_preview_only = clipboard_preview_only
+        self.enabled_getter = enabled_getter
+        self.sensitive_unselected_getter = sensitive_unselected_getter
+        self.sensitive_keywords_getter = sensitive_keywords_getter
+        self.clipboard_preview_only_getter = clipboard_preview_only_getter
 
         self._stop_event = threading.Event()
         self._last_hash: Optional[str] = None
@@ -207,7 +215,9 @@ class ClipboardCollector:
         try:
             while not self._stop_event.is_set():
                 try:
-                    self.poll_once()
+                    self._refresh_runtime_settings()
+                    if self._is_enabled():
+                        self.poll_once()
                 except Exception:
                     logger.exception('ClipboardCollector poll failed.')
 
@@ -217,7 +227,41 @@ class ClipboardCollector:
             self._close_store()
             logger.info('ClipboardCollector stopped.')
 
+    def _is_enabled(self) -> bool:
+        if self.enabled_getter is None:
+            return True
+        try:
+            return bool(self.enabled_getter())
+        except Exception:
+            logger.debug('Failed to read ClipboardCollector enabled setting.', exc_info=True)
+            return True
+
+    def _refresh_runtime_settings(self) -> None:
+        if self.sensitive_unselected_getter is not None:
+            try:
+                self.sensitive_unselected_by_default = bool(self.sensitive_unselected_getter())
+            except Exception:
+                logger.debug('Failed to refresh clipboard sensitivity selection setting.', exc_info=True)
+
+        if self.sensitive_keywords_getter is not None:
+            try:
+                keywords = self.sensitive_keywords_getter()
+                self.sensitive_keywords = [
+                    str(keyword).strip()
+                    for keyword in keywords
+                    if str(keyword).strip()
+                ]
+            except Exception:
+                logger.debug('Failed to refresh clipboard sensitive keywords.', exc_info=True)
+
+        if self.clipboard_preview_only_getter is not None:
+            try:
+                self.clipboard_preview_only = bool(self.clipboard_preview_only_getter())
+            except Exception:
+                logger.debug('Failed to refresh clipboard preview setting.', exc_info=True)
+
     def poll_once(self) -> None:
+        self._refresh_runtime_settings()
         text = read_clipboard_text()
 
         if text is None:
