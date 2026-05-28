@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import {
   Connection,
   Cpu,
@@ -11,7 +12,7 @@ import {
   Refresh
 } from '@element-plus/icons-vue'
 
-import { callBridge, callTypedBridge } from '../api/bridge'
+import { callBridge, callBridgeJob, callTypedBridge } from '../api/bridge'
 import type { LocalSettingsPayload } from '../api/types'
 import SettingsField from '../components/settings/SettingsField.vue'
 import SettingsSection from '../components/settings/SettingsSection.vue'
@@ -37,7 +38,6 @@ const saving = shallowRef(false)
 const testingConnection = shallowRef(false)
 const settingsError = shallowRef('')
 const operationMessage = shallowRef('')
-const connectionMessage = shallowRef('')
 const keywordInput = shallowRef('')
 const settingsLoadRequestId = shallowRef(0)
 const activeSettingsTab = shallowRef<SettingsTab>('collector')
@@ -112,7 +112,6 @@ async function loadSettings(): Promise<void> {
   settingsLoadRequestId.value = requestId
   loading.value = true
   settingsError.value = ''
-  connectionMessage.value = ''
 
   try {
     const payload = await callTypedBridge('getSettings', {})
@@ -123,7 +122,7 @@ async function loadSettings(): Promise<void> {
     flashOperationMessage('配置已加载')
   } catch (error) {
     if (requestId !== settingsLoadRequestId.value) return
-    settingsError.value = error instanceof Error ? error.message : String(error)
+    showSettingsError(error)
   } finally {
     if (requestId === settingsLoadRequestId.value) {
       loading.value = false
@@ -136,7 +135,6 @@ async function saveSettings(): Promise<void> {
 
   saving.value = true
   settingsError.value = ''
-  connectionMessage.value = ''
 
   try {
     const payload = await callTypedBridge('saveSettings', toBridgeSettings(draftSettings.value))
@@ -145,7 +143,7 @@ async function saveSettings(): Promise<void> {
     draftSettings.value = cloneSettings(normalized)
     flashOperationMessage('设置已保存')
   } catch (error) {
-    settingsError.value = error instanceof Error ? error.message : String(error)
+    showSettingsError(error)
   } finally {
     saving.value = false
   }
@@ -154,7 +152,6 @@ async function saveSettings(): Promise<void> {
 function cancelSettingsChanges(): void {
   if (!savedSettings.value || saving.value) return
   draftSettings.value = cloneSettings(savedSettings.value)
-  connectionMessage.value = ''
   settingsError.value = ''
   flashOperationMessage('已取消未保存修改')
 }
@@ -164,13 +161,13 @@ async function testModelConnection(): Promise<void> {
 
   testingConnection.value = true
   settingsError.value = ''
-  connectionMessage.value = ''
+  await nextTick()
 
   try {
-    const result = await callBridge<{ message?: string }>('test_model_connection', toBridgeSettings(draftSettings.value))
-    connectionMessage.value = result.message || '模型连接测试通过'
+    const result = await callBridgeJob<{ message?: string }>('test_model_connection', toBridgeSettings(draftSettings.value))
+    ElMessage.success(result.message || '模型连接测试通过')
   } catch (error) {
-    settingsError.value = error instanceof Error ? error.message : String(error)
+    showSettingsError(error)
   } finally {
     testingConnection.value = false
   }
@@ -227,6 +224,12 @@ function flashOperationMessage(message: string): void {
       operationMessage.value = ''
     }
   }, 2600)
+}
+
+function showSettingsError(error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error)
+  settingsError.value = message
+  ElMessage.error(message)
 }
 
 function normalizeSettings(payload: LocalSettingsPayload): SettingsDraft {
@@ -374,23 +377,6 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-else-if="draftSettings" class="settings-scroll">
-      <el-alert
-        v-if="settingsError"
-        class="settings-alert"
-        type="error"
-        :closable="false"
-        :title="settingsError"
-        show-icon
-      />
-      <el-alert
-        v-else-if="connectionMessage"
-        class="settings-alert"
-        type="success"
-        :closable="false"
-        :title="connectionMessage"
-        show-icon
-      />
-
       <div class="settings-tab-panel">
         <el-tabs type="card" v-model="activeSettingsTab" class="settings-tabs">
           <el-tab-pane label="采集设置" name="collector">
@@ -664,10 +650,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.settings-alert {
-  margin-bottom: 14px;
 }
 
 .settings-tab-panel {

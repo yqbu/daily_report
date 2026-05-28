@@ -11,10 +11,15 @@ import type {
 } from './types'
 
 type BridgeSlot = (payload: string, callback: (response: string) => void) => void
+type BridgeSignalSlot = (payload: string) => void
+type BridgeSignal = {
+  connect: (callback: BridgeSignalSlot) => void
+  disconnect?: (callback: BridgeSignalSlot) => void
+}
 
 interface WebChannel {
   objects: {
-    pyBridge?: Record<string, BridgeSlot | unknown>
+    pyBridge?: Record<string, BridgeSlot | BridgeSignal | unknown>
   }
 }
 
@@ -33,6 +38,20 @@ declare global {
 }
 
 let bridgePromise: Promise<Record<string, BridgeSlot | unknown> | null> | null = null
+const DEFAULT_BRIDGE_TIMEOUT_MS = 30000
+
+interface BridgeJobStart<T> {
+  job_id: string
+  status?: string
+  result?: T
+}
+
+interface BridgeJobResult<T> {
+  ok: boolean
+  jobId?: string
+  result?: T
+  error?: string
+}
 
 export async function callBridge<T = unknown>(method: string, payload: unknown = {}): Promise<T> {
   const bridge = await getBridge()
@@ -74,6 +93,89 @@ export function callTypedBridge<Method extends keyof BridgeMethodPayloadMap>(
   payload: BridgeMethodPayloadMap[Method]
 ): Promise<BridgeMethodResultMap[Method]> {
   return callBridge<BridgeMethodResultMap[Method]>(method, payload)
+}
+
+export async function callBridgeJob<T = unknown>(
+  method: string,
+  payload: unknown = {},
+  timeoutMs = DEFAULT_BRIDGE_TIMEOUT_MS
+): Promise<T> {
+  const bridge = await getBridge()
+  const signal = bridge?.jobFinished
+  if (!isBridgeSignal(signal)) {
+    const result = await callBridge<BridgeJobStart<T> | T>(method, payload)
+    if (isBridgeJobStart<T>(result)) {
+      throw new Error('Python bridge job signal is not available.')
+    }
+    return result as T
+  }
+
+  const jobSignal = signal
+  return new Promise<T>((resolve, reject) => {
+    let jobId = ''
+    const pendingJobPayloads: BridgeJobResult<T>[] = []
+
+    const timer = window.setTimeout(() => {
+      cleanup()
+      reject(new Error(`Python bridge job timed out: ${method}`))
+    }, timeoutMs)
+
+    const handler: BridgeSignalSlot = (rawPayload) => {
+      let jobPayload: BridgeJobResult<T>
+      try {
+        jobPayload = unwrapBridgeJobResult<T>(rawPayload)
+      } catch (error) {
+        cleanup()
+        reject(error)
+        return
+      }
+
+      if (!jobId) {
+        pendingJobPayloads.push(jobPayload)
+        return
+      }
+
+      if (jobPayload.jobId !== jobId) {
+        return
+      }
+
+      settleJob(jobPayload)
+    }
+
+    function cleanup(): void {
+      window.clearTimeout(timer)
+      jobSignal.disconnect?.(handler)
+    }
+
+    function settleJob(jobPayload: BridgeJobResult<T>): void {
+      cleanup()
+      if (jobPayload.ok) {
+        resolve(jobPayload.result as T)
+      } else {
+        reject(new Error(jobPayload.error || `Python bridge job failed: ${jobId}`))
+      }
+    }
+
+    jobSignal.connect(handler)
+
+    callBridge<BridgeJobStart<T> | T>(method, payload)
+      .then((start) => {
+        if (!isBridgeJobStart<T>(start)) {
+          cleanup()
+          resolve(start as T)
+          return
+        }
+        jobId = start.job_id
+        const pendingPayload = pendingJobPayloads.find((jobPayload) => jobPayload.jobId === jobId)
+        if (pendingPayload) {
+          settleJob(pendingPayload)
+        }
+      })
+      .catch((error) => {
+        cleanup()
+        reject(error)
+      })
+  })
 }
 
 async function getBridge(): Promise<Record<string, BridgeSlot | unknown> | null> {
@@ -132,6 +234,56 @@ function isBridgeResponse<T>(value: unknown): value is BridgeResponse<T> {
     'ok' in value &&
     typeof (value as BridgeResponse<T>).ok === 'boolean'
   )
+}
+
+function unwrapBridgeJobResult<T>(rawPayload: string): BridgeJobResult<T> {
+  let response: unknown
+
+  try {
+    response = JSON.parse(rawPayload)
+  } catch {
+    throw new Error(`Invalid Python bridge job response: ${rawPayload}`)
+  }
+
+  if (!isObjectRecord(response)) {
+    throw new Error('Invalid Python bridge job response shape.')
+  }
+
+  if (isBridgeResponse<T>(response)) {
+    const data = isObjectRecord(response.data) ? response.data : undefined
+    return {
+      ok: response.ok,
+      jobId: getJobId(data) || getJobId(response),
+      result: (data?.result ?? response.data) as T,
+      error: response.error
+    }
+  }
+
+  return {
+    ok: Boolean(response.ok),
+    jobId: getJobId(response),
+    result: response.result as T,
+    error: typeof response.error === 'string' ? response.error : undefined
+  }
+}
+
+function isBridgeJobStart<T>(value: BridgeJobStart<T> | T): value is BridgeJobStart<T> {
+  return isObjectRecord(value) && typeof value.job_id === 'string' && value.job_id.length > 0
+}
+
+function isBridgeSignal(value: unknown): value is BridgeSignal {
+  return isObjectRecord(value) && typeof value.connect === 'function'
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function getJobId(value: unknown): string | undefined {
+  if (!isObjectRecord(value)) {
+    return undefined
+  }
+  return typeof value.job_id === 'string' ? value.job_id : undefined
 }
 
 function getBrowserFallback<T>(method: string, payload: unknown): T {
@@ -197,6 +349,8 @@ function getBrowserFallback<T>(method: string, payload: unknown): T {
       return defaultSettings() as T
     case 'saveSettings':
       return payload as T
+    case 'test_model_connection':
+      return { message: '浏览器预览模式未连接 Python bridge，已跳过真实模型测试。' } as T
     case 'select_directory':
     case 'select_json_file':
       return { path: '' } as T

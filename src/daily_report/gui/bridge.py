@@ -37,13 +37,31 @@ class ReportWorker(QObject):
             self.finished.emit(_json_error(str(exc), job_id=self.job_id))
 
 
+class ModelTestWorker(QObject):
+    finished = Signal(str)
+
+    def __init__(self, params: dict[str, Any], job_id: str):
+        super().__init__()
+        self.params = params
+        self.job_id = job_id
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            data = GuiService().test_model_connection(self.params)
+            self.finished.emit(_json_ok({"job_id": self.job_id, "result": data}))
+        except Exception as exc:
+            logger.exception('Model test worker failed.')
+            self.finished.emit(_json_error(str(exc), job_id=self.job_id))
+
+
 class PythonBridge(QObject):
     jobFinished = Signal(str)
 
     def __init__(self, service: GuiService | None = None):
         super().__init__()
         self.service = service or GuiService()
-        self._jobs: dict[str, tuple[QThread, ReportWorker]] = {}
+        self._jobs: dict[str, tuple[QThread, ReportWorker | ModelTestWorker]] = {}
 
     @Slot(str, result=str)
     def ping(self, payload: str = "") -> str:
@@ -236,18 +254,8 @@ class PythonBridge(QObject):
         try:
             options = _payload(payload)
             job_id = uuid.uuid4().hex
-            thread = QThread(self)
             worker = ReportWorker(self.service.provider.db_path, options, job_id)
-            worker.moveToThread(thread)
-            thread.started.connect(worker.run)
-            worker.finished.connect(self._emit_job_finished)
-            worker.finished.connect(thread.quit)
-            worker.finished.connect(worker.deleteLater)
-            thread.finished.connect(thread.deleteLater)
-            thread.finished.connect(lambda job_id=job_id: self._jobs.pop(job_id, None))
-            self._jobs[job_id] = (thread, worker)
-            thread.start()
-            return _json_ok({"job_id": job_id, "status": "started"})
+            return self._start_worker(worker, job_id)
         except Exception as exc:
             logger.exception('Failed to start report worker.')
             return _json_error(str(exc))
@@ -274,7 +282,14 @@ class PythonBridge(QObject):
 
     @Slot(str, result=str)
     def test_model_connection(self, payload: str = "") -> str:
-        return self._call(payload, self.service.test_model_connection)
+        try:
+            params = _payload(payload)
+            job_id = uuid.uuid4().hex
+            worker = ModelTestWorker(params, job_id)
+            return self._start_worker(worker, job_id)
+        except Exception as exc:
+            logger.exception('Failed to start model test worker.')
+            return _json_error(str(exc))
 
     @Slot(str, result=str)
     def build_report_prompt(self, payload: str = "") -> str:
@@ -313,6 +328,19 @@ class PythonBridge(QObject):
         except Exception as exc:
             logger.exception('Python bridge call failed.')
             return _json_error(str(exc))
+
+    def _start_worker(self, worker: ReportWorker | ModelTestWorker, job_id: str) -> str:
+        thread = QThread(self)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._emit_job_finished)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda job_id=job_id: self._jobs.pop(job_id, None))
+        self._jobs[job_id] = (thread, worker)
+        thread.start()
+        return _json_ok({"job_id": job_id, "status": "started"})
 
     @Slot(str)
     def _emit_job_finished(self, payload: str) -> None:

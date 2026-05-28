@@ -228,13 +228,10 @@ function resolveCategoryColor(categoryName?: string | null): string {
   return categoryColorMap.value.get(categoryName) ?? '#8F98A8'
 }
 
-function handleCategoryChange(profile: AppProfileConfig, event: Event): void {
-  const target = event.target as HTMLSelectElement | null
-  if (!target) return
-
+function handleCategoryChange(profile: AppProfileConfig, categoryName: string): void {
   const draft = draftFor(profile)
-  draft.category = target.value
-  draft.color = resolveCategoryColor(target.value)
+  draft.category = categoryName
+  draft.color = resolveCategoryColor(categoryName)
 }
 
 function displayNameFor(profile: AppProfileConfig, draft: AppProfileDraft): string {
@@ -345,11 +342,20 @@ defineExpose({
             <div class="config-grid">
               <label class="field">
                 <span class="field-label">分类</span>
-                <select :value="card.draft.category" class="select-input" @change="handleCategoryChange(card.profile, $event)">
-                  <option v-for="category in categoryOptions" :key="category.name" :value="category.name">
-                    {{ category.name }}
-                  </option>
-                </select>
+                <el-select
+                  v-model="card.draft.category"
+                  class="profile-category-select"
+                  popper-class="profile-category-popper"
+                  fit-input-width
+                  @change="handleCategoryChange(card.profile, $event)"
+                >
+                  <el-option
+                    v-for="category in categoryOptions"
+                    :key="category.name"
+                    :label="category.name"
+                    :value="category.name"
+                  />
+                </el-select>
               </label>
 
               <label class="field">
@@ -611,22 +617,27 @@ defineExpose({
   line-height: 1;
 }
 
-.select-input {
+.profile-category-select {
   width: 100%;
   min-width: 0;
-  height: 34px;
+}
+
+:deep(.profile-category-select .el-select__wrapper) {
+  min-height: 34px;
   padding: 0 10px;
-  border: 1px solid #dce3ee;
   border-radius: 8px;
-  outline: 0;
-  color: #172033;
-  background: #ffffff;
+  box-shadow: 0 0 0 1px #dce3ee inset;
   font-size: 13px;
 }
 
-.select-input:focus {
-  border-color: #93c5fd;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+:deep(.profile-category-select .el-select__wrapper.is-focused) {
+  box-shadow:
+    0 0 0 1px #93c5fd inset,
+    0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+:deep(.profile-category-select .el-select__selected-item) {
+  color: #172033;
 }
 
 .color-editor {

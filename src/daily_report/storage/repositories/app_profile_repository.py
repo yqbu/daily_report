@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from daily_report.service.category import infer_category_for_app
@@ -177,6 +177,8 @@ class AppProfileRepository:
     ) -> dict[str, Any]:
         self.ensure_default_categories()
         filters = filters or {}
+        categories = self.list_categories()
+        category_colors = {str(category['name']): str(category['color']) for category in categories}
         observed = self._observed_app_rows()
         profiles = {str(row['app_key']): dict(row) for row in self._profile_rows()}
 
@@ -184,12 +186,13 @@ class AppProfileRepository:
             self._merge_profile(
                 observed_row=dict(row),
                 profile=profiles.pop(str(row['app_key']), None),
+                category_colors=category_colors,
             )
             for row in observed
         ]
         if include_unobserved:
             for profile in profiles.values():
-                items.append(self._merge_profile(observed_row=None, profile=profile))
+                items.append(self._merge_profile(observed_row=None, profile=profile, category_colors=category_colors))
 
         count_filters = {**filters, 'classification': 'all'}
         counts = _profile_counts(self._filter_profiles(items, count_filters))
@@ -206,7 +209,7 @@ class AppProfileRepository:
             'page': page,
             'page_size': page_size,
             'counts': counts,
-            'categories': self.list_categories(),
+            'categories': categories,
         }
 
     def get_profile(self, app_key: str) -> dict[str, Any] | None:
@@ -364,6 +367,7 @@ class AppProfileRepository:
         )
 
     def _observed_app_rows(self) -> list[sqlite3.Row]:
+        week_start, week_end = _current_week_bounds()
         return list(
             self.conn.execute(
                 """
@@ -381,8 +385,10 @@ class AppProfileRepository:
                 WHERE process_name IS NOT NULL
                   AND TRIM(process_name) <> ''
                   AND is_deleted = 0
+                  AND date BETWEEN ? AND ?
                 GROUP BY LOWER(TRIM(process_name))
-                """
+                """,
+                (week_start, week_end),
             ).fetchall()
         )
 
@@ -390,6 +396,7 @@ class AppProfileRepository:
         normalized_key = normalize_app_key(app_key)
         if not normalized_key:
             return None
+        week_start, week_end = _current_week_bounds()
         row = self.conn.execute(
             """
             SELECT
@@ -405,9 +412,10 @@ class AppProfileRepository:
             FROM app_sessions
             WHERE LOWER(TRIM(process_name)) = ?
               AND is_deleted = 0
+              AND date BETWEEN ? AND ?
             GROUP BY LOWER(TRIM(process_name))
             """,
-            (normalized_key,),
+            (normalized_key, week_start, week_end),
         ).fetchone()
         return dict(row) if row else None
 
@@ -416,6 +424,7 @@ class AppProfileRepository:
         *,
         observed_row: dict[str, Any] | None,
         profile: dict[str, Any] | None,
+        category_colors: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         observed_row = observed_row or {}
         profile = profile or {}
@@ -425,8 +434,7 @@ class AppProfileRepository:
         sample_window_title = str(observed_row.get('sample_window_title') or '')
         inferred_category = infer_category_for_app(process_name, sample_window_title)
         category = _normalize_optional_text(profile.get('category')) or inferred_category
-        category_row = self.get_category(category) or self.get_category(DEFAULT_CATEGORY_NAME)
-        category_color = str((category_row or {}).get('color') or '#8F98A8')
+        category_color = self._category_color(category, category_colors)
         manual_color = normalize_color(profile.get('color'), fallback=None)
         effective_color = manual_color or category_color
         display_name = _normalize_optional_text(profile.get('display_name')) or default_display_name
@@ -457,6 +465,13 @@ class AppProfileRepository:
             'created_at': profile.get('created_at'),
             'updated_at': profile.get('updated_at'),
         }
+
+    def _category_color(self, category: str, category_colors: dict[str, str] | None = None) -> str:
+        if category_colors is not None:
+            return category_colors.get(category) or category_colors.get(DEFAULT_CATEGORY_NAME) or '#8F98A8'
+
+        category_row = self.get_category(category) or self.get_category(DEFAULT_CATEGORY_NAME)
+        return str((category_row or {}).get('color') or '#8F98A8')
 
     @staticmethod
     def _filter_profiles(items: list[dict[str, Any]], filters: dict[str, Any]) -> list[dict[str, Any]]:
@@ -574,7 +589,7 @@ def _profile_counts(items: list[dict[str, Any]]) -> dict[str, int]:
 def _sort_profiles(items: list[dict[str, Any]], filters: dict[str, Any]) -> None:
     sort_by = str(filters.get('sort_by') or filters.get('sortBy') or 'last_seen').strip().lower()
     sort_direction = str(filters.get('sort_direction') or filters.get('sortDirection') or '').strip().lower()
-    if sort_by not in {'last_seen', 'name', 'duration'}:
+    if sort_by not in {'last_seen', 'name', 'duration', 'session_count'}:
         sort_by = 'last_seen'
     if sort_direction not in {'asc', 'desc'}:
         sort_direction = 'asc' if sort_by == 'name' else 'desc'
@@ -586,6 +601,8 @@ def _sort_profiles(items: list[dict[str, Any]], filters: dict[str, Any]) -> None
             return (name.casefold(), app_key)
         if sort_by == 'duration':
             return (float(item.get('total_active_duration_sec') or 0), name.casefold(), app_key)
+        if sort_by == 'session_count':
+            return (int(item.get('session_count') or 0), name.casefold(), app_key)
         return (
             str(item.get('last_seen_at') or ''),
             float(item.get('total_active_duration_sec') or 0),
@@ -594,6 +611,13 @@ def _sort_profiles(items: list[dict[str, Any]], filters: dict[str, Any]) -> None
         )
 
     items.sort(key=sort_key, reverse=sort_direction == 'desc')
+
+
+def _current_week_bounds() -> tuple[str, str]:
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+    return week_start.isoformat(), week_end.isoformat()
 
 
 def _optional_bool(value: Any) -> bool | None:

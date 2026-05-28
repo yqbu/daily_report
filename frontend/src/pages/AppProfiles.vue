@@ -1,3 +1,11 @@
+<script lang="ts">
+import type { AppProfileListPayload as CachedAppProfileListPayload } from '../api/types'
+
+let appProfileCache: CachedAppProfileListPayload | null = null
+let appProfileCacheUpdatedAt = 0
+const APP_PROFILE_CACHE_TTL_MS = 60_000
+</script>
+
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue'
 
@@ -102,6 +110,8 @@ async function loadAppProfileBootstrap(): Promise<void> {
     if (requestId !== appProfileLoadRequestId) return
     appProfiles.value = profilesPayload
     appCategories.value = profilesPayload.categories
+    appProfileCache = profilesPayload
+    appProfileCacheUpdatedAt = Date.now()
   } catch (error) {
     if (requestId !== appProfileLoadRequestId) return
     appProfileError.value = error instanceof Error ? error.message : String(error)
@@ -127,7 +137,8 @@ const normalizedFilters = computed<AppProfileListFilters>(() => {
 const normalizedCountFilters = computed<AppProfileListFilters>(() => {
   return {
     ...normalizedFilters.value,
-    classification: 'all'
+    classification: 'all',
+    track_enabled: null
   }
 })
 
@@ -153,6 +164,14 @@ function updateFilters(patch: FilterPatch): void {
 
 function clearCategoryFilter(): void {
   updateFilters({ category: '' })
+}
+
+function hydrateAppProfileCache(): boolean {
+  if (!appProfileCache) return false
+
+  appProfiles.value = appProfileCache
+  appCategories.value = appProfileCache.categories
+  return Date.now() - appProfileCacheUpdatedAt < APP_PROFILE_CACHE_TTL_MS
 }
 
 async function saveAppProfileDraft(payload: SaveAppProfilePayload): Promise<void> {
@@ -327,7 +346,10 @@ defineExpose({
 })
 
 onMounted(() => {
-  void loadAppProfileBootstrap()
+  const cacheFresh = hydrateAppProfileCache()
+  if (!cacheFresh) {
+    void loadAppProfileBootstrap()
+  }
 })
 
 onBeforeUnmount(() => {
@@ -438,6 +460,10 @@ function compareProfiles(
 
   if (sortBy === 'duration') {
     return left.total_active_duration_sec - right.total_active_duration_sec
+  }
+
+  if (sortBy === 'session_count') {
+    return left.session_count - right.session_count
   }
 
   return String(left.last_seen_at ?? '').localeCompare(String(right.last_seen_at ?? ''))
