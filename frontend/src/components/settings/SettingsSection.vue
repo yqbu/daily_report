@@ -42,7 +42,7 @@ defineProps<{
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
-  overflow: hidden;
+  overflow: auto;
 }
 
 .settings-section-header {
