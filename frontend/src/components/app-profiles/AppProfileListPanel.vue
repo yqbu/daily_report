@@ -703,6 +703,7 @@ defineExpose({
   background: var(--profile-color);
   box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.12);
   overflow: hidden;
+  margin-right: 10px;
 }
 
 .app-avatar--clickable {
@@ -783,6 +784,7 @@ defineExpose({
   grid-template-columns: minmax(0, 1fr) 30px 30px;
   align-items: center;
   gap: 6px;
+  margin-left: 8px;
 }
 
 .display-name-input {
