@@ -5,10 +5,6 @@ import logging
 import sys
 from pathlib import Path
 
-from daily_report.service.report_service import ReportService
-from daily_report.yasb_bridge.usage_status import print_status
-
-
 def setup_logging(level: str = 'INFO') -> None:
     logging.basicConfig(
         level=getattr(logging, level.upper(), logging.INFO),
@@ -35,6 +31,8 @@ def run_service(args: argparse.Namespace) -> None:
 def run_status(args: argparse.Namespace) -> None:
     # status 是给 YASB 高频调用的, 尽量不要输出额外日志到 stdout
     # 否则 YASB 解析 JSON 时可能失败
+    from daily_report.yasb_bridge.usage_status import print_status
+
     print_status(
         target_date=args.date,
         limit=args.limit,
@@ -43,6 +41,8 @@ def run_status(args: argparse.Namespace) -> None:
 
 
 def run_build_prompt(args: argparse.Namespace) -> None:
+    from daily_report.service.report_service import ReportService
+
     service = ReportService(db_path=args.db_path)
     prompt = service.build_prompt(
         args.date,
@@ -59,6 +59,8 @@ def run_build_prompt(args: argparse.Namespace) -> None:
 
 
 def run_generate_today(args: argparse.Namespace) -> None:
+    from daily_report.service.report_service import ReportService
+
     setup_logging(configured_log_level(args.log_level))
     service = ReportService(db_path=args.db_path)
     result = service.generate_report(
@@ -85,6 +87,8 @@ def run_generate_today(args: argparse.Namespace) -> None:
 
 
 def run_latest_report(args: argparse.Namespace) -> None:
+    from daily_report.service.report_service import ReportService
+
     service = ReportService(db_path=args.db_path)
     record = service.get_latest_report(args.date)
     if record is None:

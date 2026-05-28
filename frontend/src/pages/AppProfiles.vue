@@ -8,6 +8,7 @@ const APP_PROFILE_CACHE_TTL_MS = 60_000
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue'
+import { ElDrawer } from 'element-plus'
 
 import { callTypedBridge } from '../api/bridge'
 import type {

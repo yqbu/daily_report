@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 from contextlib import contextmanager
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterator
 from typing import Optional
@@ -10,6 +11,8 @@ from typing import Optional
 from daily_report.config.paths import get_runtime_paths
 
 logger = logging.getLogger(__name__)
+_WAL_CONFIGURED_PATHS: set[Path] = set()
+_INITIALIZED_DATABASE_PATHS: set[Path] = set()
 
 # def default_db_path() -> Path:
 #     """
@@ -45,7 +48,11 @@ def create_connection(db_path: Optional[str | Path] = None) -> sqlite3.Connectio
     conn.row_factory = sqlite3.Row
 
     # 推荐开启 WAL, 读写并发会更友好
-    conn.execute('PRAGMA journal_mode=WAL;')
+    # WAL is persistent per database file, so avoid re-negotiating it on every short-lived GUI query.
+    resolved_path = path.resolve()
+    if resolved_path not in _WAL_CONFIGURED_PATHS:
+        conn.execute('PRAGMA journal_mode=WAL;')
+        _WAL_CONFIGURED_PATHS.add(resolved_path)
 
     # 外键支持, 后面如果加关联表会有用
     conn.execute('PRAGMA foreign_keys=ON;')
@@ -60,15 +67,40 @@ def init_database(conn: sqlite3.Connection, schema_path: str | Path | None = Non
     """
     初始化数据库表结构
     """
+    cache_key = _connection_database_path(conn) if schema_path is None else None
+    if cache_key is not None and cache_key in _INITIALIZED_DATABASE_PATHS:
+        return
+
     if schema_path is None:
         schema_path = Path(__file__).with_name('schema.sql')
 
-    schema_sql = Path(schema_path).read_text(encoding='utf-8')
+    schema_sql = _read_schema_sql(str(Path(schema_path).resolve()))
 
     _run_pre_schema_migrations(conn)
     conn.executescript(schema_sql)
     _run_safe_migrations(conn)
     conn.commit()
+    if cache_key is not None:
+        _INITIALIZED_DATABASE_PATHS.add(cache_key)
+
+
+@lru_cache(maxsize=4)
+def _read_schema_sql(schema_path: str) -> str:
+    return Path(schema_path).read_text(encoding='utf-8')
+
+
+def _connection_database_path(conn: sqlite3.Connection) -> Path | None:
+    try:
+        row = conn.execute("PRAGMA database_list").fetchone()
+    except sqlite3.Error:
+        return None
+    if row is None:
+        return None
+
+    filename = row["file"] if isinstance(row, sqlite3.Row) else row[2]
+    if not filename:
+        return None
+    return Path(str(filename)).resolve()
 
 
 def _run_pre_schema_migrations(conn: sqlite3.Connection) -> None:
@@ -125,6 +157,13 @@ def _run_safe_migrations(conn: sqlite3.Connection) -> None:
             'material_summary': 'TEXT',
             'source_counts_json': "TEXT NOT NULL DEFAULT '{}'",
             'updated_at': "TEXT NOT NULL DEFAULT ''",
+        },
+    )
+    _ensure_columns(
+        conn,
+        'app_profiles',
+        {
+            'icon_path': 'TEXT',
         },
     )
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
+import { ElButton, ElInput, ElOption, ElSelect, ElTooltip } from 'element-plus'
 import { ArrowDown, ArrowUp, CollectionTag, Refresh, Search } from '@element-plus/icons-vue'
 
 import type {
@@ -113,7 +114,9 @@ function toggleSortDirection(): void {
             <Search class="search-icon" />
           </template> -->
           <template #append>
-            <el-button :icon="Search" title="搜索" @click="applyKeyword" />
+            <el-tooltip content="搜索" placement="top" :show-after="80" :hide-after="0">
+              <el-button :icon="Search" aria-label="搜索" @click="applyKeyword" />
+            </el-tooltip>
           </template>
         </el-input>
 
@@ -216,13 +219,13 @@ function toggleSortDirection(): void {
 .overview-tools {
   min-width: min(720px, 100%);
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto 34px;
+  grid-template-columns: minmax(260px, 1fr) auto 38px;
   align-items: center;
   gap: 8px;
 }
 
 .manager-button {
-  height: 34px;
+  height: 38px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -244,8 +247,8 @@ function toggleSortDirection(): void {
 }
 
 .icon-button {
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   display: grid;
   flex: 0 0 auto;
   place-items: center;
@@ -278,7 +281,7 @@ function toggleSortDirection(): void {
 }
 
 :deep(.search-input .el-input__wrapper) {
-  min-height: 34px;
+  min-height: 38px;
   border-radius: 8px 0 0 8px;
   background: #f8fafc;
   box-shadow: 0 0 0 1px #dce3ee inset;

@@ -462,6 +462,8 @@ function emptyAppProfileConfig(payload: unknown) {
     color: null,
     effective_color: '#8F98A8',
     icon_base64: null,
+    icon_path: null,
+    icon_url: null,
     track_enabled: true,
     capture_title_enabled: true,
     session_count: 0,

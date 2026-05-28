@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS app_profiles (
     category TEXT,
     color TEXT,
     icon_base64 TEXT,
+    icon_path TEXT,
 
     track_enabled INTEGER NOT NULL DEFAULT 1,
     capture_title_enabled INTEGER NOT NULL DEFAULT 1,

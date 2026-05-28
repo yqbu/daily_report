@@ -198,6 +198,8 @@ export interface AppProfileConfig {
   color?: string | null
   effective_color: string
   icon_base64?: string | null
+  icon_path?: string | null
+  icon_url?: string | null
   track_enabled: boolean
   capture_title_enabled: boolean
   session_count: number
@@ -232,6 +234,8 @@ export interface SaveAppProfilePayload {
   category?: string | null
   color?: string | null
   icon_base64?: string | null
+  icon_data_url?: string | null
+  icon_file_name?: string | null
   track_enabled?: boolean
   capture_title_enabled?: boolean
 }

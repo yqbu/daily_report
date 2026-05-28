@@ -87,7 +87,7 @@ class GuiDataProvider:
                 """,
                 (day,),
             ).fetchall()
-            sessions = self.list_app_sessions(day)
+            sessions = self._list_app_sessions_from_connection(conn, day)
             return {
                 "date": day,
                 "active_time": fmt_seconds(total["total_active_duration_sec"] if total else 0),
@@ -119,6 +119,29 @@ class GuiDataProvider:
         include_excluded: bool = False,
     ) -> list[dict[str, Any]]:
         day = day or self.today()
+        conn = self.connect()
+        try:
+            return self._list_app_sessions_from_connection(
+                conn,
+                day,
+                app_name=app_name,
+                limit=limit,
+                offset=offset,
+                include_excluded=include_excluded,
+            )
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _list_app_sessions_from_connection(
+        conn: sqlite3.Connection,
+        day: str,
+        *,
+        app_name: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+        include_excluded: bool = False,
+    ) -> list[dict[str, Any]]:
         sql = """
             SELECT a.*,
                    COALESCE(NULLIF(p.display_name, ''), a.app_name) AS display_app_name
@@ -138,12 +161,8 @@ class GuiDataProvider:
             sql += " LIMIT ? OFFSET ?"
             params.extend([int(limit), int(offset)])
 
-        conn = self.connect()
-        try:
-            rows = conn.execute(sql, tuple(params)).fetchall()
-            return [_app_session_dict(r) for r in rows]
-        finally:
-            conn.close()
+        rows = conn.execute(sql, tuple(params)).fetchall()
+        return [_app_session_dict(r) for r in rows]
 
     def count_app_sessions(
         self,
@@ -170,6 +189,30 @@ class GuiDataProvider:
         try:
             row = conn.execute(sql, tuple(params)).fetchone()
             return int(row["n"] if row else 0)
+        finally:
+            conn.close()
+
+    def count_app_sessions_by_date(self, days: list[str]) -> dict[str, int]:
+        unique_days = list(dict.fromkeys(day for day in days if day))
+        if not unique_days:
+            return {}
+
+        placeholders = ", ".join("?" for _ in unique_days)
+        sql = f"""
+            SELECT a.date, COUNT(a.id) AS n
+            FROM app_sessions a
+            LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name))
+            WHERE a.date IN ({placeholders})
+              AND a.is_deleted = 0
+              AND COALESCE(p.track_enabled, 1) = 1
+            GROUP BY a.date
+        """
+        conn = self.connect()
+        try:
+            counts = {day: 0 for day in unique_days}
+            for row in conn.execute(sql, tuple(unique_days)).fetchall():
+                counts[str(row["date"])] = int(row["n"] or 0)
+            return counts
         finally:
             conn.close()
 

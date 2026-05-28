@@ -1,6 +1,19 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import {
+  ElButton,
+  ElIcon,
+  ElInput,
+  ElInputNumber,
+  ElMessage,
+  ElOption,
+  ElSelect,
+  ElSlider,
+  ElSwitch,
+  ElTabPane,
+  ElTabs,
+  ElTag
+} from 'element-plus'
 import {
   Connection,
   Cpu,

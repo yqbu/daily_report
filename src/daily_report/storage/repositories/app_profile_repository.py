@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import base64
+import binascii
+import mimetypes
 import re
 import sqlite3
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
+from daily_report.config.paths import get_runtime_paths
 from daily_report.service.category import infer_category_for_app
 
 
@@ -21,13 +26,31 @@ DEFAULT_APP_CATEGORY_COLORS: tuple[tuple[str, str, int], ...] = (
 
 DEFAULT_CATEGORY_NAME = '其他'
 _HEX_COLOR_RE = re.compile(r'^#[0-9A-Fa-f]{6}$')
+_APP_ICON_DATA_URL_RE = re.compile(r'^data:([^;,]*);base64,(.+)$', re.DOTALL)
+_APP_ICON_EXTENSIONS = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp',
+    'image/x-icon': 'ico',
+    'image/vnd.microsoft.icon': 'ico',
+}
+_APP_ICON_MIME_BY_EXTENSION = {
+    'png': 'image/png',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'webp': 'image/webp',
+    'ico': 'image/x-icon',
+}
+_MAX_APP_ICON_BYTES = 1024 * 1024
 
 
 class AppProfileRepository:
     """Repository for per-application display and classification settings."""
 
-    def __init__(self, conn: sqlite3.Connection):
+    def __init__(self, conn: sqlite3.Connection, icon_dir: str | Path | None = None):
         self.conn = conn
+        self.icon_dir = Path(icon_dir) if icon_dir is not None else get_runtime_paths().data_dir / 'app_icons'
+        self.data_dir = self.icon_dir.parent
 
     def ensure_default_categories(self) -> None:
         now = _now()
@@ -241,14 +264,16 @@ class AppProfileRepository:
             category = None
 
         color = normalize_color(merged.get('color'), fallback=None)
+        icon_path = self._resolve_icon_path(merged, existing)
+        icon_base64 = None if icon_path else _normalize_optional_text(merged.get('icon_base64'))
         now = _now()
         self.conn.execute(
             """
             INSERT INTO app_profiles (
-                app_key, process_name, exe_path, display_name, category, color, icon_base64,
+                app_key, process_name, exe_path, display_name, category, color, icon_base64, icon_path,
                 track_enabled, capture_title_enabled, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(app_key) DO UPDATE SET
                 process_name = excluded.process_name,
                 exe_path = excluded.exe_path,
@@ -256,6 +281,7 @@ class AppProfileRepository:
                 category = excluded.category,
                 color = excluded.color,
                 icon_base64 = excluded.icon_base64,
+                icon_path = excluded.icon_path,
                 track_enabled = excluded.track_enabled,
                 capture_title_enabled = excluded.capture_title_enabled,
                 updated_at = excluded.updated_at
@@ -267,7 +293,8 @@ class AppProfileRepository:
                 _normalize_optional_text(merged.get('display_name')),
                 category,
                 color,
-                _normalize_optional_text(merged.get('icon_base64')),
+                icon_base64,
+                icon_path,
                 int(bool(merged.get('track_enabled', True))),
                 int(bool(merged.get('capture_title_enabled', True))),
                 existing.get('created_at') if existing else now,
@@ -285,6 +312,8 @@ class AppProfileRepository:
         normalized_key = normalize_app_key(app_key)
         if not normalized_key:
             raise ValueError('app_key is required.')
+        existing = self.get_profile(normalized_key)
+        self._delete_icon_file(existing.get('icon_path') if existing else None)
         self.conn.execute('DELETE FROM app_profiles WHERE app_key = ?', (normalized_key,))
         self.conn.commit()
         observed = self._observed_app_row(normalized_key)
@@ -453,6 +482,8 @@ class AppProfileRepository:
             'color': manual_color,
             'effective_color': effective_color,
             'icon_base64': profile.get('icon_base64'),
+            'icon_path': _normalize_optional_text(profile.get('icon_path')),
+            'icon_url': self._icon_url(profile.get('icon_path')),
             'track_enabled': track_enabled,
             'capture_title_enabled': capture_title_enabled,
             'session_count': int(observed_row.get('session_count') or 0),
@@ -472,6 +503,85 @@ class AppProfileRepository:
 
         category_row = self.get_category(category) or self.get_category(DEFAULT_CATEGORY_NAME)
         return str((category_row or {}).get('color') or '#8F98A8')
+
+    def _resolve_icon_path(self, merged: dict[str, Any], existing: dict[str, Any] | None) -> str | None:
+        icon_data_url = _normalize_optional_text(merged.get('icon_data_url') or merged.get('iconDataUrl'))
+        existing_path = _normalize_optional_text(existing.get('icon_path') if existing else None)
+        explicit_path = _normalize_optional_text(merged.get('icon_path') or merged.get('iconPath'))
+        if not icon_data_url:
+            return explicit_path or existing_path
+
+        return self._save_icon_file(
+            app_key=str(merged.get('app_key') or ''),
+            data_url=icon_data_url,
+            file_name=_normalize_optional_text(merged.get('icon_file_name') or merged.get('iconFileName')),
+            existing_path=existing_path,
+        )
+
+    def _save_icon_file(
+        self,
+        *,
+        app_key: str,
+        data_url: str,
+        file_name: str | None,
+        existing_path: str | None,
+    ) -> str:
+        match = _APP_ICON_DATA_URL_RE.match(data_url)
+        if match is None:
+            raise ValueError('Invalid app icon payload.')
+
+        mime_type = match.group(1).lower()
+        extension = _APP_ICON_EXTENSIONS.get(mime_type) or _icon_extension_from_file_name(file_name)
+        if extension is None:
+            raise ValueError(f'Unsupported app icon type: {mime_type}')
+
+        try:
+            icon_bytes = base64.b64decode(match.group(2), validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError('Invalid app icon base64 data.') from exc
+        if len(icon_bytes) > _MAX_APP_ICON_BYTES:
+            raise ValueError('App icon file is too large.')
+
+        relative_path = existing_path or f'app_icons/{_safe_icon_file_stem(app_key or file_name or "app")}.{extension}'
+        icon_path = self._resolve_relative_icon_path(relative_path)
+        icon_path.parent.mkdir(parents=True, exist_ok=True)
+        icon_path.write_bytes(icon_bytes)
+        return icon_path.relative_to(self.data_dir.resolve()).as_posix()
+
+    def _delete_icon_file(self, icon_path: Any) -> None:
+        normalized_path = _normalize_optional_text(icon_path)
+        if not normalized_path:
+            return
+        try:
+            resolved_path = self._resolve_relative_icon_path(normalized_path)
+        except ValueError:
+            return
+        if resolved_path.exists() and resolved_path.is_file():
+            resolved_path.unlink()
+
+    def _resolve_relative_icon_path(self, icon_path: str) -> Path:
+        data_dir = self.data_dir.resolve()
+        resolved_path = (data_dir / icon_path).resolve()
+        if data_dir != resolved_path and data_dir not in resolved_path.parents:
+            raise ValueError('Invalid app icon path.')
+        return resolved_path
+
+    def _icon_url(self, icon_path: Any) -> str | None:
+        normalized_path = _normalize_optional_text(icon_path)
+        if not normalized_path:
+            return None
+        try:
+            resolved_path = self._resolve_relative_icon_path(normalized_path)
+        except ValueError:
+            return None
+        if not resolved_path.exists() or not resolved_path.is_file():
+            return None
+
+        extension = resolved_path.suffix.lower().lstrip('.')
+        mime_type = _APP_ICON_MIME_BY_EXTENSION.get(extension) or mimetypes.guess_type(resolved_path.name)[0]
+        if not mime_type:
+            return None
+        return f'data:{mime_type};base64,{base64.b64encode(resolved_path.read_bytes()).decode("ascii")}'
 
     @staticmethod
     def _filter_profiles(items: list[dict[str, Any]], filters: dict[str, Any]) -> list[dict[str, Any]]:
@@ -544,6 +654,7 @@ def _merge_profile_payload(
         'category': existing.get('category') if existing else None,
         'color': existing.get('color') if existing else None,
         'icon_base64': existing.get('icon_base64') if existing else None,
+        'icon_path': existing.get('icon_path') if existing else None,
         'track_enabled': existing.get('track_enabled', True) if existing else True,
         'capture_title_enabled': existing.get('capture_title_enabled', True) if existing else True,
     }
@@ -553,6 +664,11 @@ def _merge_profile_payload(
         'category',
         'color',
         'icon_base64',
+        'icon_path',
+        'icon_data_url',
+        'iconDataUrl',
+        'icon_file_name',
+        'iconFileName',
         'track_enabled',
         'capture_title_enabled',
     ):
@@ -618,6 +734,18 @@ def _current_week_bounds() -> tuple[str, str]:
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
     return week_start.isoformat(), week_end.isoformat()
+
+
+def _safe_icon_file_stem(value: str) -> str:
+    normalized = normalize_app_key(value) or 'app'
+    return re.sub(r'[^a-zA-Z0-9_.-]+', '_', normalized).strip('._') or 'app'
+
+
+def _icon_extension_from_file_name(file_name: str | None) -> str | None:
+    suffix = Path(file_name or '').suffix.lower().lstrip('.')
+    if suffix == 'jpeg':
+        suffix = 'jpg'
+    return suffix if suffix in {'png', 'jpg', 'webp', 'ico'} else None
 
 
 def _optional_bool(value: Any) -> bool | None:

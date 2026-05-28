@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 
@@ -17,6 +18,7 @@ class RuntimePaths:
     output_dir: Path
 
 
+@lru_cache(maxsize=1)
 def get_project_root() -> Path:
     """
     当前文件位置：
@@ -36,22 +38,29 @@ def get_installed_share_root() -> Path:
 
 
 def get_runtime_paths() -> RuntimePaths:
+    return _get_runtime_paths(
+        os.getenv('DAILY_REPORT_DATA_DIR'),
+        os.getenv('DAILY_REPORT_LOG_DIR'),
+        os.getenv('DAILY_REPORT_OUTPUT_DIR'),
+    )
+
+
+@lru_cache(maxsize=16)
+def _get_runtime_paths(
+    data_dir_value: str | None,
+    log_dir_value: str | None,
+    output_dir_value: str | None,
+) -> RuntimePaths:
     project_root = get_project_root()
 
-    data_dir = Path(
-        os.getenv('DAILY_REPORT_DATA_DIR', project_root / 'data')
-    ).resolve()
+    data_dir = Path(data_dir_value).expanduser().resolve() if data_dir_value else project_root / 'data'
 
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    log_dir = Path(
-        os.getenv('DAILY_REPORT_LOG_DIR', project_root / 'logs')
-    ).resolve()
+    log_dir = Path(log_dir_value).expanduser().resolve() if log_dir_value else project_root / 'logs'
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    output_dir = Path(
-        os.getenv('DAILY_REPORT_OUTPUT_DIR', project_root / 'output')
-    )
+    output_dir = Path(output_dir_value).expanduser() if output_dir_value else project_root / 'output'
     output_dir.mkdir(parents=True, exist_ok=True)
 
     return RuntimePaths(

@@ -81,26 +81,27 @@ class GuiService:
         time_column = self._source_time_column(source_type)
         clauses = ["date = ?"]
         params: list[Any] = [day]
-        if self._table_has_column(table, "is_deleted"):
-            clauses.append("is_deleted = 0")
-        selected = _optional_bool(filters.get("selected"))
-        if selected is not None and self._table_has_column(table, "is_selected"):
-            clauses.append("is_selected = ?")
-            params.append(int(selected))
-        sensitive = _optional_bool(filters.get("sensitive"))
-        if sensitive is not None and self._table_has_column(table, "is_sensitive"):
-            clauses.append("is_sensitive = ?")
-            params.append(int(sensitive))
-        keyword = str(filters.get("keyword") or "").strip()
-        if keyword:
-            keyword_columns = self._keyword_columns(source_type)
-            like = f"%{keyword}%"
-            clauses.append("(" + " OR ".join(f"{column} LIKE ?" for column in keyword_columns) + ")")
-            params.extend([like] * len(keyword_columns))
-
-        sql_where = " AND ".join(clauses)
         conn = self.provider.connect()
         try:
+            columns = self._table_columns(conn, table)
+            if "is_deleted" in columns:
+                clauses.append("is_deleted = 0")
+            selected = _optional_bool(filters.get("selected"))
+            if selected is not None and "is_selected" in columns:
+                clauses.append("is_selected = ?")
+                params.append(int(selected))
+            sensitive = _optional_bool(filters.get("sensitive"))
+            if sensitive is not None and "is_sensitive" in columns:
+                clauses.append("is_sensitive = ?")
+                params.append(int(sensitive))
+            keyword = str(filters.get("keyword") or "").strip()
+            if keyword:
+                keyword_columns = self._keyword_columns(source_type)
+                like = f"%{keyword}%"
+                clauses.append("(" + " OR ".join(f"{column} LIKE ?" for column in keyword_columns) + ")")
+                params.extend([like] * len(keyword_columns))
+
+            sql_where = " AND ".join(clauses)
             total_row = conn.execute(f"SELECT COUNT(*) AS n FROM {table} WHERE {sql_where}", tuple(params)).fetchone()
             rows = conn.execute(
                 f"""
@@ -533,11 +534,9 @@ class GuiService:
 
     def _weekly_trend(self) -> list[dict[str, Any]]:
         today = date_cls.today()
-        points: list[dict[str, Any]] = []
-        for index in range(6, -1, -1):
-            day = today - timedelta(days=index)
-            points.append({"date": day.isoformat(), "count": self.provider.count_app_sessions(day.isoformat())})
-        return points
+        days = [(today - timedelta(days=index)).isoformat() for index in range(6, -1, -1)]
+        counts = self.provider.count_app_sessions_by_date(days)
+        return [{"date": day, "count": counts.get(day, 0)} for day in days]
 
     def _search_app_sessions(
         self,
@@ -618,12 +617,9 @@ class GuiService:
             "ai_prompt": ["platform", "page_title", "prompt_preview", "prompt_text"],
         }.get(normalized, ["id"])
 
-    def _table_has_column(self, table_name: str, column_name: str) -> bool:
-        conn = self.provider.connect()
-        try:
-            return column_name in {str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table_name})")}
-        finally:
-            conn.close()
+    @staticmethod
+    def _table_columns(conn, table_name: str) -> set[str]:
+        return {str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table_name})")}
 
 
 def _clamp_int(value: Any, minimum: int, maximum: int, fallback: int) -> int:

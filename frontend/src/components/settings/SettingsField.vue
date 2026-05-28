@@ -28,7 +28,7 @@ defineProps<{
   grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
   gap: 18px;
   align-items: center;
-  padding: 17px 20px;
+  padding: 15px 20px;
   border-bottom: 1px solid #edf1f7;
 }
 

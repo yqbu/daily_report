@@ -1,10 +1,10 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 
-import AppProfiles from '../pages/AppProfiles.vue'
-import DataCenter from '../pages/DataCenter.vue'
-import ReportWorkbench from '../pages/ReportWorkbench.vue'
-import Settings from '../pages/Settings.vue'
-import TodayOverview from '../pages/TodayOverview.vue'
+const AppProfiles = () => import('../pages/AppProfiles.vue')
+const DataCenter = () => import('../pages/DataCenter.vue')
+const ReportWorkbench = () => import('../pages/ReportWorkbench.vue')
+const Settings = () => import('../pages/Settings.vue')
+const TodayOverview = () => import('../pages/TodayOverview.vue')
 
 const router = createRouter({
   history: createWebHashHistory(),
