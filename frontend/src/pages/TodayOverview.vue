@@ -55,6 +55,14 @@ interface HourPoint {
   totalSec: number
 }
 
+interface TimeDistributionPoint {
+  id: string
+  label: string
+  axisLabel: string
+  activeSec: number
+  totalSec: number
+}
+
 interface RecentActivityItem {
   id: string
   title: string
@@ -196,7 +204,50 @@ const hourlyPoints = computed<HourPoint[]>(() => {
     totalSec: aggregated.value.hourly[hour]?.totalSec ?? 0
   }))
 })
-const maxHourlySec = computed(() => Math.max(...hourlyPoints.value.map((item) => item.totalSec || item.activeSec), 1))
+const isSingleDayRange = computed(() => selectedDates.value.length <= 1)
+const timeDistributionModeLabel = computed(() => (isSingleDayRange.value ? '按小时统计' : '按日统计'))
+const timeDistributionPoints = computed<TimeDistributionPoint[]>(() => {
+  if (isSingleDayRange.value) {
+    return hourlyPoints.value.map((point) => ({
+      id: `hour-${point.hour}`,
+      label: point.label,
+      axisLabel: point.label,
+      activeSec: point.activeSec,
+      totalSec: point.totalSec
+    }))
+  }
+
+  const dayMap = new Map(overviewDays.value.map((day) => [day.date, day]))
+  return selectedDates.value.map((date) => {
+    const day = dayMap.get(date)
+    const parsedDate = parseIsoDate(date)
+    return {
+      id: `day-${date}`,
+      label: formatMonthDay(parsedDate),
+      axisLabel: formatMonthDay(parsedDate),
+      activeSec: day?.active_time_sec ?? 0,
+      totalSec: Math.max(day?.total_time_sec ?? 0, day?.active_time_sec ?? 0)
+    }
+  })
+})
+const timeDistributionAxis = computed(() => {
+  if (isSingleDayRange.value) {
+    return ['00:00', '06:00', '12:00', '18:00', '24:00']
+  }
+
+  const points = timeDistributionPoints.value
+  if (points.length <= 1) return points.map((point) => point.axisLabel)
+  if (points.length <= 7) return points.map((point) => point.axisLabel)
+
+  const middle = points[Math.floor((points.length - 1) / 2)]
+  return [points[0].axisLabel, middle.axisLabel, points[points.length - 1].axisLabel]
+})
+const timeDistributionGridStyle = computed(() => ({
+  gridTemplateColumns: `repeat(${Math.max(timeDistributionPoints.value.length, 1)}, minmax(5px, 1fr))`
+}))
+const maxTimeDistributionSec = computed(() =>
+  Math.max(...timeDistributionPoints.value.map((item) => item.totalSec || item.activeSec), 1)
+)
 const idleSec = computed(() => Math.max(0, aggregated.value.totalSec - aggregated.value.activeSec))
 const recentActivities = computed<RecentActivityItem[]>(() =>
   [...recentEvents.value]
@@ -390,6 +441,12 @@ function formatIsoDate(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
+function parseIsoDate(value: string): Date {
+  const [year, month, day] = value.split('-').map((part) => Number.parseInt(part, 10))
+  if (!year || !month || !day) return startOfToday()
+  return new Date(year, month - 1, day)
+}
+
 function formatMonthDay(date: Date): string {
   return new Intl.DateTimeFormat('zh-CN', {
     month: '2-digit',
@@ -569,39 +626,38 @@ onMounted(() => {
 
       <section class="overview-card time-card">
         <header class="card-header">
-          <h2>时间分布（活跃 / 空闲）</h2>
+          <span class="card-title-group">
+            <h2>时间分布（活跃 / 统计）</h2>
+            <em>{{ timeDistributionModeLabel }}</em>
+          </span>
           <span class="time-legend">
             <span><i class="legend-dot legend-dot--active"></i>活跃</span>
             <span><i class="legend-dot legend-dot--tracked"></i>统计</span>
-            <span><i class="legend-dot"></i>空闲</span>
+<!--            <span><i class="legend-dot"></i>空闲</span>-->
           </span>
         </header>
 
-        <div class="time-bars">
+        <div class="time-bars" :style="timeDistributionGridStyle">
           <span
-            v-for="point in hourlyPoints"
-            :key="point.hour"
+            v-for="point in timeDistributionPoints"
+            :key="point.id"
             class="time-bar"
             :class="{ 'time-bar--tracked': point.totalSec > 0, 'time-bar--active': point.activeSec > 0 }"
             :title="`${point.label} 统计 ${formatDuration(point.totalSec)} / 活跃 ${formatDuration(point.activeSec)}`"
           >
             <span
               class="time-bar-stat"
-              :style="{ height: point.totalSec > 0 ? `${Math.max(8, (point.totalSec / maxHourlySec) * 100)}%` : '0%' }"
+              :style="{ height: point.totalSec > 0 ? `${Math.max(8, (point.totalSec / maxTimeDistributionSec) * 100)}%` : '0%' }"
             ></span>
             <span
               class="time-bar-fill"
-              :style="{ height: point.activeSec > 0 ? `${Math.max(8, (point.activeSec / maxHourlySec) * 100)}%` : '0%' }"
+              :style="{ height: point.activeSec > 0 ? `${Math.max(8, (point.activeSec / maxTimeDistributionSec) * 100)}%` : '0%' }"
             ></span>
           </span>
         </div>
 
         <div class="time-axis">
-          <span>00:00</span>
-          <span>06:00</span>
-          <span>12:00</span>
-          <span>18:00</span>
-          <span>24:00</span>
+          <span v-for="label in timeDistributionAxis" :key="label">{{ label }}</span>
         </div>
 
         <div class="time-summary">
@@ -940,6 +996,19 @@ onMounted(() => {
   font-size: 15px;
   font-weight: 780;
   line-height: 1.2;
+}
+
+.card-title-group {
+  min-width: 0;
+  display: inline-grid;
+  gap: 4px;
+}
+
+.card-title-group em {
+  color: var(--overview-muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 650;
 }
 
 .header-link {
