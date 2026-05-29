@@ -286,6 +286,10 @@ function normalizeSettings(payload: LocalSettingsPayload): SettingsDraft {
 }
 
 function cloneSettings(settings: SettingsDraft): SettingsDraft {
+  if (typeof structuredClone === 'function') {
+    return structuredClone(settings)
+  }
+
   return JSON.parse(JSON.stringify(settings)) as SettingsDraft
 }
 
@@ -394,6 +398,7 @@ onBeforeUnmount(() => {
         <el-tabs type="card" v-model="activeSettingsTab" class="settings-tabs">
           <el-tab-pane label="采集设置" name="collector">
             <SettingsSection
+              v-show="activeSettingsTab === 'collector'"
               title="采集设置"
               description="控制桌面活动、剪贴板、浏览器历史和 AI Prompt 进入素材池的方式。"
               :icon="DataAnalysis"
@@ -441,6 +446,7 @@ onBeforeUnmount(() => {
 
           <el-tab-pane label="隐私规则" name="privacy">
             <SettingsSection
+              v-show="activeSettingsTab === 'privacy'"
               title="隐私规则"
               description="设置敏感内容的默认处理方式，降低日报生成前泄露私密信息的风险。"
               :icon="Lock"
@@ -495,6 +501,7 @@ onBeforeUnmount(() => {
 
           <el-tab-pane label="模型设置" name="model">
             <SettingsSection
+              v-show="activeSettingsTab === 'model'"
               title="模型设置"
               description="配置日报生成使用的模型服务。"
               :icon="Cpu"
@@ -567,6 +574,7 @@ onBeforeUnmount(() => {
 
           <el-tab-pane label="系统集成" name="system">
             <SettingsSection
+              v-show="activeSettingsTab === 'system'"
               title="系统集成"
               description="维护状态栏联动、日志保留和配置文件位置。"
               :icon="Monitor"
@@ -701,6 +709,34 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
+.settings-tabs :deep(.el-tab-pane:not([aria-hidden='true']) .settings-field) {
+  animation: settings-field-rise 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.settings-tabs :deep(.el-tab-pane:not([aria-hidden='true']) .settings-field:nth-child(2)) {
+  animation-delay: 35ms;
+}
+
+.settings-tabs :deep(.el-tab-pane:not([aria-hidden='true']) .settings-field:nth-child(3)) {
+  animation-delay: 70ms;
+}
+
+.settings-tabs :deep(.el-tab-pane:not([aria-hidden='true']) .settings-field:nth-child(4)) {
+  animation-delay: 105ms;
+}
+
+.settings-tabs :deep(.el-tab-pane:not([aria-hidden='true']) .settings-field:nth-child(5)) {
+  animation-delay: 140ms;
+}
+
+.settings-tabs :deep(.el-tab-pane:not([aria-hidden='true']) .settings-field:nth-child(6)) {
+  animation-delay: 175ms;
+}
+
+.settings-tabs :deep(.el-tab-pane:not([aria-hidden='true']) .settings-field:nth-child(7)) {
+  animation-delay: 210ms;
+}
+
 .collector-toggle-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -810,6 +846,24 @@ onBeforeUnmount(() => {
 @keyframes settings-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes settings-field-rise {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-tabs :deep(.el-tab-pane .settings-field) {
+    animation: none;
   }
 }
 

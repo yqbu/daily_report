@@ -96,6 +96,8 @@ defineProps<{
 
 .page-layout--scrollable .page-body {
   overflow: auto;
+  background: #ffffff;
+  scrollbar-gutter: stable;
 }
 
 @media (max-width: 760px) {

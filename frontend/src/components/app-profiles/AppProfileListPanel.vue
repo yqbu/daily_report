@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import {computed, reactive, watch} from 'vue'
-import {ElCard, ElIcon, ElInput, ElOption, ElSelect, ElSwitch, ElTooltip} from 'element-plus'
+import {computed, onBeforeUnmount, onMounted, reactive, shallowRef, watch} from 'vue'
+import {ElCard, ElIcon, ElInput, ElMessage, ElMessageBox, ElOption, ElSelect, ElSwitch, ElTooltip} from 'element-plus'
 import {Check, Close, Delete, Edit, RefreshLeft} from '@element-plus/icons-vue'
 
 import type {AppCategoryConfig, AppProfileConfig, SaveAppProfilePayload} from '../../api/types'
@@ -88,7 +88,7 @@ const categoryColorMap = computed(() => {
 const hasUnsavedChanges = computed(() => props.profiles.some((profile) => profileHasChanges(profile)))
 
 const profileCards = computed<AppProfileCardState[]>(() => {
-  return props.profiles.map((profile) => {
+  return props.profiles.map((profile, index) => {
     const draft = readDraftFor(profile)
     return {
       key: profile.app_key,
@@ -99,10 +99,16 @@ const profileCards = computed<AppProfileCardState[]>(() => {
       displayName: displayNameFor(profile, draft),
       iconSrc: iconSource(profile, draft),
       initial: appInitial(profile, draft),
-      cardStyle: profileCardStyle(draft)
+      cardStyle: profileCardStyle(draft, index)
     }
   })
 })
+const profileListSignature = computed(() => props.profiles.map((profile) => profile.app_key).join('|') || 'empty')
+const profileCardStaggering = shallowRef(false)
+let profileCardAnimationFrame = 0
+let profileCardAnimationTimer = 0
+let lastCopiedExecutableKey = ''
+let lastCopiedExecutableAt = 0
 
 watch(
     () => props.profiles,
@@ -135,6 +141,40 @@ watch(
     },
     {immediate: true}
 )
+
+watch(
+    profileListSignature,
+    () => {
+      triggerProfileCardStagger()
+    },
+    {flush: 'post'}
+)
+
+onMounted(() => {
+  triggerProfileCardStagger()
+})
+
+onBeforeUnmount(() => {
+  window.cancelAnimationFrame(profileCardAnimationFrame)
+  window.clearTimeout(profileCardAnimationTimer)
+})
+
+function triggerProfileCardStagger(): void {
+  window.cancelAnimationFrame(profileCardAnimationFrame)
+  window.clearTimeout(profileCardAnimationTimer)
+  profileCardStaggering.value = false
+
+  if (profileCards.value.length <= 0) return
+
+  profileCardAnimationFrame = window.requestAnimationFrame(() => {
+    profileCardAnimationFrame = window.requestAnimationFrame(() => {
+      profileCardStaggering.value = true
+      profileCardAnimationTimer = window.setTimeout(() => {
+        profileCardStaggering.value = false
+      }, 580 + Math.min(profileCards.value.length, 18) * 42)
+    })
+  })
+}
 
 function createDraft(profile: AppProfileConfig): AppProfileDraft {
   return {
@@ -188,6 +228,109 @@ function createSavePayload(profile: AppProfileConfig): SaveAppProfilePayload {
 function resetDraft(profile: AppProfileConfig): void {
   drafts[profile.app_key] = createDraft(profile)
   cancelDisplayNameEdit(profile.app_key)
+}
+
+async function copyExecutableDirectory(profile: AppProfileConfig): Promise<void> {
+  const directory = executableDirectoryFor(profile)
+  if (!directory) {
+    ElMessage.warning('当前应用暂无可复制的可执行文件目录')
+    return
+  }
+
+  const now = Date.now()
+  if (lastCopiedExecutableKey === profile.app_key && now - lastCopiedExecutableAt < 500) return
+  lastCopiedExecutableKey = profile.app_key
+  lastCopiedExecutableAt = now
+
+  try {
+    await writeClipboardText(directory)
+    ElMessage.success(`已复制目录：${directory}`)
+  } catch {
+    ElMessage.error('复制失败，请稍后重试')
+  }
+}
+
+function copyExecutableDirectoryTooltip(profile: AppProfileConfig): string {
+  return executableDirectoryFor(profile) ? '点击复制可执行文件所在目录' : '暂无可执行文件目录'
+}
+
+function executableDirectoryFor(profile: AppProfileConfig): string {
+  const executablePath = profile.exe_path?.trim()
+  if (!executablePath) return ''
+
+  const normalizedPath = executablePath.replace(/[\\/]+$/, '')
+  const separatorIndex = Math.max(normalizedPath.lastIndexOf('\\'), normalizedPath.lastIndexOf('/'))
+  if (separatorIndex <= 0) return ''
+  return normalizedPath.slice(0, separatorIndex)
+}
+
+async function writeClipboardText(text: string): Promise<void> {
+  try {
+    await window.navigator.clipboard.writeText(text)
+    return
+  } catch {
+    fallbackCopyText(text)
+  }
+}
+
+function fallbackCopyText(text: string): void {
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  textarea.style.top = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+
+  try {
+    if (!document.execCommand('copy')) {
+      throw new Error('copy command failed')
+    }
+  } finally {
+    document.body.removeChild(textarea)
+  }
+}
+
+async function confirmResetProfile(profile: AppProfileConfig): Promise<void> {
+  const displayName = displayNameFor(profile, readDraftFor(profile))
+
+  try {
+    await ElMessageBox.confirm(
+        `确定要将「${displayName}」恢复为默认配置吗？当前配置将被默认规则覆盖。`,
+        '恢复默认配置',
+        {
+          type: 'warning',
+          confirmButtonText: '恢复默认',
+          cancelButtonText: '取消',
+          autofocus: false
+        }
+    )
+    emit('reset', profile.app_key)
+  } catch {
+    // User cancelled or closed the confirmation dialog.
+  }
+}
+
+async function confirmDeleteProfileRecords(profile: AppProfileConfig): Promise<void> {
+  const displayName = displayNameFor(profile, readDraftFor(profile))
+
+  try {
+    await ElMessageBox.confirm(
+        `确定要删除「${displayName}」的应用历史记录吗？删除后无法撤销。`,
+        '删除应用历史记录',
+        {
+          type: 'warning',
+          confirmButtonText: '删除',
+          cancelButtonText: '取消',
+          confirmButtonClass: 'el-button--danger',
+          autofocus: false
+        }
+    )
+    emit('delete-records', profile.app_key)
+  } catch {
+    // User cancelled or closed the confirmation dialog.
+  }
 }
 
 function resetAllDrafts(): void {
@@ -324,11 +467,12 @@ function displayNameFor(profile: AppProfileConfig, draft: AppProfileDraft): stri
   return draft.displayName.trim() || profile.effective_display_name || profile.default_display_name || profile.process_name
 }
 
-function profileCardStyle(draft: AppProfileDraft): Record<string, string> {
+function profileCardStyle(draft: AppProfileDraft, index: number): Record<string, string> {
   const color = normalizeColor(draft.color)
   return {
     '--profile-color': color,
-    '--profile-color-soft': hexToRgba(color, 0.1)
+    '--profile-color-soft': hexToRgba(color, 0.1),
+    '--profile-card-rise-delay': `${Math.min(index, 18) * 42}ms`
   }
 }
 
@@ -390,7 +534,11 @@ defineExpose({
 <template>
   <section class="list-panel">
     <div class="list-scroll" :class="{ 'list-scroll--loading': loading }" :aria-busy="loading">
-      <div v-if="profileCards.length > 0" class="profile-card-grid">
+      <div
+          v-if="profileCards.length > 0"
+          class="profile-card-grid"
+          :class="{ 'profile-card-grid--stagger': profileCardStaggering }"
+      >
         <el-card
             v-for="card in profileCards"
             :key="card.key"
@@ -409,8 +557,6 @@ defineExpose({
                 <span
                     class="app-avatar app-avatar--clickable"
                     :class="{
-                      'app-avatar--tracked': card.draft.trackEnabled,
-                      'app-avatar--excluded': !card.draft.trackEnabled,
                       'app-avatar--has-icon': card.iconSrc
                     }"
                     title="设置或更换应用图标"
@@ -418,10 +564,6 @@ defineExpose({
                   <img
                       v-if="card.iconSrc"
                       class="app-icon"
-                      :class="{
-                        'app-icon--tracked': card.draft.trackEnabled,
-                        'app-icon--excluded': !card.draft.trackEnabled
-                      }"
                       :src="card.iconSrc"
                       alt=""
                   />
@@ -474,7 +616,24 @@ defineExpose({
 
                     <div v-else class="app-copy">
                       <strong class="app-name">{{ card.displayName }}</strong>
-                      <span class="app-process">{{ card.profile.process_name }}</span>
+                      <el-tooltip
+                          :content="copyExecutableDirectoryTooltip(card.profile)"
+                          placement="top"
+                          :show-after="120"
+                          :hide-after="0"
+                      >
+                        <span
+                            class="app-process app-process--copyable"
+                            role="button"
+                            tabindex="0"
+                            @click.stop="copyExecutableDirectory(card.profile)"
+                            @dblclick.stop.prevent="copyExecutableDirectory(card.profile)"
+                            @keydown.enter.prevent="copyExecutableDirectory(card.profile)"
+                            @keydown.space.prevent="copyExecutableDirectory(card.profile)"
+                        >
+                          {{ card.profile.process_name }}
+                        </span>
+                      </el-tooltip>
                     </div>
                   </Transition>
                 </div>
@@ -562,19 +721,19 @@ defineExpose({
                     type="button"
                     title="恢复默认配置"
                     :disabled="savingAppKey === card.profile.app_key"
-                    @click="emit('reset', card.profile.app_key)"
-                >
-                  <RefreshLeft class="row-button-icon"/>
-                </button>
+                    @click="confirmResetProfile(card.profile)"
+                  >
+                    <RefreshLeft class="row-button-icon"/>
+                  </button>
                 <button
                     class="row-button row-button--danger"
                     type="button"
                     title="移除该应用历史记录"
                     :disabled="savingAppKey === card.profile.app_key"
-                    @click="emit('delete-records', card.profile.app_key)"
-                >
-                  <Delete class="row-button-icon"/>
-                </button>
+                    @click="confirmDeleteProfileRecords(card.profile)"
+                  >
+                    <Delete class="row-button-icon"/>
+                  </button>
                 <button
                     class="row-button"
                     type="button"
@@ -590,7 +749,11 @@ defineExpose({
         </el-card>
       </div>
 
-      <div v-else class="empty-state">
+      <div
+          v-else-if="!loading"
+          class="empty-state"
+          :class="{ 'empty-state--rise': profileCardStaggering }"
+      >
         <p class="empty-title">暂无应用配置</p>
         <p class="empty-description">启动采集器后，这里会显示已观察到的应用；也可以通过分类面板先维护分类。</p>
       </div>
@@ -616,17 +779,62 @@ defineExpose({
 }
 
 .list-scroll {
+  position: relative;
   height: 100%;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  isolation: isolate;
   scrollbar-gutter: stable;
+  background: #ffffff;
 }
 
 .list-scroll--loading {
   cursor: progress;
+}
+
+.list-loading-indicator {
+  position: sticky;
+  z-index: 3;
+  top: 12px;
+  width: fit-content;
+  max-width: calc(100% - 32px);
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin: 12px 0 0 16px;
+  padding: 0 12px;
+  border: 1px solid #dce3ee;
+  border-radius: 999px;
+  color: #526179;
+  background: #ffffff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+  font-size: 12px;
+  font-weight: 720;
+  pointer-events: none;
+}
+
+.loading-spinner {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 2px solid #bfdbfe;
+  border-top-color: #2563eb;
+  border-radius: 999px;
+  animation: profile-loading-spin 760ms linear infinite;
+}
+
+.profile-loading-enter-active,
+.profile-loading-leave-active {
+  transition: opacity 220ms ease,
+  transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.profile-loading-enter-from,
+.profile-loading-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .profile-card-grid {
@@ -646,9 +854,18 @@ defineExpose({
   min-width: 0;
   border-color: #e1e7f0;
   border-radius: 8px;
-  background: linear-gradient(90deg, var(--profile-color-soft), rgba(255, 255, 255, 0) 42%),
-  #ffffff;
+  background: linear-gradient(90deg, var(--profile-color-soft), rgba(255, 255, 255, 0) 42%), #ffffff;
   overflow: hidden;
+}
+
+.profile-card-grid--stagger .profile-card {
+  animation: profile-card-rise 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--profile-card-rise-delay, 0ms);
+  will-change: opacity, transform;
+}
+
+.empty-state--rise {
+  animation: profile-panel-rise 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .profile-card--dirty {
@@ -710,22 +927,6 @@ defineExpose({
   cursor: pointer;
 }
 
-.app-avatar--tracked {
-  box-shadow:
-    inset 0 0 0 1px rgba(15, 23, 42, 0.12),
-    0 0 0 1px rgba(34, 197, 94, 0.16),
-    0 0 12px 3px rgba(34, 197, 94, 0.2),
-    0 0 22px 6px rgba(34, 197, 94, 0.1);
-}
-
-.app-avatar--excluded {
-  box-shadow:
-    inset 0 0 0 1px rgba(15, 23, 42, 0.12),
-    0 0 0 1px rgba(245, 158, 11, 0.18),
-    0 0 12px 3px rgba(245, 158, 11, 0.22),
-    0 0 22px 6px rgba(245, 158, 11, 0.12);
-}
-
 .app-avatar--has-icon {
   background: transparent;
   box-shadow: none;
@@ -746,18 +947,6 @@ defineExpose({
   object-fit: contain;
 }
 
-.app-icon--tracked {
-  filter:
-    drop-shadow(0 0 2px rgba(34, 197, 94, 0.3))
-    drop-shadow(0 0 9px rgba(34, 197, 94, 0.24));
-}
-
-.app-icon--excluded {
-  filter:
-    drop-shadow(0 0 2px rgba(245, 158, 11, 0.34))
-    drop-shadow(0 0 9px rgba(245, 158, 11, 0.28));
-}
-
 .app-initial {
   font-size: 15px;
   font-weight: 820;
@@ -768,6 +957,7 @@ defineExpose({
   min-width: 0;
   display: grid;
   gap: 4px;
+  margin-left: 5px;
 }
 
 .identity-main {
@@ -795,15 +985,13 @@ defineExpose({
 :deep(.display-name-input .el-input__wrapper) {
   min-height: 32px;
   border-radius: 8px;
-  box-shadow:
-    0 0 0 1px #c9dcff inset,
-    0 0 0 3px rgba(37, 99, 235, 0.08);
+  box-shadow: 0 0 0 1px #c9dcff inset,
+  0 0 0 3px rgba(37, 99, 235, 0.08);
 }
 
 :deep(.display-name-input .el-input__wrapper.is-focus) {
-  box-shadow:
-    0 0 0 1px #93c5fd inset,
-    0 0 0 3px rgba(37, 99, 235, 0.14);
+  box-shadow: 0 0 0 1px #93c5fd inset,
+  0 0 0 3px rgba(37, 99, 235, 0.14);
 }
 
 .identity-action {
@@ -850,9 +1038,8 @@ defineExpose({
 .display-name-edit-enter-active,
 .display-name-edit-leave-active {
   overflow: hidden;
-  transition:
-    opacity 180ms ease,
-    transform 180ms ease;
+  transition: opacity 180ms ease,
+  transform 180ms ease;
 }
 
 .display-name-edit-enter-from,
@@ -888,6 +1075,21 @@ defineExpose({
 .usage-copy span {
   color: #667085;
   font-size: 12px;
+}
+
+.app-process--copyable {
+  display: block;
+  max-width: 100%;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.app-process--copyable:hover,
+.app-process--copyable:focus-visible {
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+  outline: none;
 }
 
 .config-grid {
@@ -1090,6 +1292,47 @@ defineExpose({
   color: #667085;
   font-size: 13px;
   line-height: 1.6;
+}
+
+@keyframes profile-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes profile-panel-rise {
+  from {
+    opacity: 0.72;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes profile-card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.995);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner,
+  .profile-card-grid--stagger .profile-card,
+  .empty-state--rise,
+  .profile-loading-enter-active,
+  .profile-loading-leave-active {
+    animation: none;
+    transition: none;
+  }
 }
 
 @media (max-width: 760px) {

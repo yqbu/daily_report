@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, shallowRef } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import {computed, onBeforeUnmount, onMounted, shallowRef} from 'vue'
+import {RouterLink, useRoute, useRouter} from 'vue-router'
 import {
   ArrowLeft,
   ArrowRight,
@@ -13,7 +13,7 @@ import {
   Setting
 } from '@element-plus/icons-vue'
 
-import { callBridge } from '../api/bridge'
+import {callBridge} from '../api/bridge'
 import appIcon from '../assets/icon-64-tb.png'
 
 type CollectorStatus = 'checking' | 'running' | 'stopped'
@@ -51,16 +51,16 @@ const navItems = [
     icon: DataAnalysis
   },
   {
-    to: '/apps',
-    name: 'app-profiles',
-    label: '应用配置',
-    icon: MagicStick
-  },
-  {
     to: '/reports',
     name: 'report-workbench',
     label: '日报工作台',
     icon: Document
+  },
+  {
+    to: '/apps',
+    name: 'app-profiles',
+    label: '应用配置',
+    icon: MagicStick
   },
   {
     to: '/settings',
@@ -187,12 +187,12 @@ function scheduleStatusRefresh(delay = STATUS_REFRESH_INTERVAL_MS): void {
 
 function handleVisibilityChange(): void {
   if (document.visibilityState === 'visible') {
-    void refreshCollectorStatus({ force: true })
+    void refreshCollectorStatus({force: true})
   }
 }
 
 onMounted(() => {
-  void refreshCollectorStatus({ force: true })
+  void refreshCollectorStatus({force: true})
   scheduleStatusRefresh()
   document.addEventListener('visibilitychange', handleVisibilityChange)
 })
@@ -208,14 +208,14 @@ onBeforeUnmount(() => {
 <template>
   <aside class="sidebar" :class="{ 'sidebar--expanded': props.expanded }">
     <button
-      class="brand"
-      type="button"
-      :title="props.expanded ? '折叠菜单' : '展开菜单'"
-      :aria-label="props.expanded ? '折叠菜单' : '展开菜单'"
-      @click="emit('toggle')"
+        class="brand"
+        type="button"
+        :title="props.expanded ? '折叠菜单' : '展开菜单'"
+        :aria-label="props.expanded ? '折叠菜单' : '展开菜单'"
+        @click="emit('toggle')"
     >
       <span class="brand-logo-wrap">
-        <img class="brand-logo" :src="appIcon" alt="" />
+        <img class="brand-logo" :src="appIcon" alt=""/>
       </span>
 
       <span class="brand-copy">
@@ -223,42 +223,42 @@ onBeforeUnmount(() => {
         <span class="brand-subtitle">本地工作日报</span>
       </span>
 
-<!--      <span class="brand-toggle">-->
-<!--        <ArrowLeft v-if="props.expanded" class="toggle-icon" />-->
-<!--        <ArrowRight v-else class="toggle-icon" />-->
-<!--      </span>-->
+      <!--      <span class="brand-toggle">-->
+      <!--        <ArrowLeft v-if="props.expanded" class="toggle-icon" />-->
+      <!--        <ArrowRight v-else class="toggle-icon" />-->
+      <!--      </span>-->
     </button>
 
     <div class="search-block">
       <form
-        class="quick-search"
-        role="search"
-        :title="props.expanded ? '搜索功能界面' : '展开搜索'"
-        @submit.prevent="openFirstSearchMatch"
-        @click="handleSearchShellClick"
+          class="quick-search"
+          role="search"
+          :title="props.expanded ? '搜索功能界面' : '展开搜索'"
+          @submit.prevent="openFirstSearchMatch"
+          @click="handleSearchShellClick"
       >
-        <Search class="search-icon" />
+        <Search class="search-icon"/>
         <input
-          v-model="searchKeyword"
-          class="search-input"
-          type="search"
-          placeholder="搜索功能"
-          autocomplete="off"
-          :aria-hidden="!props.expanded"
-          :tabindex="props.expanded ? 0 : -1"
+            v-model="searchKeyword"
+            class="search-input"
+            type="search"
+            placeholder="搜索功能"
+            autocomplete="off"
+            :aria-hidden="!props.expanded"
+            :tabindex="props.expanded ? 0 : -1"
         />
         <span class="search-shortcut">Ctrl K</span>
       </form>
 
       <div v-if="props.expanded && normalizedSearch" class="search-results">
         <button
-          v-for="item in searchMatches"
-          :key="item.name"
-          class="search-result"
-          type="button"
-          @click="openSearchMatch(item.to)"
+            v-for="item in searchMatches"
+            :key="item.name"
+            class="search-result"
+            type="button"
+            @click="openSearchMatch(item.to)"
         >
-          <component :is="item.icon" class="search-result-icon" />
+          <component :is="item.icon" class="search-result-icon"/>
           <span>{{ item.label }}</span>
         </button>
 
@@ -268,32 +268,32 @@ onBeforeUnmount(() => {
 
     <nav class="nav-list" aria-label="主导航">
       <RouterLink
-        v-for="item in navItems"
-        :key="item.name"
-        class="nav-item"
-        :class="{ 'nav-item--active': activeRouteName === item.name }"
-        :to="item.to"
-        :title="item.label"
+          v-for="item in navItems"
+          :key="item.name"
+          class="nav-item"
+          :class="{ 'nav-item--active': activeRouteName === item.name }"
+          :to="item.to"
+          :title="item.label"
       >
-        <component :is="item.icon" class="nav-icon" />
+        <component :is="item.icon" class="nav-icon"/>
         <span class="nav-label">{{ item.label }}</span>
       </RouterLink>
     </nav>
 
     <button
-      class="bridge-status"
-      :class="{
+        class="bridge-status"
+        :class="{
         'bridge-status--online': collectorRunning,
         'bridge-status--offline': !collectorRunning,
         'bridge-status--busy': collectorBusy || collectorStatus === 'checking'
       }"
-      type="button"
-      :title="collectorActionTitle"
-      :aria-label="collectorActionTitle"
-      :disabled="collectorBusy"
-      @click="toggleCollectorService"
+        type="button"
+        :title="collectorActionTitle"
+        :aria-label="collectorActionTitle"
+        :disabled="collectorBusy"
+        @click="toggleCollectorService"
     >
-      <Connection class="bridge-icon" />
+      <Connection class="bridge-icon"/>
       <span class="bridge-label">{{ collectorStatusLabel }}</span>
     </button>
   </aside>
@@ -332,12 +332,11 @@ onBeforeUnmount(() => {
   background: transparent;
   cursor: pointer;
   overflow: hidden;
-  transition:
-    width 240ms cubic-bezier(0.22, 1, 0.36, 1),
-    gap 240ms cubic-bezier(0.22, 1, 0.36, 1),
-    background-color 180ms ease,
-    border-color 180ms ease,
-    box-shadow 180ms ease;
+  transition: width 240ms cubic-bezier(0.22, 1, 0.36, 1),
+  gap 240ms cubic-bezier(0.22, 1, 0.36, 1),
+  background-color 180ms ease,
+  border-color 180ms ease,
+  box-shadow 180ms ease;
 }
 
 .brand-logo-wrap {
@@ -364,9 +363,8 @@ onBeforeUnmount(() => {
   text-align: left;
   opacity: 0;
   transform: translateX(-6px);
-  transition:
-    opacity 120ms ease,
-    transform 160ms ease;
+  transition: opacity 120ms ease,
+  transform 160ms ease;
 }
 
 .brand-title {
@@ -395,12 +393,11 @@ onBeforeUnmount(() => {
   background: #ffffff;
   opacity: 0;
   transform: translateX(-6px);
-  transition:
-    opacity 120ms ease,
-    transform 160ms ease,
-    color 160ms ease,
-    border-color 160ms ease,
-    background-color 160ms ease;
+  transition: opacity 120ms ease,
+  transform 160ms ease,
+  color 160ms ease,
+  border-color 160ms ease,
+  background-color 160ms ease;
 }
 
 .brand:hover .brand-toggle {
@@ -436,12 +433,11 @@ onBeforeUnmount(() => {
   background: #f8fafc;
   cursor: text;
   overflow: hidden;
-  transition:
-    width 240ms cubic-bezier(0.22, 1, 0.36, 1),
-    gap 240ms cubic-bezier(0.22, 1, 0.36, 1),
-    padding 240ms cubic-bezier(0.22, 1, 0.36, 1),
-    background-color 160ms ease,
-    border-color 160ms ease;
+  transition: width 240ms cubic-bezier(0.22, 1, 0.36, 1),
+  gap 240ms cubic-bezier(0.22, 1, 0.36, 1),
+  padding 240ms cubic-bezier(0.22, 1, 0.36, 1),
+  background-color 160ms ease,
+  border-color 160ms ease;
 }
 
 .quick-search:hover {
@@ -481,9 +477,8 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   opacity: 0;
   transform: translateX(-6px);
-  transition:
-    opacity 120ms ease,
-    transform 160ms ease;
+  transition: opacity 120ms ease,
+  transform 160ms ease;
 }
 
 .search-results {
@@ -549,12 +544,11 @@ onBeforeUnmount(() => {
   color: #667085;
   text-decoration: none;
   background: transparent;
-  transition:
-    width 240ms cubic-bezier(0.22, 1, 0.36, 1),
-    background-color 160ms ease,
-    border-color 160ms ease,
-    color 160ms ease,
-    box-shadow 160ms ease;
+  transition: width 240ms cubic-bezier(0.22, 1, 0.36, 1),
+  background-color 160ms ease,
+  border-color 160ms ease,
+  color 160ms ease,
+  box-shadow 160ms ease;
 }
 
 .nav-item {

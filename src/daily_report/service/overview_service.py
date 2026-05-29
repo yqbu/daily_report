@@ -160,7 +160,7 @@ class OverviewService:
 
     @staticmethod
     def _hourly_activity(conn: sqlite3.Connection, day: str) -> list[dict[str, Any]]:
-        slots = [{'hour': hour, 'label': f'{hour:02d}:00', 'active_sec': 0} for hour in range(24)]
+        slots = [{'hour': hour, 'label': f'{hour:02d}:00', 'active_sec': 0, 'total_sec': 0} for hour in range(24)]
         try:
             rows = conn.execute(
                 """
@@ -182,7 +182,10 @@ class OverviewService:
             except ValueError:
                 continue
             if 0 <= hour < 24:
-                slots[hour]['active_sec'] += int(row['active_duration_sec'] or row['duration_sec'] or 0)
+                active_sec = int(row['active_duration_sec'] or row['duration_sec'] or 0)
+                total_sec = int(row['duration_sec'] or active_sec or 0)
+                slots[hour]['active_sec'] += active_sec
+                slots[hour]['total_sec'] += max(total_sec, active_sec)
         return slots
 
     def _category_distribution(self, day: str) -> list[dict[str, Any]]:

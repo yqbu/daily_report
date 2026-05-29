@@ -36,6 +36,12 @@ body {
   overflow: hidden;
 }
 
+html,
+body,
+#app {
+  background-color: #f5f7fb;
+}
+
 button,
 input,
 textarea,

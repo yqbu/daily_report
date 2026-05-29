@@ -99,6 +99,8 @@ def run_gui(
     dev_port: int = 5173,
     remote_debugging_port: int | None = None,
 ) -> int:
+    _configure_qt_webengine_rendering()
+
     if remote_debugging_port is not None:
         os.environ.setdefault("QTWEBENGINE_REMOTE_DEBUGGING", str(remote_debugging_port))
 
@@ -108,6 +110,27 @@ def run_gui(
             return _run_qt_app()
 
     return _run_qt_app()
+
+
+def _configure_qt_webengine_rendering() -> None:
+    """Prefer stable software compositing for Qt WebEngine on Windows.
+
+    Some Windows GPU/driver combinations produce white repaint stripes while
+    scrolling complex CSS layers in QWebEngine. Keep this opt-out friendly:
+    users can still provide QTWEBENGINE_CHROMIUM_FLAGS themselves.
+    """
+    os.environ.setdefault("QT_OPENGL", "software")
+    os.environ.setdefault(
+        "QTWEBENGINE_CHROMIUM_FLAGS",
+        " ".join(
+            [
+                "--disable-gpu",
+                "--disable-gpu-compositing",
+                "--disable-gpu-rasterization",
+                "--disable-zero-copy",
+            ]
+        ),
+    )
 
 
 def _run_qt_app() -> int:

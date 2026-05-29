@@ -8,7 +8,7 @@ const APP_PROFILE_CACHE_TTL_MS = 60_000
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue'
-import { ElDrawer } from 'element-plus'
+import { ElDrawer, ElMessage } from 'element-plus'
 
 import { callTypedBridge } from '../api/bridge'
 import type {
@@ -47,7 +47,7 @@ const appProfilePage = shallowRef(1)
 const appProfilePageSize = shallowRef(500)
 const appProfiles = shallowRef<AppProfileListPayload>(emptyAppProfileList())
 const appCategories = shallowRef<AppCategoryConfig[]>([])
-const appProfileLoading = shallowRef(false)
+const appProfileLoading = shallowRef(true)
 const appProfileError = shallowRef('')
 const operationMessage = shallowRef('')
 const savingAppKey = shallowRef('')
@@ -180,10 +180,11 @@ async function saveAppProfileDraft(payload: SaveAppProfilePayload): Promise<void
   appProfileError.value = ''
   try {
     await callTypedBridge('saveAppProfile', payload)
-    flashOperationMessage('应用配置已保存')
+    operationMessage.value = ''
+    ElMessage.success('应用配置已保存')
     await loadAppProfileBootstrap()
   } catch (error) {
-    appProfileError.value = error instanceof Error ? error.message : String(error)
+    showAppProfileError(error)
   } finally {
     savingAppKey.value = ''
   }
@@ -194,10 +195,11 @@ async function resetAppProfileDraft(appKey: string): Promise<void> {
   appProfileError.value = ''
   try {
     await callTypedBridge('resetAppProfile', { app_key: appKey })
-    flashOperationMessage('已恢复默认配置')
+    operationMessage.value = ''
+    ElMessage.success('已恢复默认配置')
     await loadAppProfileBootstrap()
   } catch (error) {
-    appProfileError.value = error instanceof Error ? error.message : String(error)
+    showAppProfileError(error)
   } finally {
     savingAppKey.value = ''
   }
@@ -208,10 +210,11 @@ async function deleteAppProfileRecords(appKey: string): Promise<void> {
   appProfileError.value = ''
   try {
     const result = await callTypedBridge('deleteAppRecords', { app_key: appKey })
-    flashOperationMessage(`已移除 ${result.deleted_count} 条历史记录`)
+    operationMessage.value = ''
+    ElMessage.success(`已移除 ${result.deleted_count} 条历史记录`)
     await loadAppProfileBootstrap()
   } catch (error) {
-    appProfileError.value = error instanceof Error ? error.message : String(error)
+    showAppProfileError(error)
   } finally {
     savingAppKey.value = ''
   }
@@ -231,10 +234,11 @@ async function saveAllAppProfileDrafts(): Promise<void> {
       savingAppKey.value = payload.app_key
       await callTypedBridge('saveAppProfile', payload)
     }
-    flashOperationMessage(`已保存 ${payloads.length} 项应用配置`)
+    operationMessage.value = ''
+    ElMessage.success(`已保存 ${payloads.length} 项应用配置`)
     await loadAppProfileBootstrap()
   } catch (error) {
-    appProfileError.value = error instanceof Error ? error.message : String(error)
+    showAppProfileError(error)
   } finally {
     savingAppKey.value = ''
     bulkSaving.value = false
@@ -255,10 +259,11 @@ async function saveAppCategoryDraft(payload: { name: string; color: string }): P
   appProfileError.value = ''
   try {
     await callTypedBridge('saveAppCategory', payload)
-    flashOperationMessage('分类已保存')
+    operationMessage.value = ''
+    ElMessage.success('分类已保存')
     await loadAppProfileBootstrap()
   } catch (error) {
-    appProfileError.value = error instanceof Error ? error.message : String(error)
+    showAppProfileError(error)
   } finally {
     categorySaving.value = false
   }
@@ -272,13 +277,20 @@ async function deleteAppCategoryDraft(name: string): Promise<void> {
     if (selectedCategory.value === name) {
       appProfileFilters.value = { ...appProfileFilters.value, category: '' }
     }
-    flashOperationMessage('分类已删除')
+    operationMessage.value = ''
+    ElMessage.success('分类已删除')
     await loadAppProfileBootstrap()
   } catch (error) {
-    appProfileError.value = error instanceof Error ? error.message : String(error)
+    showAppProfileError(error)
   } finally {
     categorySaving.value = false
   }
+}
+
+function showAppProfileError(error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error)
+  appProfileError.value = message
+  ElMessage.error(message)
 }
 
 function flashOperationMessage(message: string): void {
@@ -350,7 +362,10 @@ onMounted(() => {
   const cacheFresh = hydrateAppProfileCache()
   if (!cacheFresh) {
     void loadAppProfileBootstrap()
+    return
   }
+
+  appProfileLoading.value = false
 })
 
 onBeforeUnmount(() => {
@@ -425,13 +440,21 @@ function paginateProfiles(
 }
 
 function countProfiles(profiles: readonly AppProfileConfig[]): AppProfileCounts {
-  return {
-    all: profiles.length,
-    classified: profiles.filter((profile) => profile.is_classified).length,
-    unclassified: profiles.filter((profile) => !profile.is_classified).length,
-    configured: profiles.filter((profile) => profile.is_configured).length,
-    excluded: profiles.filter((profile) => !profile.track_enabled).length
+  const counts = emptyAppProfileCounts()
+  counts.all = profiles.length
+
+  for (const profile of profiles) {
+    if (profile.is_classified) {
+      counts.classified += 1
+    } else {
+      counts.unclassified += 1
+    }
+
+    if (profile.is_configured) counts.configured += 1
+    if (!profile.track_enabled) counts.excluded += 1
   }
+
+  return counts
 }
 
 function profileMatchesKeyword(profile: AppProfileConfig, keyword: string): boolean {
@@ -570,4 +593,5 @@ function profileDisplayName(profile: AppProfileConfig): string {
   padding: 0;
   overflow: hidden;
 }
+
 </style>

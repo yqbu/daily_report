@@ -53,7 +53,7 @@ export interface OverviewPayload {
   }>
   source_distribution: Array<{ source_type: SourceType; count: number }>
   category_distribution: Array<{ category: string; count: number }>
-  hourly_activity: Array<{ hour: number; label: string; active_sec: number }>
+  hourly_activity: Array<{ hour: number; label: string; active_sec: number; total_sec?: number }>
 }
 
 export interface TimelineEvent {

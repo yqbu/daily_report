@@ -125,9 +125,9 @@ function toggleSortDirection(): void {
           <span>管理应用分类</span>
         </button>
 
-        <button class="icon-button" type="button" title="刷新应用列表" :disabled="loading" @click="emit('refresh')">
-          <Refresh class="button-icon" />
-        </button>
+<!--        <button class="icon-button" type="button" title="刷新应用列表" :disabled="loading" @click="emit('refresh')">-->
+<!--          <Refresh class="button-icon" />-->
+<!--        </button>-->
       </div>
     </header>
 
@@ -217,9 +217,9 @@ function toggleSortDirection(): void {
 }
 
 .overview-tools {
-  min-width: min(720px, 100%);
+  min-width: min(648px, 100%);
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto 38px;
+  grid-template-columns: minmax(260px, 1fr) auto;
   align-items: center;
   gap: 8px;
 }

@@ -1,6 +1,7 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 
-const AppProfiles = () => import('../pages/AppProfiles.vue')
+import AppProfiles from '../pages/AppProfiles.vue'
+
 const DataCenter = () => import('../pages/DataCenter.vue')
 const ReportWorkbench = () => import('../pages/ReportWorkbench.vue')
 const Settings = () => import('../pages/Settings.vue')
@@ -14,7 +15,8 @@ const router = createRouter({
       name: 'today',
       component: TodayOverview,
       meta: {
-        title: '今日总览'
+        title: '今日总览',
+        hideShellTopBar: true
       }
     },
     {
