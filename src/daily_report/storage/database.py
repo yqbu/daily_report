@@ -109,7 +109,25 @@ def _run_pre_schema_migrations(conn: sqlite3.Connection) -> None:
         conn,
         'app_sessions',
         {
+            'is_selected': 'INTEGER NOT NULL DEFAULT 1',
             'is_deleted': 'INTEGER NOT NULL DEFAULT 0',
+        },
+    )
+    _ensure_columns(
+        conn,
+        'browser_history_entries',
+        {
+            'is_selected': 'INTEGER NOT NULL DEFAULT 1',
+            'is_deleted': 'INTEGER NOT NULL DEFAULT 0',
+        },
+    )
+    _ensure_columns(
+        conn,
+        'clipboard_entries',
+        {
+            'is_selected': 'INTEGER NOT NULL DEFAULT 1',
+            'is_deleted': 'INTEGER NOT NULL DEFAULT 0',
+            'is_sensitive': 'INTEGER NOT NULL DEFAULT 0',
         },
     )
     _ensure_columns(
@@ -121,6 +139,14 @@ def _run_pre_schema_migrations(conn: sqlite3.Connection) -> None:
             'is_sensitive': 'INTEGER NOT NULL DEFAULT 0',
         },
     )
+    _ensure_columns(
+        conn,
+        'entry_annotations',
+        {
+            'is_sensitive_override': 'INTEGER',
+            'sensitivity_reason_override': 'TEXT',
+        },
+    )
 
 
 def _run_safe_migrations(conn: sqlite3.Connection) -> None:
@@ -129,6 +155,25 @@ def _run_safe_migrations(conn: sqlite3.Connection) -> None:
         conn,
         'app_sessions',
         {
+            'is_selected': 'INTEGER NOT NULL DEFAULT 1',
+            'is_deleted': 'INTEGER NOT NULL DEFAULT 0',
+        },
+    )
+    _ensure_columns(
+        conn,
+        'browser_history_entries',
+        {
+            'is_selected': 'INTEGER NOT NULL DEFAULT 1',
+            'is_deleted': 'INTEGER NOT NULL DEFAULT 0',
+        },
+    )
+    _ensure_columns(
+        conn,
+        'clipboard_entries',
+        {
+            'is_sensitive': 'INTEGER NOT NULL DEFAULT 0',
+            'sensitivity_reason': 'TEXT',
+            'is_selected': 'INTEGER NOT NULL DEFAULT 1',
             'is_deleted': 'INTEGER NOT NULL DEFAULT 0',
         },
     )
@@ -164,6 +209,14 @@ def _run_safe_migrations(conn: sqlite3.Connection) -> None:
         'app_profiles',
         {
             'icon_path': 'TEXT',
+        },
+    )
+    _ensure_columns(
+        conn,
+        'entry_annotations',
+        {
+            'is_sensitive_override': 'INTEGER',
+            'sensitivity_reason_override': 'TEXT',
         },
     )
 
@@ -226,6 +279,26 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_entry_annotations_source
         ON entry_annotations(source_type, source_id)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_entry_annotations_sensitive
+        ON entry_annotations(source_type, is_sensitive_override)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_app_sessions_date_start_time
+        ON app_sessions(date, start_time)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_clipboard_entries_date_first_seen
+        ON clipboard_entries(date, first_seen_at)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_browser_history_entries_date_visit_time
+        ON browser_history_entries(date, visit_time)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_ai_prompt_entries_date_timestamp
+        ON ai_prompt_entries(date, timestamp)
         """,
     ]
     for sql in statements:

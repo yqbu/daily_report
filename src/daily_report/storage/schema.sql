@@ -255,6 +255,8 @@ CREATE TABLE IF NOT EXISTS entry_annotations (
     category TEXT,
     note TEXT,
     importance INTEGER NOT NULL DEFAULT 0,
+    is_sensitive_override INTEGER,
+    sensitivity_reason_override TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     UNIQUE(source_type, source_id)
@@ -262,3 +264,18 @@ CREATE TABLE IF NOT EXISTS entry_annotations (
 
 CREATE INDEX IF NOT EXISTS idx_entry_annotations_source
 ON entry_annotations(source_type, source_id);
+
+CREATE INDEX IF NOT EXISTS idx_entry_annotations_sensitive
+ON entry_annotations(source_type, is_sensitive_override);
+
+CREATE INDEX IF NOT EXISTS idx_app_sessions_date_start_time
+ON app_sessions(date, start_time);
+
+CREATE INDEX IF NOT EXISTS idx_clipboard_entries_date_first_seen
+ON clipboard_entries(date, first_seen_at);
+
+CREATE INDEX IF NOT EXISTS idx_browser_history_entries_date_visit_time
+ON browser_history_entries(date, visit_time);
+
+CREATE INDEX IF NOT EXISTS idx_ai_prompt_entries_date_timestamp
+ON ai_prompt_entries(date, timestamp);

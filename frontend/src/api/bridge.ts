@@ -62,6 +62,9 @@ export async function callBridge<T = unknown>(method: string, payload: unknown =
 
   const slot = bridge[method]
   if (typeof slot !== 'function') {
+    if (method === 'getDataCenterSummary' || method === 'getDataCenterAnalytics') {
+      return getBrowserFallback<T>(method, payload)
+    }
     throw new Error(`Python bridge method not found: ${method}`)
   }
 
@@ -293,7 +296,7 @@ function getBrowserFallback<T>(method: string, payload: unknown): T {
     case 'getOverview':
       return emptyOverview(date) as T
     case 'getTimeline':
-      return { items: [], total: 0 } as T
+      return { items: [], total: 0, nextCursor: null, hasMore: false } as T
     case 'listEntries':
       return {
         items: [],
@@ -307,6 +310,17 @@ function getBrowserFallback<T>(method: string, payload: unknown): T {
     case 'markEntryDeleted':
     case 'updateEntryAnnotation':
       return { ok: true } as T
+    case 'updateEntrySensitive':
+      return {
+        source_type: String(getPayloadValue(payload, 'sourceType') || 'app'),
+        id: getPayloadNumber(payload, 'id', 0),
+        is_sensitive: Boolean(getPayloadValue(payload, 'sensitive')),
+        sensitivity_reason: getPayloadValue(payload, 'reason') || null
+      } as T
+    case 'getDataCenterSummary':
+      return emptyDataCenterSummary() as T
+    case 'getDataCenterAnalytics':
+      return { summary: emptyDataCenterSummary(), charts: {} } as T
     case 'listAppProfiles':
       return {
         items: [],
@@ -332,19 +346,39 @@ function getBrowserFallback<T>(method: string, payload: unknown): T {
         fallback_category: '其他'
       } as T
     case 'getReportMaterials':
-      return { date, items: [], total: 0 } as T
+      return {
+        summary: {
+          total_count: 0,
+          selected_count: 0,
+          sensitive_excluded_count: 0,
+          pending_count: 0,
+          estimated_prompt_chars: 0
+        },
+        items: [],
+        hasMore: false
+      } as T
+    case 'batchUpdateEntrySelection':
+      return { ok: true, updated: 0 } as T
     case 'buildPrompt':
       return emptyPromptPreview(date, payload) as T
     case 'generateReport':
       return {
         report_id: 0,
         prompt_text: '',
-        report_markdown: ''
+        report_markdown: '',
+        material_snapshot_json: '',
+        created_at: new Date().toISOString()
       } as T
+    case 'saveReport':
+      return { report_id: 0, saved: true } as T
     case 'getLatestReport':
       return null as T
     case 'listReports':
       return { items: [], total: 0 } as T
+    case 'getReportDetail':
+      return null as T
+    case 'deleteReport':
+      return { ok: true } as T
     case 'getSettings':
       return defaultSettings() as T
     case 'saveSettings':
@@ -405,6 +439,19 @@ function emptyOverview(date: string): OverviewPayload {
     source_distribution: [],
     category_distribution: [],
     hourly_activity: []
+  }
+}
+
+function emptyDataCenterSummary() {
+  return {
+    total: 0,
+    app: 0,
+    browser: 0,
+    clipboard: 0,
+    ai_prompt: 0,
+    sensitive: 0,
+    deleted: 0,
+    categories: []
   }
 }
 

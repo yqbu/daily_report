@@ -1,13 +1,10 @@
 <script setup lang="ts">
-import { computed, shallowRef } from 'vue'
-import { RouterView, useRoute } from 'vue-router'
+import { shallowRef } from 'vue'
+import { RouterView } from 'vue-router'
 
 import Sidebar from '../components/Sidebar.vue'
-import TopBar from '../components/TopBar.vue'
 
 const sidebarExpanded = shallowRef(false)
-const route = useRoute()
-const showShellTopBar = computed(() => route.meta.hideShellTopBar !== true)
 
 function toggleSidebar(): void {
   sidebarExpanded.value = !sidebarExpanded.value
@@ -18,9 +15,7 @@ function toggleSidebar(): void {
   <div class="app-shell" :class="{ 'app-shell--expanded': sidebarExpanded }">
     <Sidebar :expanded="sidebarExpanded" @toggle="toggleSidebar" />
 
-    <main class="app-main" :class="{ 'app-main--full': !showShellTopBar }">
-      <TopBar v-if="showShellTopBar" />
-
+    <main class="app-main">
       <section class="app-workspace">
         <RouterView />
       </section>
@@ -50,14 +45,9 @@ function toggleSidebar(): void {
   height: 100vh;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 14px;
+  grid-template-rows: minmax(0, 1fr);
   padding: 14px 16px 16px 16px;
   overflow: hidden;
-}
-
-.app-main--full {
-  grid-template-rows: minmax(0, 1fr);
 }
 
 .app-workspace {

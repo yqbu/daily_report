@@ -3,6 +3,8 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import asdict, dataclass
 from datetime import date as date_cls
+from datetime import datetime
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal
 
@@ -32,6 +34,9 @@ class TimelineEvent:
     is_selected: bool
     is_sensitive: bool
     is_deleted: bool
+    source_ids: list[int] | None = None
+    item_count: int = 1
+    aggregate_kind: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -47,8 +52,10 @@ class TimelineService:
         source_types: list[str] | None = None,
         selected: bool | None = None,
         sensitive: bool | None = None,
+        category: str | list[str] | None = None,
         keyword: str | None = None,
         limit: int = 500,
+        offset: int = 0,
         sort_order: str = 'asc',
     ) -> list[TimelineEvent]:
         day = date or date_cls.today().isoformat()
@@ -57,17 +64,25 @@ class TimelineService:
         with self._connect() as conn:
             annotations = AnnotationRepository(conn)
             if 'app' in wanted:
-                events.extend(self._list_app(conn, annotations, day, selected, sensitive, keyword))
+                events.extend(self._list_app(conn, annotations, day, selected, keyword))
             if 'browser' in wanted:
-                events.extend(self._list_browser(conn, annotations, day, selected, sensitive, keyword))
+                events.extend(self._list_browser(conn, annotations, day, selected, keyword))
             if 'clipboard' in wanted:
                 events.extend(self._list_clipboard(conn, annotations, day, selected, sensitive, keyword))
             if 'ai_prompt' in wanted:
                 events.extend(self._list_ai_prompt(conn, annotations, day, selected, sensitive, keyword))
 
+        if sensitive is not None:
+            events = [event for event in events if event.is_sensitive is sensitive]
+        categories = _normalize_categories(category)
+        if categories:
+            events = [event for event in events if event.category in categories]
+
         reverse = sort_order.lower() == 'desc'
         events.sort(key=lambda event: (event.start_time or '', event.source_id), reverse=reverse)
-        return events[: max(1, int(limit))]
+        start = max(0, int(offset or 0))
+        stop = start + max(1, int(limit))
+        return events[start:stop]
 
     def update_entry_selection(self, source_type: str, source_id: int, selected: bool) -> None:
         table = self._source_table(source_type)
@@ -87,7 +102,12 @@ class TimelineService:
             )
             conn.commit()
 
-    def get_entry_detail(self, source_type: str, source_id: int) -> dict[str, Any] | None:
+    def get_entry_detail(
+        self,
+        source_type: str,
+        source_id: int,
+        source_ids: list[int] | None = None,
+    ) -> dict[str, Any] | None:
         table = self._source_table(source_type)
         with self._connect() as conn:
             row = conn.execute(f"SELECT * FROM {table} WHERE id = ?", (int(source_id),)).fetchone()
@@ -97,6 +117,22 @@ class TimelineService:
             normalized = self._normalize_source_type(source_type)
             annotation = AnnotationRepository(conn).get_annotation(normalized, int(source_id))
             data['annotation'] = dict(annotation) if annotation else None
+            ids = [int(item) for item in (source_ids or []) if int(item) > 0]
+            if normalized == 'app' and len(ids) > 1:
+                placeholders = ','.join('?' for _ in ids)
+                rows = conn.execute(
+                    f"""
+                    SELECT id, app_name, process_name, window_title, start_time, end_time,
+                           duration_sec, active_duration_sec
+                    FROM app_sessions
+                    WHERE id IN ({placeholders})
+                    ORDER BY start_time ASC, id ASC
+                    """,
+                    tuple(ids),
+                ).fetchall()
+                data['source_ids'] = ids
+                data['aggregate_items'] = [dict(item) for item in rows]
+                data['aggregate_count'] = len(rows)
             return data
 
     def _list_app(
@@ -105,10 +141,9 @@ class TimelineService:
         annotations: AnnotationRepository,
         day: str,
         selected: bool | None,
-        sensitive: bool | None,
         keyword: str | None,
     ) -> list[TimelineEvent]:
-        if sensitive is True or not _table_exists(conn, 'app_sessions'):
+        if not _table_exists(conn, 'app_sessions'):
             return []
         clauses = ['a.date = ?']
         params: list[Any] = [day]
@@ -140,6 +175,7 @@ class TimelineService:
         events = []
         for row in rows:
             annotation = annotation_map.get(int(row['id']), {})
+            is_sensitive = bool(annotation.get('is_sensitive_override') or 0)
             category = (
                 annotation.get('category')
                 or _row_optional_text(row, 'profile_category')
@@ -162,11 +198,11 @@ class TimelineService:
                     content_preview=subtitle,
                     category=category,
                     is_selected=bool(row['is_selected']),
-                    is_sensitive=False,
+                    is_sensitive=is_sensitive,
                     is_deleted=bool(_row_get(row, 'is_deleted', 0)),
                 )
             )
-        return events
+        return _aggregate_app_events(events)
 
     def _list_browser(
         self,
@@ -174,10 +210,9 @@ class TimelineService:
         annotations: AnnotationRepository,
         day: str,
         selected: bool | None,
-        sensitive: bool | None,
         keyword: str | None,
     ) -> list[TimelineEvent]:
-        if sensitive is True or not _table_exists(conn, 'browser_history_entries'):
+        if not _table_exists(conn, 'browser_history_entries'):
             return []
         clauses = ['date = ?']
         params: list[Any] = [day]
@@ -202,6 +237,7 @@ class TimelineService:
         events = []
         for row in rows:
             annotation = annotation_map.get(int(row['id']), {})
+            is_sensitive = bool(annotation.get('is_sensitive_override') or 0)
             category = annotation.get('category') or infer_category_for_browser(
                 row['title'], row['url'], row['is_search'], row['search_query']
             )
@@ -219,7 +255,7 @@ class TimelineService:
                     content_preview=content_preview,
                     category=category,
                     is_selected=bool(row['is_selected']),
-                    is_sensitive=False,
+                    is_sensitive=is_sensitive,
                     is_deleted=bool(row['is_deleted']),
                 )
             )
@@ -396,3 +432,91 @@ def _row_bool(row: sqlite3.Row, key: str, default: bool) -> bool:
     if value is None:
         value = int(default)
     return bool(value)
+
+
+def _normalize_categories(value: str | list[str] | None) -> set[str]:
+    if value is None:
+        return set()
+    if isinstance(value, str):
+        text = value.strip()
+        return {text} if text else set()
+    return {str(item).strip() for item in value if str(item).strip()}
+
+
+def _parse_datetime(value: str | None) -> datetime | None:
+    text = str(value or '').strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace(' ', 'T'))
+    except ValueError:
+        return None
+
+
+def _aggregate_app_events(events: list[TimelineEvent]) -> list[TimelineEvent]:
+    if not events:
+        return []
+    gap_limit = timedelta(minutes=10)
+    sorted_events = sorted(events, key=lambda item: (item.start_time or '', item.source_id))
+    groups: list[list[TimelineEvent]] = []
+    for event in sorted_events:
+        if not groups:
+            groups.append([event])
+            continue
+        previous = groups[-1][-1]
+        previous_end = _parse_datetime(previous.end_time or previous.start_time)
+        current_start = _parse_datetime(event.start_time)
+        same_bucket = (
+            previous.title == event.title
+            and previous.category == event.category
+            and previous.is_sensitive is event.is_sensitive
+        )
+        close_enough = (
+            previous_end is not None
+            and current_start is not None
+            and current_start - previous_end <= gap_limit
+        )
+        if same_bucket and close_enough:
+            groups[-1].append(event)
+        else:
+            groups.append([event])
+
+    aggregated: list[TimelineEvent] = []
+    for group in groups:
+        if len(group) == 1:
+            single = group[0]
+            aggregated.append(
+                TimelineEvent(
+                    **{
+                        **single.to_dict(),
+                        'source_ids': [single.source_id],
+                        'item_count': 1,
+                        'aggregate_kind': None,
+                    }
+                )
+            )
+            continue
+        first = group[0]
+        last = group[-1]
+        source_ids = [item.source_id for item in group]
+        previews = [item.content_preview or item.subtitle for item in group if item.content_preview or item.subtitle]
+        aggregated.append(
+            TimelineEvent(
+                event_id=f"app-group:{source_ids[0]}-{source_ids[-1]}",
+                source_type='app',
+                source_id=source_ids[0],
+                source_ids=source_ids,
+                item_count=len(group),
+                aggregate_kind='app_session_group',
+                start_time=first.start_time,
+                end_time=last.end_time or last.start_time,
+                title=first.title,
+                subtitle=f"{len(group)} 条前台应用记录",
+                content_preview=previews[-1] if previews else '',
+                category=first.category,
+                is_selected=any(item.is_selected for item in group),
+                is_sensitive=first.is_sensitive,
+                is_deleted=all(item.is_deleted for item in group),
+            )
+        )
+    return aggregated

@@ -60,6 +60,9 @@ export interface TimelineEvent {
   event_id: string
   source_type: SourceType
   source_id: number
+  source_ids?: number[]
+  item_count?: number
+  aggregate_kind?: string | null
   start_time: string
   end_time?: string | null
   title: string
@@ -69,6 +72,23 @@ export interface TimelineEvent {
   is_selected: boolean
   is_sensitive: boolean
   is_deleted: boolean
+}
+
+export interface DataCenterSummaryPayload {
+  total: number
+  app: number
+  browser: number
+  clipboard: number
+  ai_prompt: number
+  sensitive: number
+  deleted: number
+  categories: Array<{ category: string; count: number }>
+  days: Array<{ date: string; count: number }>
+}
+
+export interface DataCenterAnalyticsPayload {
+  summary: DataCenterSummaryPayload
+  charts: Record<string, Array<Record<string, unknown>>>
 }
 
 export interface MaterialCard {
@@ -142,16 +162,24 @@ export interface LocalSettingsPayload {
 
 export interface TimelineFilters {
   source_types?: SourceType[]
+  sourceTypes?: SourceType[]
   selected?: boolean
   sensitive?: boolean
+  category?: string | null
+  categories?: string[]
   keyword?: string
   sort_order?: 'asc' | 'desc'
+  sortOrder?: 'asc' | 'desc'
+  startDate?: string | null
+  endDate?: string | null
   limit?: number
 }
 
 export interface EntryListFilters {
   selected?: boolean
   sensitive?: boolean
+  category?: string | null
+  categories?: string[]
   keyword?: string
 }
 
@@ -159,6 +187,8 @@ export interface EntryAnnotationPayload {
   category?: string | null
   note?: string | null
   importance?: number | null
+  is_sensitive_override?: boolean | null
+  sensitivity_reason_override?: string | null
 }
 
 export type AppProfileClassificationFilter = 'all' | 'classified' | 'unclassified' | 'configured'
@@ -262,6 +292,10 @@ export interface MaterialListPayload {
 export interface TimelineListPayload {
   items: TimelineEvent[]
   total: number
+  offset?: number
+  limit?: number
+  nextCursor?: string | null
+  hasMore?: boolean
 }
 
 /**
@@ -272,18 +306,42 @@ export interface TimelineListPayload {
  */
 export interface BridgeMethodPayloadMap {
   getOverview: { date?: string | null }
-  getTimeline: { date?: string | null; filters?: TimelineFilters }
-  listEntries: {
-    sourceType: SourceType
+  getTimeline: {
     date?: string | null
+    startDate?: string | null
+    endDate?: string | null
+    filters?: TimelineFilters
+    cursor?: string | null
+    offset?: number
+    limit?: number
+    pageSize?: number
+  }
+  listEntries: {
+    sourceType: SourceType | 'all'
+    date?: string | null
+    startDate?: string | null
+    endDate?: string | null
     filters?: EntryListFilters
     page: number
     pageSize: number
   }
-  getEntryDetail: { sourceType: SourceType; id: number }
+  getEntryDetail: { sourceType: SourceType; id: number; ids?: number[] }
   updateEntrySelection: { sourceType: SourceType; id: number; selected: boolean }
   markEntryDeleted: { sourceType: SourceType; id: number }
   updateEntryAnnotation: { sourceType: SourceType; id: number; payload: EntryAnnotationPayload }
+  updateEntrySensitive: { sourceType: SourceType; id: number; ids?: number[]; sensitive: boolean; reason?: string | null }
+  getDataCenterSummary: {
+    date?: string | null
+    startDate?: string | null
+    endDate?: string | null
+    filters?: TimelineFilters
+  }
+  getDataCenterAnalytics: {
+    startDate?: string | null
+    endDate?: string | null
+    filters?: TimelineFilters
+    chartTypes?: string[]
+  }
   listAppProfiles: {
     filters?: AppProfileListFilters
     page?: number
@@ -314,6 +372,9 @@ export interface BridgeMethodResultMap {
   updateEntrySelection: { ok?: boolean }
   markEntryDeleted: { ok?: boolean }
   updateEntryAnnotation: { ok?: boolean }
+  updateEntrySensitive: { source_type: SourceType; id: number; ids?: number[]; is_sensitive: boolean; sensitivity_reason?: string | null }
+  getDataCenterSummary: DataCenterSummaryPayload
+  getDataCenterAnalytics: DataCenterAnalyticsPayload
   listAppProfiles: AppProfileListPayload
   saveAppProfile: AppProfileConfig
   resetAppProfile: AppProfileConfig

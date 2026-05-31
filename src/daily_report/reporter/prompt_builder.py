@@ -51,12 +51,23 @@ class PromptBuilder:
         stats: dict[str, Any] | None = None,
         template_name: str = DEFAULT_TEMPLATE_NAME,
         max_chars: int = 12000,
+        extra_requirements: str | None = None,
+        output_focus: list[str] | None = None,
+        options: dict[str, Any] | None = None,
     ) -> str:
         stats = stats or {}
+        options = options or {}
         template_text = self.load_template(template_name)
         material_text = self._format_materials(materials)
         if not materials:
             material_text = '今日有效素材不足。请只基于已有统计进行保守总结，不要补充不存在的事项。'
+        focus_text = '、'.join(output_focus or []) or '完成事项、问题排查、明日计划'
+        extra_text = str(extra_requirements or '').strip() or '无'
+        option_lines = [
+            f"- 包含素材摘要：{'是' if options.get('includeMaterialSummary', True) else '否'}",
+            f"- 包含明日计划建议：{'是' if options.get('includeTomorrowPlan', True) else '否'}",
+            f"- 按分类组织：{'是' if options.get('groupByCategory', True) else '否'}",
+        ]
 
         prompt = f"""你是一名严谨的个人工作日报写作助手。请根据用户本地采集并人工筛选后的素材，生成中文 Markdown 日报。
 
@@ -73,6 +84,15 @@ class PromptBuilder:
 
 # 输出模板
 {template_text}
+
+# 本次输出重点
+{focus_text}
+
+# 本次补充要求
+{extra_text}
+
+# 输出选项
+{chr(10).join(option_lines)}
 
 # 已筛选素材
 {material_text}
@@ -132,6 +152,9 @@ def build_prompt_from_materials(
     stats: dict[str, Any] | None = None,
     template_name: str = DEFAULT_TEMPLATE_NAME,
     max_chars: int = 12000,
+    extra_requirements: str | None = None,
+    output_focus: list[str] | None = None,
+    options: dict[str, Any] | None = None,
 ) -> str:
     return PromptBuilder().build_prompt(
         date=date,
@@ -139,6 +162,9 @@ def build_prompt_from_materials(
         stats=stats,
         template_name=template_name,
         max_chars=max_chars,
+        extra_requirements=extra_requirements,
+        output_focus=output_focus,
+        options=options,
     )
 
 

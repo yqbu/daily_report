@@ -81,6 +81,8 @@ class PythonBridge(QObject):
             return self.service.list_entries(
                 source_type=str(data.get("sourceType") or data.get("source_type") or ""),
                 target_date=str(data.get("date") or "").strip() or None,
+                start_date=str(data.get("startDate") or data.get("start_date") or "").strip() or None,
+                end_date=str(data.get("endDate") or data.get("end_date") or "").strip() or None,
                 filters=data.get("filters") if isinstance(data.get("filters"), dict) else {},
                 page=int(data.get("page") or 1),
                 page_size=int(data.get("pageSize") or data.get("page_size") or 30),
@@ -91,9 +93,12 @@ class PythonBridge(QObject):
     @Slot(str, result=str)
     def getEntryDetail(self, payload: str = "") -> str:  # noqa: N802
         def run(data: dict[str, Any]) -> Any:
+            raw_ids = data.get("ids")
+            source_ids = [int(item) for item in raw_ids] if isinstance(raw_ids, list) else None
             return self.service.get_entry_detail(
                 str(data.get("sourceType") or data.get("source_type") or ""),
                 int(data.get("id") or 0),
+                source_ids,
             )
 
         return self._call(payload, run)
@@ -132,6 +137,37 @@ class PythonBridge(QObject):
         return self._call(payload, run)
 
     @Slot(str, result=str)
+    def updateEntrySensitive(self, payload: str = "") -> str:  # noqa: N802
+        def run(data: dict[str, Any]) -> dict[str, Any]:
+            raw_ids = data.get("ids")
+            source_ids = [int(item) for item in raw_ids] if isinstance(raw_ids, list) else None
+            return self.service.update_entry_sensitive(
+                str(data.get("sourceType") or data.get("source_type") or ""),
+                int(data.get("id") or 0),
+                bool(data.get("sensitive")),
+                str(data.get("reason") or "").strip() or None,
+                source_ids,
+            )
+
+        return self._call(payload, run)
+
+    @Slot(str, result=str)
+    def getDataCenterSummary(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, self.service.get_data_center_summary)
+
+    @Slot(str, result=str)
+    def getDataCenterAnalytics(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, self.service.get_data_center_analytics)
+
+    @Slot(str, result=str)
+    def get_data_center_summary(self, payload: str = "") -> str:
+        return self.getDataCenterSummary(payload)
+
+    @Slot(str, result=str)
+    def get_data_center_analytics(self, payload: str = "") -> str:
+        return self.getDataCenterAnalytics(payload)
+
+    @Slot(str, result=str)
     def listAppProfiles(self, payload: str = "") -> str:  # noqa: N802
         return self._call(payload, self.service.list_app_profiles)
 
@@ -161,28 +197,23 @@ class PythonBridge(QObject):
 
     @Slot(str, result=str)
     def getReportMaterials(self, payload: str = "") -> str:  # noqa: N802
-        return self._call(payload, lambda data: self.service.get_report_materials(_date_arg(data)))
+        return self._call(payload, self.service.get_report_materials)
+
+    @Slot(str, result=str)
+    def batchUpdateEntrySelection(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, self.service.batch_update_entry_selection)
 
     @Slot(str, result=str)
     def buildPrompt(self, payload: str = "") -> str:  # noqa: N802
-        def run(data: dict[str, Any]) -> dict[str, Any]:
-            return self.service.build_prompt(
-                _date_arg(data),
-                str(data.get("templateName") or data.get("template_name") or "daily_standard"),
-            )
-
-        return self._call(payload, run)
+        return self._call(payload, self.service.build_prompt)
 
     @Slot(str, result=str)
     def generateReport(self, payload: str = "") -> str:  # noqa: N802
-        def run(data: dict[str, Any]) -> dict[str, Any]:
-            return self.service.generate_report_sync(
-                _date_arg(data),
-                str(data.get("templateName") or data.get("template_name") or "daily_standard"),
-                str(data.get("apiKey") or data.get("api_key") or "").strip() or None,
-            )
+        return self._call(payload, self.service.generate_report_sync)
 
-        return self._call(payload, run)
+    @Slot(str, result=str)
+    def saveReport(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, self.service.save_report)
 
     @Slot(str, result=str)
     def getLatestReport(self, payload: str = "") -> str:  # noqa: N802
@@ -190,13 +221,15 @@ class PythonBridge(QObject):
 
     @Slot(str, result=str)
     def listReports(self, payload: str = "") -> str:  # noqa: N802
-        def run(data: dict[str, Any]) -> dict[str, Any]:
-            return self.service.list_reports(
-                str(data.get("startDate") or data.get("start_date") or "").strip() or None,
-                str(data.get("endDate") or data.get("end_date") or "").strip() or None,
-            )
+        return self._call(payload, self.service.list_reports)
 
-        return self._call(payload, run)
+    @Slot(str, result=str)
+    def getReportDetail(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, self.service.get_report_detail_by_id)
+
+    @Slot(str, result=str)
+    def deleteReport(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, self.service.delete_report_by_id)
 
     @Slot(str, result=str)
     def getSettings(self, payload: str = "") -> str:  # noqa: N802

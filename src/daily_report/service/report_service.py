@@ -4,6 +4,7 @@ import json
 import logging
 from dataclasses import asdict, dataclass
 from datetime import date as date_cls
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,8 @@ class GeneratedReport:
     report_id: int
     prompt_text: str
     report_markdown: str
+    material_snapshot_json: str = ''
+    created_at: str = ''
 
 
 class ReportService:
@@ -63,6 +66,9 @@ class ReportService:
         *,
         template_name: str = 'daily_standard',
         max_chars: int | None = None,
+        extra_requirements: str | None = None,
+        output_focus: list[str] | None = None,
+        options: dict[str, Any] | None = None,
     ) -> str:
         self.ensure_database()
         settings = load_local_settings()
@@ -76,6 +82,9 @@ class ReportService:
             stats=stats,
             template_name=template_name,
             max_chars=max_chars or settings.model.max_prompt_chars,
+            extra_requirements=extra_requirements,
+            output_focus=output_focus,
+            options=options,
         )
 
     def generate_report(
@@ -85,11 +94,22 @@ class ReportService:
         api_key: str | None = None,
         save: bool = True,
         template_name: str = 'daily_standard',
+        prompt_text: str | None = None,
+        extra_requirements: str | None = None,
+        output_focus: list[str] | None = None,
+        options: dict[str, Any] | None = None,
     ) -> GeneratedReport:
         self.ensure_database()
         settings = load_local_settings()
         day = target_date or date_cls.today().isoformat()
-        prompt = self.build_prompt(day, template_name=template_name, max_chars=settings.model.max_prompt_chars)
+        prompt = prompt_text or self.build_prompt(
+            day,
+            template_name=template_name,
+            max_chars=settings.model.max_prompt_chars,
+            extra_requirements=extra_requirements,
+            output_focus=output_focus,
+            options=options,
+        )
 
         resolved_api_key = api_key or get_model_api_key(settings)
         if not resolved_api_key:
@@ -120,10 +140,12 @@ class ReportService:
             raise RuntimeError('Model returned an empty report. Nothing was saved.')
 
         report_id = -1
+        material_snapshot_json = ''
         if save:
             snapshot = self.material_service.build_snapshot(day, include_sensitive=False)
             stats = self._build_day_stats(day)
             source_counts = self.material_service.count_selected_sources(day, include_sensitive=False)
+            material_snapshot_json = json.dumps(snapshot, ensure_ascii=False)
             report_id = ReportStore(self.connection_factory).save(
                 SaveReportCommand(
                     date=day,
@@ -133,18 +155,61 @@ class ReportService:
                     model_name=settings.model.model_name,
                     prompt_text=prompt,
                     report_markdown=markdown,
-                    material_snapshot_json=json.dumps(snapshot, ensure_ascii=False),
+                    material_snapshot_json=material_snapshot_json,
                     material_summary=self._build_material_summary(day, snapshot),
                     source_counts={**source_counts, **stats},
                 )
             )
 
-        return GeneratedReport(report_id=report_id, prompt_text=prompt, report_markdown=markdown)
+        return GeneratedReport(
+            report_id=report_id,
+            prompt_text=prompt,
+            report_markdown=markdown,
+            material_snapshot_json=material_snapshot_json,
+            created_at=datetime.now().isoformat(timespec='seconds'),
+        )
+
+    def save_report(
+        self,
+        *,
+        target_date: str,
+        template_name: str,
+        prompt_text: str,
+        report_markdown: str,
+        material_snapshot_json: str | None = None,
+    ) -> int:
+        self.ensure_database()
+        settings = load_local_settings()
+        day = target_date or date_cls.today().isoformat()
+        snapshot = material_snapshot_json or json.dumps(
+            self.material_service.build_snapshot(day, include_sensitive=False),
+            ensure_ascii=False,
+        )
+        source_counts = self.material_service.count_selected_sources(day, include_sensitive=False)
+        stats = self._build_day_stats(day)
+        return ReportStore(self.connection_factory).save(
+            SaveReportCommand(
+                date=day,
+                report_type='daily',
+                template_name=template_name,
+                model_provider=settings.model.provider,
+                model_name=settings.model.model_name,
+                prompt_text=prompt_text,
+                report_markdown=report_markdown,
+                material_snapshot_json=snapshot,
+                material_summary=self._build_material_summary(day, {'source_counts': source_counts}),
+                source_counts={**source_counts, **stats},
+            )
+        )
 
     def get_latest_report(self, target_date: str | None = None):
         self.ensure_database()
         day = target_date or date_cls.today().isoformat()
         return ReportStore(self.connection_factory).latest_by_date(day)
+
+    def get_report_detail(self, report_id: int):
+        self.ensure_database()
+        return ReportStore(self.connection_factory).get_by_id(report_id)
 
     def list_reports(
         self,

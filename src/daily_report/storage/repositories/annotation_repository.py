@@ -20,6 +20,8 @@ class AnnotationRepository:
         category: str | None = None,
         note: str | None = None,
         importance: int | None = None,
+        is_sensitive_override: bool | None = None,
+        sensitivity_reason_override: str | None = None,
     ) -> sqlite3.Row:
         self._validate_source_type(source_type)
         existing = self.get_annotation(source_type, source_id)
@@ -29,9 +31,17 @@ class AnnotationRepository:
             self.conn.execute(
                 """
                 INSERT INTO entry_annotations (
-                    source_type, source_id, category, note, importance, created_at, updated_at
+                    source_type,
+                    source_id,
+                    category,
+                    note,
+                    importance,
+                    is_sensitive_override,
+                    sensitivity_reason_override,
+                    created_at,
+                    updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     source_type,
@@ -39,6 +49,8 @@ class AnnotationRepository:
                     category,
                     note,
                     int(importance if importance is not None else 0),
+                    _optional_bool_int(is_sensitive_override),
+                    sensitivity_reason_override,
                     now,
                     now,
                 ),
@@ -50,6 +62,8 @@ class AnnotationRepository:
                 SET category = COALESCE(?, category),
                     note = COALESCE(?, note),
                     importance = COALESCE(?, importance),
+                    is_sensitive_override = COALESCE(?, is_sensitive_override),
+                    sensitivity_reason_override = COALESCE(?, sensitivity_reason_override),
                     updated_at = ?
                 WHERE source_type = ? AND source_id = ?
                 """,
@@ -57,6 +71,8 @@ class AnnotationRepository:
                     category,
                     note,
                     int(importance) if importance is not None else None,
+                    _optional_bool_int(is_sensitive_override),
+                    sensitivity_reason_override,
                     now,
                     source_type,
                     int(source_id),
@@ -78,6 +94,20 @@ class AnnotationRepository:
             """,
             (source_type, int(source_id)),
         ).fetchone()
+
+    def update_sensitive_override(
+        self,
+        source_type: str,
+        source_id: int,
+        sensitive: bool,
+        reason: str | None = None,
+    ) -> sqlite3.Row:
+        return self.update_annotation(
+            source_type=source_type,
+            source_id=source_id,
+            is_sensitive_override=sensitive,
+            sensitivity_reason_override=reason,
+        )
 
     def get_annotations_for_ids(
         self,
@@ -106,3 +136,9 @@ class AnnotationRepository:
 
 def _now() -> str:
     return datetime.now().isoformat(timespec='seconds')
+
+
+def _optional_bool_int(value: bool | None) -> int | None:
+    if value is None:
+        return None
+    return int(bool(value))

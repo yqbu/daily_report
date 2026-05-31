@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, shallowRef } from 'vue'
 import {
   ElButton,
   ElIcon,
@@ -19,6 +19,8 @@ import {
   Cpu,
   DataAnalysis,
   FolderOpened,
+  Check,
+  Close,
   Lock,
   Monitor,
   Plus,
@@ -29,7 +31,6 @@ import { callBridge, callBridgeJob, callTypedBridge } from '../api/bridge'
 import type { LocalSettingsPayload } from '../api/types'
 import SettingsField from '../components/settings/SettingsField.vue'
 import SettingsSection from '../components/settings/SettingsSection.vue'
-import { useAppStore } from '../stores/app'
 
 type LoggingLevel = 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR'
 type SettingsTab = 'collector' | 'privacy' | 'model' | 'system'
@@ -43,7 +44,6 @@ interface SettingsDraft extends Omit<LocalSettingsPayload, 'yasb'> {
   yasb: YasbSettingsDraft
 }
 
-const appStore = useAppStore()
 const savedSettings = ref<SettingsDraft | null>(null)
 const draftSettings = ref<SettingsDraft | null>(null)
 const loading = shallowRef(false)
@@ -104,7 +104,7 @@ const hasUnsavedChanges = computed(() => {
   return stableSettingsJson(savedSettings.value) !== stableSettingsJson(draftSettings.value)
 })
 
-const topBarSaveStatus = computed(() => {
+const saveStatus = computed(() => {
   if (saving.value) {
     return { text: '保存中', tone: 'saving' as const }
   }
@@ -119,6 +119,7 @@ const topBarSaveStatus = computed(() => {
 
   return { text: operationMessage.value || '已保存', tone: 'saved' as const }
 })
+const saveStatusClass = computed(() => `save-status--${saveStatus.value.tone}`)
 
 async function loadSettings(): Promise<void> {
   const requestId = settingsLoadRequestId.value + 1
@@ -336,58 +337,53 @@ function joinPath(directory: string, fileName: string): string {
   return trimmed.endsWith('/') || trimmed.endsWith('\\') ? `${trimmed}${fileName}` : `${trimmed}${separator}${fileName}`
 }
 
-watch(
-  [topBarSaveStatus, hasUnsavedChanges, saving, loading],
-  ([status]) => {
-    appStore.setTopBarState({
-      mode: 'app-config',
-      statusText: status.text,
-      statusTone: status.tone,
-      canCancel: hasUnsavedChanges.value && !saving.value,
-      canRefresh: !saving.value,
-      canSave: hasUnsavedChanges.value && !saving.value,
-      refreshing: loading.value,
-      saving: saving.value
-    })
-  },
-  { immediate: true }
-)
-
-watch(
-  () => appStore.topBar.saveRequestId,
-  () => {
-    if (appStore.topBar.mode !== 'app-config') return
-    void saveSettings()
-  }
-)
-
-watch(
-  () => appStore.topBar.cancelRequestId,
-  () => {
-    if (appStore.topBar.mode !== 'app-config') return
-    cancelSettingsChanges()
-  }
-)
-
-watch(
-  () => appStore.topBar.refreshRequestId,
-  () => {
-    if (appStore.topBar.mode !== 'app-config') return
-    void loadSettings()
-  }
-)
-
 onMounted(() => {
   void loadSettings()
-})
-
-onBeforeUnmount(() => {
-  appStore.resetTopBarState()
 })
 </script>
 
 <template>
   <div class="settings-root">
+    <header class="settings-topbar">
+      <div class="title-block">
+        <span class="workspace-label">Daily Report</span>
+        <h1 class="page-title">设置</h1>
+      </div>
+
+      <div class="top-actions">
+        <button
+          class="top-button"
+          type="button"
+          :disabled="loading || saving"
+          title="重新读取本地配置"
+          @click="loadSettings"
+        >
+          <Refresh class="action-icon" :class="{ 'action-icon--spin': loading }" />
+          <span>刷新</span>
+        </button>
+        <span class="save-status" :class="saveStatusClass">{{ saveStatus.text }}</span>
+        <span class="top-action-divider" aria-hidden="true"></span>
+        <button
+          class="top-button"
+          type="button"
+          :disabled="!hasUnsavedChanges || saving"
+          @click="cancelSettingsChanges"
+        >
+          <Close class="action-icon" />
+          <span>取消</span>
+        </button>
+        <button
+          class="top-button top-button--primary"
+          type="button"
+          :disabled="!hasUnsavedChanges || saving"
+          @click="saveSettings"
+        >
+          <Check class="action-icon" />
+          <span>保存</span>
+        </button>
+      </div>
+    </header>
+
     <div v-if="loading && !draftSettings" class="settings-loading">
       <el-icon class="settings-loading-icon"><Refresh /></el-icon>
       <span>正在读取本地配置...</span>
@@ -648,8 +644,136 @@ onBeforeUnmount(() => {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
   overflow: hidden;
+}
+
+.settings-topbar {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+}
+
+.title-block {
+  min-width: 0;
+}
+
+.workspace-label {
+  display: block;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.page-title {
+  margin: 4px 0 0;
+  color: #172033;
+  font-size: 22px;
+  font-weight: 720;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.save-status,
+.top-button {
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  color: #526179;
+  background: #ffffff;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.save-status {
+  background: #f8fafc;
+}
+
+.save-status--dirty {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.save-status--saving {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.save-status--saved {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+}
+
+.save-status--error {
+  color: #b42318;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.top-action-divider {
+  width: 1px;
+  height: 24px;
+  flex: 0 0 auto;
+  background: #dce3ee;
+}
+
+.top-button {
+  cursor: pointer;
+}
+
+.top-button:hover {
+  color: #2563eb;
+  border-color: #c9dcff;
+  background: #eff6ff;
+}
+
+.top-button--primary {
+  color: #ffffff;
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+.top-button--primary:hover {
+  color: #ffffff;
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+}
+
+.top-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.action-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.action-icon--spin {
+  animation: settings-spin 900ms linear infinite;
 }
 
 .settings-loading {
@@ -868,6 +992,19 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 760px) {
+  .settings-topbar {
+    min-height: auto;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .top-actions {
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
   .collector-toggle-grid {
     grid-template-columns: minmax(0, 1fr);
     padding: 16px;

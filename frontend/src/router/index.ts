@@ -15,8 +15,7 @@ const router = createRouter({
       name: 'today',
       component: TodayOverview,
       meta: {
-        title: '今日总览',
-        hideShellTopBar: true
+        title: '今日总览'
       }
     },
     {

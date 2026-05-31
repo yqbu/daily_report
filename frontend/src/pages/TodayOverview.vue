@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, shallowRef } from 'vue'
 import { RouterLink } from 'vue-router'
-import { ElDatePicker } from 'element-plus'
 import {
   Calendar,
   ChatDotRound,
@@ -15,6 +14,7 @@ import {
 
 import { callTypedBridge } from '../api/bridge'
 import type { AppProfileConfig, OverviewPayload, SourceType, TimelineEvent } from '../api/types'
+import DateRangePicker from '../components/DateRangePicker.vue'
 
 type DateRange = [Date, Date]
 type Tone = 'blue' | 'green' | 'orange' | 'purple' | 'slate'
@@ -86,32 +86,6 @@ const recentEvents = shallowRef<TimelineEvent[]>([])
 const appProfiles = shallowRef<AppProfileConfig[]>([])
 const loading = shallowRef(false)
 let loadRequestId = 0
-
-const dateShortcuts = [
-  {
-    text: '今天',
-    value: () => [startOfToday(), startOfToday()]
-  },
-  {
-    text: '最近三天',
-    value: () => [addDays(startOfToday(), -2), startOfToday()]
-  },
-  {
-    text: '最近一周',
-    value: () => [addDays(startOfToday(), -6), startOfToday()]
-  },
-  {
-    text: '最近一月',
-    value: () => [addDays(startOfToday(), -29), startOfToday()]
-  },
-  {
-    text: '本月',
-    value: () => {
-      const today = startOfToday()
-      return [new Date(today.getFullYear(), today.getMonth(), 1), today]
-    }
-  }
-]
 
 const selectedDates = computed(() => datesBetween(dateRange.value[0], dateRange.value[1]))
 const rangeLabel = computed(() => {
@@ -507,15 +481,9 @@ onMounted(() => {
       </div>
 
       <div class="top-actions">
-        <ElDatePicker
+        <DateRangePicker
           v-model="dateRange"
           class="date-picker"
-          type="daterange"
-          range-separator="至"
-          start-placeholder="开始时间"
-          end-placeholder="结束时间"
-          :shortcuts="dateShortcuts"
-          :clearable="false"
           @change="handleDateRangeChange"
         />
 
@@ -872,7 +840,7 @@ onMounted(() => {
   grid-template-columns: 38px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
-  padding: 14px;
+  padding: 10px 14px;
 }
 
 .metric-icon {

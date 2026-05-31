@@ -7,8 +7,9 @@ const APP_PROFILE_CACHE_TTL_MS = 60_000
 </script>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue'
+import { computed, onMounted, shallowRef, useTemplateRef } from 'vue'
 import { ElDrawer, ElMessage } from 'element-plus'
+import { Check, Close, Refresh } from '@element-plus/icons-vue'
 
 import { callTypedBridge } from '../api/bridge'
 import type {
@@ -23,7 +24,6 @@ import type {
 import AppCategoryPanel from '../components/app-profiles/AppCategoryPanel.vue'
 import AppProfileListPanel from '../components/app-profiles/AppProfileListPanel.vue'
 import AppProfileOverview from '../components/app-profiles/AppProfileOverview.vue'
-import { useAppStore } from '../stores/app'
 
 type FilterPatch = Partial<AppProfileListFilters>
 type AppProfileListPanelInstance = InstanceType<typeof AppProfileListPanel>
@@ -33,7 +33,6 @@ const appProfileCollator = new Intl.Collator('zh-CN', {
   sensitivity: 'base'
 })
 
-const appStore = useAppStore()
 const profileListPanel = useTemplateRef<AppProfileListPanelInstance>('profileListPanel')
 const appProfileFilters = shallowRef<AppProfileListFilters>({
   classification: 'all',
@@ -68,7 +67,7 @@ const appProfileSummary = computed(() => {
   return countProfiles(filterProfiles(appProfiles.value.items, normalizedCountFilters.value))
 })
 const selectedCategory = computed(() => appProfileFilters.value.category || '')
-const topBarSaveStatus = computed(() => {
+const saveStatus = computed(() => {
   if (bulkSaving.value) {
     return {
       text: '保存中',
@@ -308,47 +307,6 @@ function normalizeClassification(
   return value ?? 'all'
 }
 
-watch(
-  [topBarSaveStatus, appProfileDirty, bulkSaving, appProfileLoading],
-  ([status]) => {
-    appStore.setTopBarState({
-      mode: 'app-config',
-      statusText: status.text,
-      statusTone: status.tone,
-      canCancel: appProfileDirty.value && !bulkSaving.value,
-      canRefresh: !bulkSaving.value,
-      canSave: appProfileDirty.value && !bulkSaving.value,
-      refreshing: appProfileLoading.value,
-      saving: bulkSaving.value
-    })
-  },
-  { immediate: true }
-)
-
-watch(
-  () => appStore.topBar.saveRequestId,
-  () => {
-    if (appStore.topBar.mode !== 'app-config') return
-    void saveAllAppProfileDrafts()
-  }
-)
-
-watch(
-  () => appStore.topBar.cancelRequestId,
-  () => {
-    if (appStore.topBar.mode !== 'app-config') return
-    cancelAllAppProfileDrafts()
-  }
-)
-
-watch(
-  () => appStore.topBar.refreshRequestId,
-  () => {
-    if (appStore.topBar.mode !== 'app-config') return
-    void loadAppProfileBootstrap()
-  }
-)
-
 defineExpose({
   loadAppProfileBootstrap,
   saveAppProfileDraft,
@@ -367,10 +325,7 @@ onMounted(() => {
 
   appProfileLoading.value = false
 })
-
-onBeforeUnmount(() => {
-  appStore.resetTopBarState()
-})
+const saveStatusClass = computed(() => `save-status--${saveStatus.value.tone}`)
 
 function emptyAppProfileList(): AppProfileListPayload {
   return {
@@ -504,6 +459,45 @@ function profileDisplayName(profile: AppProfileConfig): string {
 
 <template>
   <div class="app-profiles-root">
+    <header class="app-profiles-topbar">
+      <div class="title-block">
+        <span class="workspace-label">Daily Report</span>
+        <h1 class="page-title">应用配置</h1>
+      </div>
+
+      <div class="top-actions">
+        <button
+          class="top-button"
+          type="button"
+          :disabled="appProfileLoading || bulkSaving"
+          title="刷新应用配置"
+          @click="loadAppProfileBootstrap"
+        >
+          <Refresh class="action-icon" :class="{ 'action-icon--spin': appProfileLoading }" />
+          <span>刷新</span>
+        </button>
+        <span class="save-status" :class="saveStatusClass">{{ saveStatus.text }}</span>
+        <span class="top-action-divider" aria-hidden="true"></span>
+        <button
+          class="top-button"
+          type="button"
+          :disabled="!appProfileDirty || bulkSaving"
+          @click="cancelAllAppProfileDrafts"
+        >
+          <Close class="action-icon" />
+          <span>取消</span>
+        </button>
+        <button
+          class="top-button top-button--primary"
+          type="button"
+          :disabled="!appProfileDirty || bulkSaving"
+          @click="saveAllAppProfileDrafts"
+        >
+          <Check class="action-icon" />
+          <span>保存</span>
+        </button>
+      </div>
+    </header>
 
     <div class="app-profiles-page">
       <section class="app-profiles-pinned" aria-label="应用配置筛选与分类">
@@ -561,8 +555,136 @@ function profileDisplayName(profile: AppProfileConfig): string {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
   overflow: hidden;
+}
+
+.app-profiles-topbar {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+}
+
+.title-block {
+  min-width: 0;
+}
+
+.workspace-label {
+  display: block;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.page-title {
+  margin: 4px 0 0;
+  color: #172033;
+  font-size: 22px;
+  font-weight: 720;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.save-status,
+.top-button {
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  color: #526179;
+  background: #ffffff;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.save-status {
+  background: #f8fafc;
+}
+
+.save-status--dirty {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.save-status--saving {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.save-status--saved {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+}
+
+.save-status--error {
+  color: #b42318;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.top-action-divider {
+  width: 1px;
+  height: 24px;
+  flex: 0 0 auto;
+  background: #dce3ee;
+}
+
+.top-button {
+  cursor: pointer;
+}
+
+.top-button:hover {
+  color: #2563eb;
+  border-color: #c9dcff;
+  background: #eff6ff;
+}
+
+.top-button--primary {
+  color: #ffffff;
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+.top-button--primary:hover {
+  color: #ffffff;
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+}
+
+.top-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.action-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.action-icon--spin {
+  animation: app-profiles-spin 900ms linear infinite;
 }
 
 .app-profiles-page {
@@ -592,6 +714,27 @@ function profileDisplayName(profile: AppProfileConfig): string {
   min-height: 0;
   padding: 0;
   overflow: hidden;
+}
+
+@keyframes app-profiles-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 760px) {
+  .app-profiles-topbar {
+    min-height: auto;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .top-actions {
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
 }
 
 </style>

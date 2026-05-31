@@ -47,6 +47,10 @@ class ReportStore:
         with self.connection_factory.connect() as conn:
             return DailyReportRepository(conn).get_latest_by_date(date)
 
+    def get_by_id(self, report_id: int) -> DailyReportRecord | None:
+        with self.connection_factory.connect() as conn:
+            return DailyReportRepository(conn).get_by_id(report_id)
+
     def list_by_date(self, date: str) -> list[DailyReportRecord]:
         with self.connection_factory.connect() as conn:
             return DailyReportRepository(conn).list_by_date(date)
