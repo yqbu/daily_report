@@ -83,7 +83,7 @@ function viewPrompt(prompt: string): void {
 .history-pane {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(320px, 0.78fr) minmax(0, 1.22fr);
+  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
   gap: 14px;
   align-items: stretch;
 }

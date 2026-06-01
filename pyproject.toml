@@ -75,6 +75,7 @@ exclude = [
     ".git",
     ".idea",
     ".pytest_cache",
+    ".pytest_tmp",
     ".ruff_cache",
     ".venv",
     "build",
@@ -84,6 +85,8 @@ exclude = [
     "frontend/node_modules",
     "logs",
     "output",
+    "tmp_pytest",
+    "tmp_pytest_*",
 ]
 
 [tool.pytest.ini_options]

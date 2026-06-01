@@ -8,7 +8,8 @@
     "frontend:build": "cd frontend && npm run build",
     "tauri:dev": "cross-env VITE_API_MODE=tauri tauri dev",
     "tauri:dev:sidecar": "cross-env VITE_API_MODE=tauri DAILY_REPORT_TAURI_START_API=1 tauri dev",
-    "tauri:build": "cross-env VITE_API_MODE=tauri tauri build"
+    "tauri:build": "cross-env VITE_API_MODE=tauri tauri build",
+    "gui": "npm run tauri:dev:sidecar"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0"

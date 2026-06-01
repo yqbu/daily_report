@@ -65,7 +65,7 @@ function updateFilters(patch: Partial<MaterialFilters>): void {
         <h2 class="card-title">素材选择</h2>
         <p class="card-subtitle">从四类本地记录中筛选本次日报素材</p>
       </div>
-      <el-tag type="success" effect="light">{{ summary.selected_count }} 已选</el-tag>
+      <el-tag disable-transitions type="success" effect="light">{{ summary.selected_count }} 已选</el-tag>
     </header>
 
     <div class="summary-grid">
@@ -138,6 +138,7 @@ function updateFilters(patch: Partial<MaterialFilters>): void {
 
 <style scoped>
 .material-card {
+  container-type: inline-size;
   min-height: 0;
   height: 100%;
   display: grid;
@@ -146,11 +147,16 @@ function updateFilters(patch: Partial<MaterialFilters>): void {
 }
 
 .card-header {
+  min-width: 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
+}
+
+.card-header > div {
+  min-width: 0;
 }
 
 .card-title {
@@ -164,11 +170,12 @@ function updateFilters(patch: Partial<MaterialFilters>): void {
   margin: 5px 0 0;
   color: #667085;
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(90px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 90px), 1fr));
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -207,14 +214,31 @@ function updateFilters(patch: Partial<MaterialFilters>): void {
 
 .filter-grid {
   display: grid;
-  grid-template-columns: minmax(128px, 0.8fr) minmax(128px, 0.8fr) minmax(128px, 0.8fr) minmax(180px, 1.6fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 128px), 1fr));
   gap: 8px;
   margin-bottom: 10px;
+}
+
+.filter-grid :deep(.el-select),
+.filter-grid :deep(.el-input) {
+  min-width: 0;
+  width: 100%;
 }
 
 .material-scroll {
   min-height: 0;
   overflow: hidden;
+}
+
+@container (max-width: 520px) {
+  .card-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .card-header :deep(.el-tag) {
+    align-self: flex-start;
+  }
 }
 
 @media (max-width: 1120px) {
@@ -228,6 +252,19 @@ function updateFilters(patch: Partial<MaterialFilters>): void {
 }
 
 @media (max-width: 640px) {
+  .summary-grid,
+  .filter-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (max-width: 520px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 340px) {
   .summary-grid,
   .filter-grid {
     grid-template-columns: minmax(0, 1fr);

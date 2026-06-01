@@ -670,8 +670,10 @@ onMounted(() => {
   height: 100%;
   min-height: 0;
   display: grid;
-  align-content: start;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-content: stretch;
   gap: 12px;
+  min-width: 0;
   overflow: auto;
   color: var(--overview-text);
   background: #fbfcfd;
@@ -915,9 +917,10 @@ onMounted(() => {
 }
 
 .overview-dashboard-grid {
+  min-height: 0;
   display: grid;
-  grid-template-columns: minmax(300px, 0.95fr) minmax(0, 1fr) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 260px) minmax(0, 304px);
+  grid-template-columns: minmax(320px, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(220px, 1fr) minmax(260px, 1.15fr);
   gap: 12px;
 }
 

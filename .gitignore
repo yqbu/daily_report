@@ -5,6 +5,11 @@ env/
 
 # Python cache
 __pycache__/
+.pytest_cache/
+.pytest_tmp/
+.ruff_cache/
+tmp_pytest/
+tmp_pytest_*/
 *.py[cod]
 *.pyo
 
@@ -15,6 +20,7 @@ dist/
 node_modules/
 frontend/node_modules/
 frontend/dist/
+frontend/vite-dev*.log
 src-tauri/target/
 
 # Local database and runtime data

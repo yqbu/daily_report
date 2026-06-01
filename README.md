@@ -10,10 +10,86 @@ history, and AI prompt records. The desktop UI lets the user review useful
 materials before generating a Markdown daily report with a DeepSeek-compatible
 chat model.
 
+## Migration Status
+
+Current migration phase:
+
+1. Phase 1: Python FastAPI API boundary.
+2. Phase 2: Vue frontend reads data through HTTP APIs.
+3. Phase 3: Create the Tauri shell without bundling Python.
+4. Phase 4: Tauri starts the local Python FastAPI process in development.
+5. Phase 5: Tauri is the primary GUI entry, replacing PySide6 for daily use without bundling Python.
+6. Phase 6: Package the Python sidecar.
+7. Phase 7: Remove or downgrade the PySide6 GUI.
+
+This repository is currently in Phase 5. Python is not bundled, Tauri does not
+use `externalBin`, and the app still depends on the local source checkout and
+Python environment.
+
+## Recommended GUI Entry
+
+Use the Tauri GUI for daily development and self-use testing:
+
+```powershell
+daily-report gui
+```
+
+This is equivalent to:
+
+```powershell
+npm run tauri:dev:sidecar
+```
+
+It starts the Tauri shell and lets Tauri start the local Python FastAPI process
+on `127.0.0.1`. Vue reads the runtime API URL and bearer token from Tauri, then
+uses HTTP APIs to talk to Python.
+
+Explicit Tauri entry:
+
+```powershell
+daily-report gui-tauri
+```
+
+Legacy PySide6 fallback:
+
+```powershell
+daily-report gui-pyside
+```
+
+`daily-report gui --backend pyside` is also accepted as a compatibility path,
+but `daily-report gui-pyside` is the clearer legacy command.
+
+PySide6 GUI is kept as a legacy fallback during the Tauri migration. New UI
+development should target the Vue + Tauri frontend. PySide6 GUI is temporarily
+kept for compatibility; new screens and features should be implemented in
+Vue + Tauri first.
+
+Manual API mode is still available:
+
+```powershell
+daily-report api --host 127.0.0.1 --port 8765
+daily-report gui --manual-api
+```
+
+Or:
+
+```powershell
+daily-report api --host 127.0.0.1 --port 8765
+npm run tauri:dev
+```
+
+Current Phase 5 limits:
+
+- Python is not bundled.
+- The app depends on the local Python environment, usually `.venv`.
+- The app depends on the repository source directory.
+- This is not a redistributable installer build.
+- Phase 6 will add proper Python sidecar packaging.
+
 ## Local API
 
-The first-stage Tauri sidecar preparation adds a local FastAPI boundary without
-removing the existing CLI or PySide6 GUI.
+The Tauri migration uses a local FastAPI boundary without removing the existing
+CLI or legacy PySide6 GUI.
 
 Start the API:
 
@@ -75,12 +151,12 @@ need local overrides:
 
 ```env
 # mock | http | qwebchannel | tauri
-VITE_API_MODE=http
+VITE_API_MODE=tauri
 VITE_API_BASE_URL=http://127.0.0.1:8765
 VITE_API_TOKEN=
 ```
 
-Development flow:
+Browser-only development can still use HTTP mode:
 
 ```powershell
 daily-report api --host 127.0.0.1 --port 8765
@@ -88,8 +164,9 @@ cd frontend
 npm run dev
 ```
 
-Set `VITE_API_MODE=mock` to work on the UI without the Python API. Set
-`VITE_API_MODE=qwebchannel` when running through the existing PySide6
+Set `VITE_API_MODE=http` for normal browser development with a manually started
+Python API. Set `VITE_API_MODE=mock` to work on the UI without the Python API.
+Set `VITE_API_MODE=qwebchannel` when running through the existing PySide6
 QWebChannel path.
 
 ## Tauri Development Preview
@@ -103,6 +180,14 @@ Install the root JavaScript dependencies once before using the Tauri scripts:
 ```powershell
 npm install
 ```
+
+Recommended script:
+
+```powershell
+npm run gui
+```
+
+This is an alias for `npm run tauri:dev:sidecar`.
 
 ### Manual API mode
 

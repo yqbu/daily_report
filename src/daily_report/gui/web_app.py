@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import json
 import os
 import subprocess
 import sys
@@ -19,6 +20,106 @@ from daily_report.gui.services.gui_service import GuiService
 
 
 logger = logging.getLogger(__name__)
+
+
+class ApiSidecarServer(AbstractContextManager["ApiSidecarServer"]):
+    def __init__(
+        self,
+        *,
+        host: str = "127.0.0.1",
+        port: int = 8765,
+        timeout_seconds: int = 30,
+    ):
+        self.host = host
+        self.port = port
+        self.timeout_seconds = timeout_seconds
+        self.url = f"http://{host}:{port}"
+        self.process: subprocess.Popen | None = None
+
+    def __enter__(self) -> "ApiSidecarServer":
+        if self._is_ready():
+            logger.info("Using existing Daily Report API: %s", self.url)
+            self._export_env()
+            return self
+
+        command = self._command()
+        logger.info("Starting Daily Report API: %s", self.url)
+        self.process = subprocess.Popen(command)
+        self._wait_until_ready()
+        self._export_env()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        if self.process is None:
+            return
+        if self.process.poll() is not None:
+            return
+        logger.info("Stopping Daily Report API")
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/PID", str(self.process.pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        else:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+
+    def _command(self) -> list[str]:
+        if getattr(sys, "frozen", False):
+            return [
+                sys.executable,
+                "api",
+                "--host",
+                self.host,
+                "--port",
+                str(self.port),
+            ]
+        return [
+            sys.executable,
+            "-m",
+            "daily_report.main",
+            "api",
+            "--host",
+            self.host,
+            "--port",
+            str(self.port),
+        ]
+
+    def _wait_until_ready(self) -> None:
+        deadline = time.time() + self.timeout_seconds
+        while time.time() < deadline:
+            if self.process is not None and self.process.poll() is not None:
+                raise RuntimeError(f"Daily Report API exited with code {self.process.returncode}")
+            if self._is_ready():
+                logger.info("Daily Report API ready: %s", self.url)
+                return
+            time.sleep(0.4)
+        raise RuntimeError(f"Timed out waiting for Daily Report API: {self.url}")
+
+    def _is_ready(self) -> bool:
+        try:
+            with urlopen(f"{self.url}/api/health", timeout=0.8) as response:
+                if not 200 <= response.status < 500:
+                    return False
+                payload = json.loads(response.read().decode("utf-8"))
+        except (OSError, URLError, json.JSONDecodeError):
+            return False
+        data = payload.get("data") if isinstance(payload, dict) else None
+        return bool(
+            isinstance(payload, dict)
+            and payload.get("ok") is True
+            and isinstance(data, dict)
+            and data.get("service") == "daily-report-api"
+        )
+
+    def _export_env(self) -> None:
+        os.environ["VITE_API_BASE_URL"] = self.url
+        os.environ["DAILY_REPORT_API_BASE_URL"] = self.url
 
 
 class ViteDevServer(AbstractContextManager["ViteDevServer"]):
@@ -98,12 +199,23 @@ def run_gui(
     dev: bool = False,
     dev_port: int = 5173,
     remote_debugging_port: int | None = None,
+    manage_api: bool = True,
+    api_host: str = "127.0.0.1",
+    api_port: int = 8765,
 ) -> int:
     _configure_qt_webengine_rendering()
 
     if remote_debugging_port is not None:
         os.environ.setdefault("QTWEBENGINE_REMOTE_DEBUGGING", str(remote_debugging_port))
 
+    if manage_api:
+        with ApiSidecarServer(host=api_host, port=api_port):
+            return _run_gui_with_frontend(dev=dev, dev_port=dev_port)
+
+    return _run_gui_with_frontend(dev=dev, dev_port=dev_port)
+
+
+def _run_gui_with_frontend(*, dev: bool, dev_port: int) -> int:
     if dev:
         with ViteDevServer(port=dev_port) as server:
             os.environ["DAILY_REPORT_WEB_DEV_SERVER"] = server.url

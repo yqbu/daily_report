@@ -122,7 +122,7 @@ async function callHttpFallback<T>(method: string, payload: unknown): Promise<T>
     case 'getOverview':
       return apiGet<T>('/api/overview', { date })
     case 'getTimeline':
-      return apiGet<T>('/api/timeline', timelineParams(payload))
+      return callGuiCompat<T>(method, payload)
     case 'listEntries':
       return listEntriesHttp<T>(payload)
     case 'getEntryDetail':
@@ -136,7 +136,7 @@ async function callHttpFallback<T>(method: string, payload: unknown): Promise<T>
         deleted: true
       })
     case 'getDataCenterSummary':
-      return buildDataCenterSummaryHttp<T>(payload)
+      return callGuiCompat<T>(method, payload)
     case 'buildPrompt':
       return buildPromptHttp<T>(payload)
     case 'generateReport':
@@ -151,11 +151,10 @@ async function callHttpFallback<T>(method: string, payload: unknown): Promise<T>
     case 'get_collector_status':
       return apiGet<T>('/api/health/collectors')
     case 'getDataCenterAnalytics':
-      return { summary: await buildDataCenterSummaryHttp(payload), charts: {} } as T
+      return callGuiCompat<T>(method, payload)
     case 'getReportMaterials':
-      return buildReportMaterialsHttp<T>(payload)
+      return callGuiCompat<T>(method, payload)
     case 'batchUpdateEntrySelection':
-      return { ok: true, updated: 0 } as T
     case 'updateEntryAnnotation':
     case 'updateEntrySensitive':
     case 'listAppProfiles':
@@ -170,12 +169,17 @@ async function callHttpFallback<T>(method: string, payload: unknown): Promise<T>
     case 'deleteReport':
     case 'saveReport':
     case 'test_model_connection':
+      return callGuiCompat<T>(method, payload)
     case 'select_directory':
     case 'select_json_file':
       return getBrowserFallback<T>(method, payload)
     default:
       return getBrowserFallback<T>(method, payload)
   }
+}
+
+async function callGuiCompat<T>(method: string, payload: unknown): Promise<T> {
+  return apiPost<T>(`/api/gui/${encodeURIComponent(method)}`, payload ?? {})
 }
 
 function getMockFallback<T>(method: string, payload: unknown): T {

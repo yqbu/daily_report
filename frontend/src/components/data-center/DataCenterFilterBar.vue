@@ -71,6 +71,7 @@ const sensitiveOptions: Array<{ label: string; value: SensitiveFilter }> = [
 
 <style scoped>
 .filter-card {
+  container-type: inline-size;
   padding: 14px 16px;
   border: 1px solid #dce3ee;
   border-radius: 8px;
@@ -80,7 +81,7 @@ const sensitiveOptions: Array<{ label: string; value: SensitiveFilter }> = [
 
 .filter-grid {
   display: grid;
-  grid-template-columns: minmax(220px, 1.25fr) 140px 150px minmax(240px, 1.5fr) auto;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.78fr) minmax(0, 0.84fr) minmax(0, 1.5fr) auto;
   gap: 12px;
   align-items: end;
 }
@@ -114,6 +115,22 @@ const sensitiveOptions: Array<{ label: string; value: SensitiveFilter }> = [
 }
 
 @media (max-width: 680px) {
+  .filter-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .filter-actions {
+    justify-content: flex-start;
+  }
+}
+
+@container (max-width: 1180px) {
+  .filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 680px) {
   .filter-grid {
     grid-template-columns: minmax(0, 1fr);
   }

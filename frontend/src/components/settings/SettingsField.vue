@@ -25,7 +25,7 @@ defineProps<{
 .settings-field {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
   gap: 18px;
   align-items: center;
   padding: 15px 20px;
@@ -41,7 +41,7 @@ defineProps<{
 }
 
 .settings-field--wide {
-  grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
 }
 
 .settings-field-copy {

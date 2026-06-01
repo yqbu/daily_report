@@ -170,6 +170,7 @@ function toggleSortDirection(): void {
 
 <style scoped>
 .overview-panel {
+  container-type: inline-size;
   min-width: 0;
   min-height: 0;
   display: grid;
@@ -217,7 +218,7 @@ function toggleSortDirection(): void {
 }
 
 .overview-tools {
-  min-width: min(648px, 100%);
+  min-width: 0;
   display: grid;
   grid-template-columns: minmax(260px, 1fr) auto;
   align-items: center;
@@ -302,7 +303,7 @@ function toggleSortDirection(): void {
 .filter-row {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
 }
@@ -430,6 +431,41 @@ function toggleSortDirection(): void {
 }
 
 @media (max-width: 680px) {
+  .filter-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sort-tools {
+    grid-template-columns: minmax(0, 1fr) 82px;
+  }
+
+  .sort-select {
+    width: 100%;
+  }
+}
+
+@container (max-width: 1040px) {
+  .filter-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sort-tools {
+    justify-content: end;
+  }
+}
+
+@container (max-width: 920px) {
+  .overview-tools {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .overview-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@container (max-width: 680px) {
   .filter-tabs {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

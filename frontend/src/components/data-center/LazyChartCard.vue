@@ -17,6 +17,7 @@ const emit = defineEmits<{
   load: []
 }>()
 
+const cardEl = shallowRef<HTMLElement | null>(null)
 const chartEl = shallowRef<HTMLDivElement | null>(null)
 const loaded = shallowRef(false)
 const effectiveLoaded = computed(() => loaded.value || Boolean(props.loaded))
@@ -62,16 +63,19 @@ function scheduleResize(): void {
 }
 
 onMounted(() => {
-  if (chartEl.value) {
+  if (cardEl.value) {
     observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) {
         requestLoad()
       }
     }, { rootMargin: '120px' })
-    observer.observe(chartEl.value)
+    observer.observe(cardEl.value)
+  }
+  if (chartEl.value) {
     resizeObserver = new ResizeObserver(scheduleResize)
     resizeObserver.observe(chartEl.value)
   }
+  void renderChart()
 })
 
 onBeforeUnmount(() => {
@@ -94,7 +98,7 @@ watch(
 </script>
 
 <template>
-  <article class="chart-card" :class="{ 'chart-card--wide': wide }" :style="cardStyle">
+  <article ref="cardEl" class="chart-card" :class="{ 'chart-card--wide': wide }" :style="cardStyle">
     <header class="chart-header">
       <div>
         <h3 class="chart-title">{{ title }}</h3>

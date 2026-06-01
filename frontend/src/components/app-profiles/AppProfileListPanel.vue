@@ -841,7 +841,7 @@ defineExpose({
   width: 100%;
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
   align-items: start;
   align-content: start;
   gap: 14px;

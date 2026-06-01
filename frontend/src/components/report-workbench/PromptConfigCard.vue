@@ -63,8 +63,8 @@ function focusDescription(value: string): string {
         <el-button :icon="Tickets" class="header-template-button" @click="emit('openTemplates')">
           模板管理
         </el-button>
-        <el-tag v-if="promptDirty" class="dirty-tag" type="warning" effect="light">需重新构建</el-tag>
-        <el-tag v-else type="success" effect="light">Prompt 已构建</el-tag>
+        <el-tag disable-transitions v-if="promptDirty" class="dirty-tag" type="warning" effect="light">需重新构建</el-tag>
+        <el-tag disable-transitions v-else type="success" effect="light">Prompt 已构建</el-tag>
       </div>
     </header>
 

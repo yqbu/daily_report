@@ -98,6 +98,7 @@ function updatePromptOptions(options: PromptOptions): void {
 
 <style scoped>
 .generate-pane {
+  container-type: inline-size;
   min-width: 0;
   display: grid;
   gap: 14px;
@@ -109,7 +110,7 @@ function updatePromptOptions(options: PromptOptions): void {
   height: min(680px, calc(100vh - 188px));
   min-height: 540px;
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(480px, 0.95fr);
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
   gap: 14px;
   align-items: stretch;
 }
@@ -124,6 +125,14 @@ function updatePromptOptions(options: PromptOptions): void {
 }
 
 @media (max-width: 1120px) {
+  .generate-top-grid {
+    height: auto;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (max-width: 1120px) {
   .generate-top-grid {
     height: auto;
     min-height: 0;

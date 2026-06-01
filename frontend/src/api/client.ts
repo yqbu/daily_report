@@ -20,7 +20,7 @@ export class ApiClientError extends Error {
   }
 }
 
-const DEFAULT_TIMEOUT_MS = 15000
+const DEFAULT_TIMEOUT_MS = 70000
 const CONNECTION_ERROR_MESSAGE =
   '无法连接本地 Daily Report API，请确认已运行：daily-report api --host 127.0.0.1 --port 8765'
 
@@ -29,7 +29,10 @@ let lastMessageAt = 0
 
 export function apiMode(): 'mock' | 'http' | 'qwebchannel' | 'tauri' {
   const mode = String(import.meta.env.VITE_API_MODE || 'http').toLowerCase()
-  if (mode === 'mock' || mode === 'qwebchannel' || mode === 'tauri') return mode
+  if (mode === 'mock') return mode
+  if (mode === 'qwebchannel') return mode
+  if (hasQWebChannelBridge()) return 'qwebchannel'
+  if (mode === 'tauri') return mode
   return 'http'
 }
 
@@ -128,4 +131,12 @@ function showApiError(message: string): void {
   lastMessage = message
   lastMessageAt = now
   ElMessage.error(message)
+}
+
+function hasQWebChannelBridge(): boolean {
+  return Boolean(
+    typeof window !== 'undefined' &&
+      window.qt?.webChannelTransport &&
+      typeof window.QWebChannel === 'function'
+  )
 }

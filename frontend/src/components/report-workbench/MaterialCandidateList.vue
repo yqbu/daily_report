@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { ChatDotRound, CopyDocument, Link, Monitor, View } from '@element-plus/icons-vue'
+import {computed} from 'vue'
+import {ChatDotRound, CopyDocument, Link, Monitor, View} from '@element-plus/icons-vue'
 
-import type { MaterialCandidate } from '../../types/reportWorkbench'
+import type {MaterialCandidate} from '../../types/reportWorkbench'
 
 const props = defineProps<{
   items: MaterialCandidate[]
@@ -17,39 +17,44 @@ const emit = defineEmits<{
 }>()
 
 const sourceMeta = computed(() => ({
-  app: { label: '前台应用', icon: Monitor, className: 'source-app' },
-  browser: { label: '浏览器历史', icon: Link, className: 'source-browser' },
-  clipboard: { label: '剪切板', icon: CopyDocument, className: 'source-clipboard' },
-  ai_prompt: { label: 'AI 提问', icon: ChatDotRound, className: 'source-ai' }
+  app: {label: '前台应用', icon: Monitor, className: 'source-app'},
+  browser: {label: '浏览器历史', icon: Link, className: 'source-browser'},
+  clipboard: {label: '剪切板', icon: CopyDocument, className: 'source-clipboard'},
+  ai_prompt: {label: 'AI 提问', icon: ChatDotRound, className: 'source-ai'}
 }))
 </script>
 
 <template>
   <div class="material-list">
     <article
-      v-for="item in items"
-      :key="`${item.source_type}:${item.source_id}`"
-      class="material-row"
-      :class="{ 'material-row--sensitive': item.is_sensitive }"
-      @click="emit('detail', item)"
+        v-for="item in items"
+        :key="`${item.source_type}:${item.source_id}`"
+        class="material-row"
+        :class="{ 'material-row--sensitive': item.is_sensitive }"
+        @click="emit('detail', item)"
     >
       <el-checkbox
-        :model-value="item.is_selected"
-        class="material-check"
-        @click.stop
-        @update:model-value="emit('toggle', item, Boolean($event))"
+          :model-value="item.is_selected"
+          class="material-check"
+          @click.stop
+          @update:model-value="emit('toggle', item, Boolean($event))"
       />
 
       <div class="source-icon" :class="sourceMeta[item.source_type].className">
-        <el-icon><component :is="sourceMeta[item.source_type].icon" /></el-icon>
+        <el-icon>
+          <component :is="sourceMeta[item.source_type].icon"/>
+        </el-icon>
       </div>
 
       <div class="material-main">
         <div class="material-title-line">
-          <el-tag size="small" effect="plain">{{ sourceMeta[item.source_type].label }}</el-tag>
+          <el-tag disable-transitions size="small" effect="plain">{{ sourceMeta[item.source_type].label }}</el-tag>
           <strong class="material-title">{{ item.title }}</strong>
-          <el-tag v-if="item.category" size="small" type="info" effect="light">{{ item.category }}</el-tag>
-          <el-tag v-if="item.is_sensitive" size="small" type="danger" effect="light">
+          <el-tag disable-transitions v-if="item.category" size="small" type="info" effect="light">{{
+              item.category
+            }}
+          </el-tag>
+          <el-tag disable-transitions v-if="item.is_sensitive" size="small" type="danger" effect="light">
             敏感
           </el-tag>
         </div>
@@ -61,7 +66,7 @@ const sourceMeta = computed(() => ({
         </div>
       </div>
 
-      <el-button :icon="View" circle text title="查看详情" @click.stop="emit('detail', item)" />
+      <el-button :icon="View" circle text title="查看详情" @click.stop="emit('detail', item)"/>
     </article>
 
     <div v-if="!items.length && !loading" class="material-empty">
@@ -79,6 +84,7 @@ const sourceMeta = computed(() => ({
 
 <style scoped>
 .material-list {
+  container-type: inline-size;
   height: 100%;
   max-height: 100%;
   display: grid;
@@ -88,6 +94,7 @@ const sourceMeta = computed(() => ({
   overflow-x: hidden;
   overflow-y: auto;
   padding-right: 4px;
+  padding-top: 4px;
   scrollbar-gutter: stable;
 }
 
@@ -102,10 +109,9 @@ const sourceMeta = computed(() => ({
   border-radius: 10px;
   background: #fbfdff;
   cursor: pointer;
-  transition:
-    border-color 160ms ease,
-    background 160ms ease,
-    transform 160ms ease;
+  transition: border-color 160ms ease,
+  background 160ms ease,
+  transform 160ms ease;
 }
 
 .material-row:hover {
@@ -218,6 +224,33 @@ const sourceMeta = computed(() => ({
   .material-row > .el-button {
     grid-column: 3;
     justify-self: flex-start;
+  }
+}
+
+@container (max-width: 620px) {
+  .material-row {
+    grid-template-columns: auto 34px minmax(0, 1fr);
+  }
+
+  .material-row > .el-button {
+    grid-column: 3;
+    justify-self: flex-start;
+  }
+}
+
+@container (max-width: 420px) {
+  .material-row {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .source-icon {
+    display: none;
+  }
+
+  .material-row > .el-button {
+    grid-column: 2;
   }
 }
 </style>

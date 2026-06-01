@@ -32,18 +32,26 @@ const emit = defineEmits<{
         class="date-picker"
         @update:model-value="emit('update:selectedDate', String($event))"
       />
-      <el-button :icon="Refresh" :loading="loading" @click="emit('refresh')">
-        刷新素材
-      </el-button>
-      <el-button
-        :icon="Select"
-        type="primary"
-        :loading="generating"
-        :disabled="!canGenerate"
+      <button
+        class="top-button"
+        type="button"
+        :disabled="loading"
+        title="刷新当前日报素材"
+        @click="emit('refresh')"
+      >
+        <Refresh class="action-icon" :class="{ 'action-icon--spin': loading }" />
+        <span>刷新素材</span>
+      </button>
+      <button
+        class="top-button top-button--primary"
+        type="button"
+        :disabled="generating || !canGenerate"
+        title="生成当前日期日报"
         @click="emit('generate')"
       >
-        生成日报
-      </el-button>
+        <Select class="action-icon" />
+        <span>生成日报</span>
+      </button>
     </div>
   </header>
 </template>
@@ -89,11 +97,93 @@ const emit = defineEmits<{
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
 }
 
 .date-picker {
-  width: 164px;
+  width: 176px;
+}
+
+.report-workbench-topbar :deep(.date-picker.el-date-editor.el-input) {
+  height: 38px;
+}
+
+.report-workbench-topbar :deep(.date-picker.el-date-editor .el-input__wrapper) {
+  height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #dce3ee inset;
+}
+
+.report-workbench-topbar :deep(.date-picker.el-date-editor .el-input__wrapper:hover),
+.report-workbench-topbar :deep(.date-picker.el-date-editor .el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px #c9dcff inset;
+}
+
+.report-workbench-topbar :deep(.date-picker.el-date-editor .el-input__inner) {
+  height: 38px;
+  color: #172033;
+  font-size: 13px;
+  line-height: 38px;
+}
+
+.report-workbench-topbar :deep(.date-picker.el-date-editor .el-input__prefix),
+.report-workbench-topbar :deep(.date-picker.el-date-editor .el-input__suffix) {
+  color: #7b8797;
+}
+
+.report-workbench-topbar :deep(.date-picker.el-date-editor .el-input__prefix-inner > :last-child) {
+  margin-right: 6px;
+}
+
+.top-button {
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  color: #526179;
+  background: #ffffff;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.top-button:hover {
+  color: #2563eb;
+  border-color: #c9dcff;
+  background: #eff6ff;
+}
+
+.top-button--primary {
+  color: #ffffff;
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+.top-button--primary:hover {
+  color: #ffffff;
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+}
+
+.top-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.action-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.action-icon--spin {
+  animation: report-workbench-spin 900ms linear infinite;
 }
 
 @media (max-width: 760px) {
@@ -106,6 +196,16 @@ const emit = defineEmits<{
     width: 100%;
     flex-wrap: wrap;
     justify-content: flex-start;
+  }
+}
+
+@keyframes report-workbench-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
   }
 }
 </style>

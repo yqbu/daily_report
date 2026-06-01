@@ -57,13 +57,14 @@ class GuiService:
         filters = params.get("filters") if isinstance(params.get("filters"), dict) else params
         limit = max(1, min(200, int(params.get("pageSize") or params.get("limit") or filters.get("limit") or 40)))
         offset = max(0, int(params.get("offset") or _cursor_offset(params.get("cursor")) or 0))
-        events = self._timeline_events_for_params(params, filters, limit=limit + 1, offset=offset)
-        has_more = len(events) > limit
-        page_items = events[:limit]
-        next_offset = offset + limit
+        events = self._timeline_events_for_params(params, filters)
+        total = len(events)
+        page_items = events[offset : offset + limit]
+        next_offset = offset + len(page_items)
+        has_more = next_offset < total
         return {
             "items": [event.to_dict() for event in page_items],
-            "total": offset + len(page_items) + (1 if has_more else 0),
+            "total": total,
             "offset": offset,
             "limit": limit,
             "nextCursor": str(next_offset) if has_more else None,
