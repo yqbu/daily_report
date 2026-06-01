@@ -112,6 +112,12 @@ def run_gui_cmd(args: argparse.Namespace) -> None:
     )
 
 
+def run_api_cmd(args: argparse.Namespace) -> None:
+    from daily_report.api.server import run_api_server
+
+    run_api_server(host=args.host, port=args.port, token=args.token)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='daily-report',
@@ -171,6 +177,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gui_parser.add_argument('--remote-debugging-port', type=int, default=9223)
     gui_parser.set_defaults(func=run_gui_cmd)
+
+    api_parser = subparsers.add_parser('api', help='Run local FastAPI sidecar API')
+    api_parser.add_argument('--host', default='127.0.0.1', help='Bind host, default: 127.0.0.1')
+    api_parser.add_argument('--port', type=int, default=8765, help='Bind port, default: 8765; 0 uses a free port')
+    api_parser.add_argument('--token', default=None, help='Optional bearer token required by protected APIs')
+    api_parser.set_defaults(func=run_api_cmd)
 
     return parser
 

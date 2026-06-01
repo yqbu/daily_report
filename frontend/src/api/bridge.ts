@@ -7,8 +7,22 @@ import type {
   HealthPayload,
   LocalSettingsPayload,
   OverviewPayload,
-  PromptPreviewPayload
+  PromptPreviewPayload,
+  SourceType,
+  TimelineEvent
 } from './types'
+import { apiGet, apiMode, apiPatch, apiPost, apiPut } from './client'
+import {
+  mockBuildPrompt,
+  mockEntries,
+  mockEntryDetail,
+  mockGenerateReport,
+  mockHealth,
+  mockLatestReport,
+  mockOverview,
+  mockSettings,
+  mockTimeline
+} from './mock'
 
 type BridgeSlot = (payload: string, callback: (response: string) => void) => void
 type BridgeSignalSlot = (payload: string) => void
@@ -54,6 +68,10 @@ interface BridgeJobResult<T> {
 }
 
 export async function callBridge<T = unknown>(method: string, payload: unknown = {}): Promise<T> {
+  if (apiMode() !== 'qwebchannel') {
+    return callApiModeFallback<T>(method, payload)
+  }
+
   const bridge = await getBridge()
 
   if (!bridge) {
@@ -89,6 +107,247 @@ export async function callBridge<T = unknown>(method: string, payload: unknown =
       reject(error)
     }
   })
+}
+
+async function callApiModeFallback<T>(method: string, payload: unknown): Promise<T> {
+  if (apiMode() === 'mock') {
+    return getMockFallback<T>(method, payload)
+  }
+  return callHttpFallback<T>(method, payload)
+}
+
+async function callHttpFallback<T>(method: string, payload: unknown): Promise<T> {
+  const date = getPayloadDate(payload)
+  switch (method) {
+    case 'getOverview':
+      return apiGet<T>('/api/overview', { date })
+    case 'getTimeline':
+      return apiGet<T>('/api/timeline', timelineParams(payload))
+    case 'listEntries':
+      return listEntriesHttp<T>(payload)
+    case 'getEntryDetail':
+      return getEntryDetailHttp<T>(payload)
+    case 'updateEntrySelection':
+      return apiPatch<T>(`/api/entries/${getPayloadSourceType(payload)}/${getPayloadNumber(payload, 'id', 0)}/selection`, {
+        selected: Boolean(getPayloadValue(payload, 'selected'))
+      })
+    case 'markEntryDeleted':
+      return apiPatch<T>(`/api/entries/${getPayloadSourceType(payload)}/${getPayloadNumber(payload, 'id', 0)}/deleted`, {
+        deleted: true
+      })
+    case 'getDataCenterSummary':
+      return buildDataCenterSummaryHttp<T>(payload)
+    case 'buildPrompt':
+      return buildPromptHttp<T>(payload)
+    case 'generateReport':
+      return generateReportHttp<T>(payload)
+    case 'getLatestReport':
+      return getLatestReportHttp<T>(payload)
+    case 'getSettings':
+      return apiGet<T>('/api/settings')
+    case 'saveSettings':
+      return apiPut<T>('/api/settings', payload)
+    case 'getHealth':
+    case 'get_collector_status':
+      return apiGet<T>('/api/health/collectors')
+    case 'getDataCenterAnalytics':
+      return { summary: await buildDataCenterSummaryHttp(payload), charts: {} } as T
+    case 'getReportMaterials':
+      return buildReportMaterialsHttp<T>(payload)
+    case 'batchUpdateEntrySelection':
+      return { ok: true, updated: 0 } as T
+    case 'updateEntryAnnotation':
+    case 'updateEntrySensitive':
+    case 'listAppProfiles':
+    case 'listAppCategories':
+    case 'saveAppProfile':
+    case 'resetAppProfile':
+    case 'deleteAppRecords':
+    case 'saveAppCategory':
+    case 'deleteAppCategory':
+    case 'listReports':
+    case 'getReportDetail':
+    case 'deleteReport':
+    case 'saveReport':
+    case 'test_model_connection':
+    case 'select_directory':
+    case 'select_json_file':
+      return getBrowserFallback<T>(method, payload)
+    default:
+      return getBrowserFallback<T>(method, payload)
+  }
+}
+
+function getMockFallback<T>(method: string, payload: unknown): T {
+  const date = getPayloadDate(payload)
+  switch (method) {
+    case 'getOverview':
+      return mockOverview(date) as T
+    case 'getTimeline':
+      return mockTimeline(date) as T
+    case 'listEntries':
+      return mockEntries(getPayloadSourceType(payload), date) as T
+    case 'getEntryDetail':
+      return mockEntryDetail(getPayloadSourceType(payload), getPayloadNumber(payload, 'id', 0)) as T
+    case 'buildPrompt':
+      return { ...mockBuildPrompt(date, String(getPayloadValue(payload, 'templateName') || 'daily_standard')), prompt: mockBuildPrompt(date).prompt_text } as T
+    case 'generateReport':
+      return mockGenerateReport(date) as T
+    case 'getLatestReport':
+      return mockLatestReport(date).report as T
+    case 'getSettings':
+      return mockSettings() as T
+    case 'saveSettings':
+      return payload as T
+    case 'getHealth':
+    case 'get_collector_status':
+      return mockHealth() as T
+    default:
+      return getBrowserFallback<T>(method, payload)
+  }
+}
+
+function timelineParams(payload: unknown): Record<string, unknown> {
+  const filters = isObjectRecord(getPayloadValue(payload, 'filters')) ? getPayloadValue(payload, 'filters') as AnyRecord : {}
+  const sourceTypes = getPayloadValue(filters, 'sourceTypes') || getPayloadValue(filters, 'source_types')
+  const firstSource = Array.isArray(sourceTypes) && sourceTypes.length === 1 ? sourceTypes[0] : 'all'
+  return {
+    date: getPayloadValue(payload, 'date') || getPayloadValue(payload, 'startDate') || getPayloadValue(payload, 'start_date'),
+    source_type: firstSource || 'all',
+    selected: getPayloadValue(filters, 'selected'),
+    sensitive: getPayloadValue(filters, 'sensitive'),
+    keyword: getPayloadValue(filters, 'keyword'),
+    limit: getPayloadNumber(payload, 'pageSize', getPayloadNumber(payload, 'limit', 500)),
+    offset: getPayloadNumber(payload, 'offset', getPayloadNumber(payload, 'cursor', 0)),
+    order: getPayloadValue(filters, 'sortOrder') || getPayloadValue(filters, 'sort_order') || 'asc'
+  }
+}
+
+async function listEntriesHttp<T>(payload: unknown): Promise<T> {
+  const sourceType = getPayloadSourceType(payload)
+  const pageSize = getPayloadNumber(payload, 'pageSize', getPayloadNumber(payload, 'limit', 50))
+  const page = getPayloadNumber(payload, 'page', 1)
+  const filters = isObjectRecord(getPayloadValue(payload, 'filters')) ? getPayloadValue(payload, 'filters') as AnyRecord : {}
+  return apiGet<T>(`/api/entries/${sourceType}`, {
+    date: getPayloadValue(payload, 'date') || getPayloadValue(payload, 'startDate'),
+    selected: getPayloadValue(filters, 'selected'),
+    sensitive: getPayloadValue(filters, 'sensitive'),
+    keyword: getPayloadValue(filters, 'keyword'),
+    limit: pageSize,
+    offset: (page - 1) * pageSize
+  })
+}
+
+async function getEntryDetailHttp<T>(payload: unknown): Promise<T> {
+  const sourceType = getPayloadSourceType(payload)
+  const response = await apiGet<{ detail: unknown }>(`/api/entries/${sourceType}/${getPayloadNumber(payload, 'id', 0)}`)
+  return response.detail as T
+}
+
+async function buildDataCenterSummaryHttp<T>(payload: unknown): Promise<T> {
+  const days = dateRangeDays(payload)
+  const overviews = await Promise.all(days.map((date) => apiGet<OverviewPayload>('/api/overview', { date })))
+  const summary = {
+    total: 0,
+    app: 0,
+    browser: 0,
+    clipboard: 0,
+    ai_prompt: 0,
+    sensitive: 0,
+    deleted: 0,
+    categories: [] as Array<{ category: string; count: number }>,
+    days: [] as Array<{ date: string; count: number }>
+  }
+  const categories = new Map<string, number>()
+  for (const item of overviews) {
+    summary.app += item.app_session_count || 0
+    summary.browser += item.browser_count || 0
+    summary.clipboard += item.clipboard_count || 0
+    summary.ai_prompt += item.ai_prompt_count || 0
+    summary.sensitive += item.sensitive_count || 0
+    const dayCount = (item.app_session_count || 0) + (item.browser_count || 0) + (item.clipboard_count || 0) + (item.ai_prompt_count || 0)
+    summary.days.push({ date: item.date, count: dayCount })
+    for (const category of item.category_distribution || []) {
+      categories.set(category.category, (categories.get(category.category) || 0) + category.count)
+    }
+  }
+  summary.total = summary.app + summary.browser + summary.clipboard + summary.ai_prompt
+  summary.categories = [...categories.entries()].map(([category, count]) => ({ category, count }))
+  return summary as T
+}
+
+async function buildPromptHttp<T>(payload: unknown): Promise<T> {
+  const result = await apiPost<{ date: string; template_name: string; prompt_text: string }>('/api/reports/build-prompt', {
+    date: getPayloadDate(payload),
+    template_name: String(getPayloadValue(payload, 'templateName') || getPayloadValue(payload, 'template_name') || 'daily_standard')
+  })
+  return { ...result, prompt: result.prompt_text } as T
+}
+
+async function generateReportHttp<T>(payload: unknown): Promise<T> {
+  return apiPost<T>('/api/reports/generate', {
+    date: getPayloadDate(payload),
+    template_name: String(getPayloadValue(payload, 'templateName') || getPayloadValue(payload, 'template_name') || 'daily_standard'),
+    save: getPayloadValue(payload, 'save') ?? true
+  })
+}
+
+async function getLatestReportHttp<T>(payload: unknown): Promise<T> {
+  const result = await apiGet<{ report: unknown }>('/api/reports/latest', { date: getPayloadDate(payload) })
+  return result.report as T
+}
+
+async function buildReportMaterialsHttp<T>(payload: unknown): Promise<T> {
+  const timeline = await apiGet<{ items: TimelineEvent[]; total: number }>('/api/timeline', {
+    date: getPayloadDate(payload),
+    selected: true,
+    limit: 500,
+    order: 'asc'
+  })
+  return {
+    summary: {
+      total_count: timeline.total,
+      selected_count: timeline.items.filter((item) => item.is_selected).length,
+      sensitive_excluded_count: timeline.items.filter((item) => item.is_sensitive).length,
+      pending_count: timeline.items.filter((item) => !item.is_selected).length,
+      estimated_prompt_chars: timeline.items.reduce((sum, item) => sum + (item.content_preview || '').length, 0)
+    },
+    items: timeline.items.map((item) => ({
+      source_type: item.source_type,
+      source_id: item.source_id,
+      title: item.title,
+      summary: item.content_preview || item.subtitle || '',
+      evidence: item.content_preview || '',
+      category: item.category || '其他',
+      time_range: item.start_time,
+      importance: 0,
+      is_sensitive: item.is_sensitive,
+      is_selected: item.is_selected
+    })),
+    hasMore: false
+  } as T
+}
+
+function getPayloadSourceType(payload: unknown): SourceType {
+  const raw = String(getPayloadValue(payload, 'sourceType') || getPayloadValue(payload, 'source_type') || 'app')
+  return (raw === 'ai' ? 'ai_prompt' : raw) as SourceType
+}
+
+function dateRangeDays(payload: unknown): string[] {
+  const start = String(getPayloadValue(payload, 'startDate') || getPayloadValue(payload, 'start_date') || getPayloadDate(payload)).slice(0, 10)
+  const end = String(getPayloadValue(payload, 'endDate') || getPayloadValue(payload, 'end_date') || start).slice(0, 10)
+  const startDate = new Date(`${start}T00:00:00`)
+  const endDate = new Date(`${end}T00:00:00`)
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return [getPayloadDate(payload)]
+  const first = startDate <= endDate ? startDate : endDate
+  const last = startDate <= endDate ? endDate : startDate
+  const days: string[] = []
+  const cursor = new Date(first)
+  while (cursor <= last && days.length < 367) {
+    days.push(cursor.toISOString().slice(0, 10))
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return days
 }
 
 export function callTypedBridge<Method extends keyof BridgeMethodPayloadMap>(

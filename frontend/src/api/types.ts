@@ -9,6 +9,19 @@ export interface BridgeResponse<T> {
   ok: boolean
   data?: T
   error?: string
+  code?: string
+}
+
+export interface ApiResponse<T> {
+  ok: boolean
+  data?: T
+  error?: string
+  code?: string
+}
+
+export interface PagedResult<T> {
+  items: T[]
+  total: number
 }
 
 export interface PageResult<T> {
@@ -27,6 +40,8 @@ export type TemplateName = 'daily_standard' | 'daily_technical' | 'daily_brief'
  * 新页面应优先使用 SourceType。
  */
 export type RecordKind = 'app' | 'clipboard' | 'browser' | 'ai'
+
+export type OverviewDTO = OverviewPayload
 
 export interface OverviewPayload {
   date: string
@@ -74,6 +89,68 @@ export interface TimelineEvent {
   is_deleted: boolean
 }
 
+export interface TimelineQuery {
+  date?: string
+  source_type?: SourceType | 'all'
+  selected?: boolean | null
+  sensitive?: boolean | null
+  keyword?: string
+  limit?: number
+  offset?: number
+  order?: 'asc' | 'desc'
+}
+
+export interface EntryDetail {
+  source_type: SourceType
+  id: number
+  detail: Record<string, unknown>
+}
+
+export interface EntryQuery {
+  date?: string
+  selected?: boolean | null
+  sensitive?: boolean | null
+  keyword?: string
+  limit?: number
+  offset?: number
+}
+
+export interface BuildPromptRequest {
+  date?: string
+  template_name?: string
+}
+
+export interface BuildPromptResponse {
+  date: string
+  template_name: string
+  prompt_text: string
+}
+
+export interface GenerateReportRequest {
+  date?: string
+  template_name?: string
+  save?: boolean
+}
+
+export interface GenerateReportResponse {
+  date: string
+  report_id?: number | null
+  report_markdown: string
+  prompt_text?: string
+}
+
+export interface LatestReportResponse {
+  date: string
+  report: null | {
+    id: number
+    template_name: string
+    model_name?: string
+    report_markdown: string
+    created_at: string
+    [key: string]: unknown
+  }
+}
+
 export interface DataCenterSummaryPayload {
   total: number
   app: number
@@ -101,6 +178,7 @@ export interface MaterialCard {
   evidence: string
   importance: number
   is_sensitive: boolean
+  is_selected?: boolean
 }
 
 export interface GeneratedReport {
@@ -287,6 +365,14 @@ export interface MaterialListPayload {
   date?: string
   items: MaterialCard[]
   total?: number
+  summary?: {
+    total_count: number
+    selected_count: number
+    sensitive_excluded_count: number
+    pending_count: number
+    estimated_prompt_chars: number
+  }
+  hasMore?: boolean
 }
 
 export interface TimelineListPayload {

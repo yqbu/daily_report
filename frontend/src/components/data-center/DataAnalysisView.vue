@@ -42,6 +42,9 @@ const filterSignature = computed(() => {
 })
 
 async function loadChart(chartType: string): Promise<void> {
+  if (loadingCharts[chartType]) {
+    return
+  }
   const requestId = (chartRequestIds[chartType] ?? 0) + 1
   chartRequestIds[chartType] = requestId
   loadedCharts[chartType] = true
@@ -272,14 +275,10 @@ watch(
 watch(
   () => props.active,
   (active) => {
-    if (!active) {
+    if (!active || loadedCharts[chartCards[0].key]) {
       return
     }
-    for (const chart of chartCards) {
-      if (!loadedCharts[chart.key]) {
-        void loadChart(chart.key)
-      }
-    }
+    void loadChart(chartCards[0].key)
   },
   { immediate: true }
 )

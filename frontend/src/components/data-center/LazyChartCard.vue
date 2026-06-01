@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, watch } from 'vue'
-import * as echarts from 'echarts'
 
-import type { EChartsOption } from 'echarts'
+import type { ECharts, EChartsOption } from 'echarts'
 
 const props = defineProps<{
   title: string
@@ -24,20 +23,21 @@ const effectiveLoaded = computed(() => loaded.value || Boolean(props.loaded))
 const cardStyle = computed(() => ({
   '--chart-span': String(props.span ?? (props.wide ? 2 : 1))
 }))
-let chart: echarts.ECharts | null = null
+let chart: ECharts | null = null
+let echartsModule: typeof import('echarts') | null = null
 let observer: IntersectionObserver | null = null
 let resizeObserver: ResizeObserver | null = null
 let resizeFrame = 0
 
 function requestLoad(): void {
-  if (loaded.value) {
+  if (effectiveLoaded.value) {
     return
   }
   loaded.value = true
   emit('load')
 }
 
-function renderChart(): void {
+async function renderChart(): Promise<void> {
   if (!props.option) {
     chart?.clear()
     return
@@ -45,7 +45,8 @@ function renderChart(): void {
   if (!chartEl.value) {
     return
   }
-  chart ||= echarts.init(chartEl.value)
+  echartsModule ||= await import('echarts')
+  chart ||= echartsModule.init(chartEl.value)
   chart.setOption(props.option, true)
   scheduleResize()
 }
@@ -86,7 +87,7 @@ watch(
   () => props.option,
   async () => {
     await nextTick()
-    renderChart()
+    await renderChart()
   },
   { flush: 'post' }
 )

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, reactive, shallowRef, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, reactive, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ChatDotRound,
@@ -16,7 +16,6 @@ import {
 import { callTypedBridge } from '../api/bridge'
 import type { AnyRecord, DataCenterSummaryPayload, SourceType, TimelineEvent } from '../api/types'
 import DateRangePicker from '../components/DateRangePicker.vue'
-import DataAnalysisView from '../components/data-center/DataAnalysisView.vue'
 import DataCenterFilterBar from '../components/data-center/DataCenterFilterBar.vue'
 import RecordDetailDrawer from '../components/data-center/RecordDetailDrawer.vue'
 import TimelineInfiniteList from '../components/data-center/TimelineInfiniteList.vue'
@@ -37,6 +36,7 @@ let filters = reactive<DataCenterFilters>({
 })
 
 const activeView = shallowRef<DataCenterView>('timeline')
+const DataAnalysisView = defineAsyncComponent(() => import('../components/data-center/DataAnalysisView.vue'))
 const summary = shallowRef<DataCenterSummaryPayload>(emptySummary())
 const summaryLoading = shallowRef(false)
 const timelineItems = shallowRef<TimelineEvent[]>([])

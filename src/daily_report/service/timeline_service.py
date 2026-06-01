@@ -60,17 +60,21 @@ class TimelineService:
     ) -> list[TimelineEvent]:
         day = date or date_cls.today().isoformat()
         wanted = self._normalize_source_types(source_types)
+        start = max(0, int(offset or 0))
+        stop = start + max(1, int(limit))
+        query_limit = None if _requires_full_scan(wanted, sensitive, category) else stop
+        order_direction = _order_direction(sort_order)
         events: list[TimelineEvent] = []
         with self._connect() as conn:
             annotations = AnnotationRepository(conn)
             if 'app' in wanted:
-                events.extend(self._list_app(conn, annotations, day, selected, keyword))
+                events.extend(self._list_app(conn, annotations, day, selected, keyword, query_limit, order_direction))
             if 'browser' in wanted:
-                events.extend(self._list_browser(conn, annotations, day, selected, keyword))
+                events.extend(self._list_browser(conn, annotations, day, selected, keyword, query_limit, order_direction))
             if 'clipboard' in wanted:
-                events.extend(self._list_clipboard(conn, annotations, day, selected, sensitive, keyword))
+                events.extend(self._list_clipboard(conn, annotations, day, selected, sensitive, keyword, query_limit, order_direction))
             if 'ai_prompt' in wanted:
-                events.extend(self._list_ai_prompt(conn, annotations, day, selected, sensitive, keyword))
+                events.extend(self._list_ai_prompt(conn, annotations, day, selected, sensitive, keyword, query_limit, order_direction))
 
         if sensitive is not None:
             events = [event for event in events if event.is_sensitive is sensitive]
@@ -80,8 +84,6 @@ class TimelineService:
 
         reverse = sort_order.lower() == 'desc'
         events.sort(key=lambda event: (event.start_time or '', event.source_id), reverse=reverse)
-        start = max(0, int(offset or 0))
-        stop = start + max(1, int(limit))
         return events[start:stop]
 
     def update_entry_selection(self, source_type: str, source_id: int, selected: bool) -> None:
@@ -93,14 +95,17 @@ class TimelineService:
             )
             conn.commit()
 
-    def mark_entry_deleted(self, source_type: str, source_id: int) -> None:
+    def update_entry_deleted(self, source_type: str, source_id: int, deleted: bool) -> None:
         table = self._source_table(source_type)
         with self._connect() as conn:
             conn.execute(
-                f"UPDATE {table} SET is_deleted = 1, updated_at = datetime('now', 'localtime') WHERE id = ?",
-                (int(source_id),),
+                f"UPDATE {table} SET is_deleted = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
+                (int(deleted), int(source_id)),
             )
             conn.commit()
+
+    def mark_entry_deleted(self, source_type: str, source_id: int) -> None:
+        self.update_entry_deleted(source_type, source_id, True)
 
     def get_entry_detail(
         self,
@@ -142,6 +147,8 @@ class TimelineService:
         day: str,
         selected: bool | None,
         keyword: str | None,
+        row_limit: int | None,
+        order_direction: str,
     ) -> list[TimelineEvent]:
         if not _table_exists(conn, 'app_sessions'):
             return []
@@ -167,9 +174,10 @@ class TimelineService:
             FROM app_sessions a
             LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name))
             WHERE {' AND '.join(clauses)}
-            ORDER BY a.start_time ASC
+            ORDER BY a.start_time {order_direction}, a.id {order_direction}
+            {_limit_clause(row_limit)}
             """,
-            tuple(params),
+            tuple(_with_limit(params, row_limit)),
         ).fetchall()
         annotation_map = annotations.get_annotations_for_ids('app', [int(row['id']) for row in rows])
         events = []
@@ -211,6 +219,8 @@ class TimelineService:
         day: str,
         selected: bool | None,
         keyword: str | None,
+        row_limit: int | None,
+        order_direction: str,
     ) -> list[TimelineEvent]:
         if not _table_exists(conn, 'browser_history_entries'):
             return []
@@ -229,9 +239,10 @@ class TimelineService:
             SELECT *
             FROM browser_history_entries
             WHERE {' AND '.join(clauses)}
-            ORDER BY visit_time ASC
+            ORDER BY visit_time {order_direction}, id {order_direction}
+            {_limit_clause(row_limit)}
             """,
-            tuple(params),
+            tuple(_with_limit(params, row_limit)),
         ).fetchall()
         annotation_map = annotations.get_annotations_for_ids('browser', [int(row['id']) for row in rows])
         events = []
@@ -269,6 +280,8 @@ class TimelineService:
         selected: bool | None,
         sensitive: bool | None,
         keyword: str | None,
+        row_limit: int | None,
+        order_direction: str,
     ) -> list[TimelineEvent]:
         if not _table_exists(conn, 'clipboard_entries'):
             return []
@@ -290,9 +303,10 @@ class TimelineService:
             SELECT *
             FROM clipboard_entries
             WHERE {' AND '.join(clauses)}
-            ORDER BY first_seen_at ASC
+            ORDER BY first_seen_at {order_direction}, id {order_direction}
+            {_limit_clause(row_limit)}
             """,
-            tuple(params),
+            tuple(_with_limit(params, row_limit)),
         ).fetchall()
         annotation_map = annotations.get_annotations_for_ids('clipboard', [int(row['id']) for row in rows])
         events = []
@@ -325,6 +339,8 @@ class TimelineService:
         selected: bool | None,
         sensitive: bool | None,
         keyword: str | None,
+        row_limit: int | None,
+        order_direction: str,
     ) -> list[TimelineEvent]:
         if not _table_exists(conn, 'ai_prompt_entries'):
             return []
@@ -346,9 +362,10 @@ class TimelineService:
             SELECT *
             FROM ai_prompt_entries
             WHERE {' AND '.join(clauses)}
-            ORDER BY timestamp ASC
+            ORDER BY timestamp {order_direction}, id {order_direction}
+            {_limit_clause(row_limit)}
             """,
-            tuple(params),
+            tuple(_with_limit(params, row_limit)),
         ).fetchall()
         annotation_map = annotations.get_annotations_for_ids('ai_prompt', [int(row['id']) for row in rows])
         events = []
@@ -441,6 +458,30 @@ def _normalize_categories(value: str | list[str] | None) -> set[str]:
         text = value.strip()
         return {text} if text else set()
     return {str(item).strip() for item in value if str(item).strip()}
+
+
+def _requires_full_scan(
+    source_types: set[str],
+    sensitive: bool | None,
+    category: str | list[str] | None,
+) -> bool:
+    if _normalize_categories(category):
+        return True
+    return sensitive is not None and bool(source_types & {'app', 'browser'})
+
+
+def _order_direction(sort_order: str) -> str:
+    return 'DESC' if str(sort_order or '').lower() == 'desc' else 'ASC'
+
+
+def _limit_clause(row_limit: int | None) -> str:
+    return 'LIMIT ?' if row_limit is not None else ''
+
+
+def _with_limit(params: list[Any], row_limit: int | None) -> list[Any]:
+    if row_limit is None:
+        return params
+    return [*params, max(1, int(row_limit))]
 
 
 def _parse_datetime(value: str | None) -> datetime | None:

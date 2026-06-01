@@ -57,26 +57,35 @@ class GuiService:
         filters = params.get("filters") if isinstance(params.get("filters"), dict) else params
         limit = max(1, min(200, int(params.get("pageSize") or params.get("limit") or filters.get("limit") or 40)))
         offset = max(0, int(params.get("offset") or _cursor_offset(params.get("cursor")) or 0))
-        events = self._timeline_events_for_params(params, filters)
-        total = len(events)
-        page_items = events[offset : offset + limit]
+        events = self._timeline_events_for_params(params, filters, limit=limit + 1, offset=offset)
+        has_more = len(events) > limit
+        page_items = events[:limit]
         next_offset = offset + limit
         return {
             "items": [event.to_dict() for event in page_items],
-            "total": total,
+            "total": offset + len(page_items) + (1 if has_more else 0),
             "offset": offset,
             "limit": limit,
-            "nextCursor": str(next_offset) if next_offset < total else None,
-            "hasMore": next_offset < total,
+            "nextCursor": str(next_offset) if has_more else None,
+            "hasMore": has_more,
         }
 
-    def _timeline_events_for_params(self, params: dict[str, Any], filters: dict[str, Any]) -> list[Any]:
+    def _timeline_events_for_params(
+        self,
+        params: dict[str, Any],
+        filters: dict[str, Any],
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[Any]:
         source_types = filters.get("source_types") or filters.get("sourceTypes")
         if isinstance(source_types, str):
             source_types = [source_types] if source_types else None
         sort_order = str(filters.get("sort_order") or filters.get("sortOrder") or "desc")
         categories = _normalize_category_filter(filters)
         events = []
+        page_limit = max(1, int(limit or 100000))
+        page_offset = max(0, int(offset or 0))
+        per_day_limit = page_offset + page_limit
         for day in _date_range_days(params, filters, self.provider.today()):
             events.extend(
                 self.timeline_service.list_timeline(
@@ -86,14 +95,14 @@ class GuiService:
                     sensitive=_optional_bool(filters.get("sensitive")),
                     category=categories,
                     keyword=str(filters.get("keyword") or "").strip() or None,
-                    limit=100000,
+                    limit=per_day_limit,
                     offset=0,
                     sort_order=sort_order,
                 )
             )
         reverse = sort_order.lower() == "desc"
         events.sort(key=lambda event: (event.start_time or "", event.source_id), reverse=reverse)
-        return events
+        return events[page_offset : page_offset + page_limit]
 
     def list_entries(
         self,
@@ -165,24 +174,39 @@ class GuiService:
                 clauses.append("(" + " OR ".join(f"{column} LIKE ?" for column in keyword_columns) + ")")
                 params.extend([like] * len(keyword_columns))
 
-            sql_where = " AND ".join(clauses)
-            rows_for_total = conn.execute(
-                f"""
-                SELECT *
-                FROM {table}
-                WHERE {sql_where}
-                ORDER BY {time_column} DESC, id DESC
-                """,
-                tuple(params),
-            ).fetchall()
             annotation_repo = AnnotationRepository(conn)
-            filtered_rows = [
-                item
-                for item in (self._merge_entry_row(annotation_repo, source_type, row) for row in rows_for_total)
-                if self._matches_annotation_filters(item, filters)
-            ]
-            total = len(filtered_rows)
-            page_items = filtered_rows[offset : offset + page_size]
+            sql_where = " AND ".join(clauses)
+            requires_annotation_filter = bool(filters.get("category") or _requires_annotation_sensitive(source_type, sensitive))
+
+            if requires_annotation_filter:
+                rows_for_total = conn.execute(
+                    f"""
+                    SELECT *
+                    FROM {table}
+                    WHERE {sql_where}
+                    ORDER BY {time_column} DESC, id DESC
+                    """,
+                    tuple(params),
+                ).fetchall()
+                filtered_rows = [
+                    item
+                    for item in (self._merge_entry_row(annotation_repo, source_type, row) for row in rows_for_total)
+                    if self._matches_annotation_filters(item, filters)
+                ]
+                total = len(filtered_rows)
+                page_items = filtered_rows[offset : offset + page_size]
+            else:
+                row = conn.execute(
+                    f"""
+                    SELECT COUNT(*) AS n
+                    FROM {table}
+                    WHERE {sql_where}
+                    """,
+                    tuple(params),
+                ).fetchone()
+                total = int(row["n"] if row else 0)
+                page_items = []
+
             rows = conn.execute(
                 f"""
                 SELECT *
@@ -194,10 +218,10 @@ class GuiService:
                 tuple([*params, page_size, offset]),
             ).fetchall()
             return {
-                "items": page_items if (filters.get("category") or _requires_annotation_sensitive(source_type, sensitive)) else [
+                "items": page_items if requires_annotation_filter else [
                     self._merge_entry_row(annotation_repo, source_type, row) for row in rows
                 ],
-                "total": total if (filters.get("category") or _requires_annotation_sensitive(source_type, sensitive)) else len(rows_for_total),
+                "total": total,
                 "page": page,
                 "page_size": page_size,
             }
@@ -298,6 +322,9 @@ class GuiService:
 
     def get_data_center_summary(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         filters = (params or {}).get("filters") if isinstance((params or {}).get("filters"), dict) else (params or {})
+        if _can_use_fast_summary(filters):
+            return self._fast_data_center_summary(params or {}, filters)
+
         items = [event.to_dict() for event in self._timeline_events_for_params(params or {}, filters)]
         by_source = Counter(str(item.get("source_type") or "") for item in items if isinstance(item, dict))
         sensitive_count = sum(1 for item in items if isinstance(item, dict) and bool(item.get("is_sensitive")))
@@ -320,6 +347,150 @@ class GuiService:
             "days": [{"date": key, "count": day_counts[key]} for key in sorted(day_counts.keys(), reverse=True)],
         }
 
+    def _fast_data_center_summary(self, params: dict[str, Any], filters: dict[str, Any]) -> dict[str, Any]:
+        days = _date_range_days(params, filters, self.provider.today())
+        wanted = _summary_source_types(filters)
+        sensitive = _optional_bool(filters.get("sensitive"))
+        summary = {
+            "total": 0,
+            "app": 0,
+            "browser": 0,
+            "clipboard": 0,
+            "ai_prompt": 0,
+            "sensitive": 0,
+            "deleted": 0,
+            "categories": [],
+            "days": [],
+        }
+        day_counts = {day: 0 for day in days}
+        category_counts: Counter[str] = Counter()
+        conn = self.provider.connect()
+        try:
+            for source_type in wanted:
+                count, sensitive_count, deleted_count, by_day, by_category = self._summary_source_counts(
+                    conn,
+                    source_type,
+                    days,
+                    sensitive,
+                )
+                summary[source_type] = count
+                summary["total"] += count
+                summary["sensitive"] += sensitive_count
+                summary["deleted"] += deleted_count
+                for day, value in by_day.items():
+                    day_counts[day] = day_counts.get(day, 0) + value
+                category_counts.update(by_category)
+        finally:
+            conn.close()
+
+        summary["categories"] = [
+            {"category": key, "count": value}
+            for key, value in category_counts.most_common()
+            if key
+        ]
+        summary["days"] = [
+            {"date": day, "count": day_counts[day]}
+            for day in sorted(day_counts.keys(), reverse=True)
+            if day_counts[day] > 0
+        ]
+        return summary
+
+    def _summary_source_counts(
+        self,
+        conn,
+        source_type: str,
+        days: list[str],
+        sensitive: bool | None,
+    ) -> tuple[int, int, int, dict[str, int], Counter[str]]:
+        if not days:
+            return 0, 0, 0, {}, Counter()
+        placeholders = ",".join("?" for _ in days)
+        if source_type == "app":
+            where = f"a.date IN ({placeholders}) AND a.is_deleted = 0 AND COALESCE(p.track_enabled, 1) = 1"
+            params: list[Any] = list(days)
+            if sensitive is not None:
+                where += " AND COALESCE(e.is_sensitive_override, 0) = ?"
+                params.append(int(sensitive))
+            count = _count_where_join(
+                conn,
+                """
+                app_sessions a
+                LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name))
+                LEFT JOIN entry_annotations e ON e.source_type = 'app' AND e.source_id = a.id
+                """,
+                where,
+                params,
+            )
+            sensitive_count = _count_where_join(
+                conn,
+                """
+                app_sessions a
+                LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name))
+                LEFT JOIN entry_annotations e ON e.source_type = 'app' AND e.source_id = a.id
+                """,
+                f"{where} AND COALESCE(e.is_sensitive_override, 0) = 1",
+                params,
+            )
+            by_day = _group_count(
+                conn,
+                "app_sessions a LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name)) LEFT JOIN entry_annotations e ON e.source_type = 'app' AND e.source_id = a.id",
+                "a.date",
+                where,
+                params,
+            )
+            by_category = _group_count(
+                conn,
+                "app_sessions a LEFT JOIN app_profiles p ON p.app_key = LOWER(TRIM(a.process_name)) LEFT JOIN entry_annotations e ON e.source_type = 'app' AND e.source_id = a.id",
+                "COALESCE(NULLIF(e.category, ''), NULLIF(p.category, ''), '其他')",
+                where,
+                params,
+            )
+            return count, sensitive_count, 0, by_day, Counter(by_category)
+
+        table = {
+            "browser": "browser_history_entries",
+            "clipboard": "clipboard_entries",
+            "ai_prompt": "ai_prompt_entries",
+        }.get(source_type)
+        if table is None or not _service_table_exists(conn, table):
+            return 0, 0, 0, {}, Counter()
+        time_sensitive_join = source_type == "browser"
+        if time_sensitive_join:
+            where = f"t.date IN ({placeholders}) AND t.is_deleted = 0"
+            params = list(days)
+            if sensitive is not None:
+                where += " AND COALESCE(e.is_sensitive_override, 0) = ?"
+                params.append(int(sensitive))
+            from_sql = f"{table} t LEFT JOIN entry_annotations e ON e.source_type = ? AND e.source_id = t.id"
+            join_params = [source_type]
+            count = _count_where_join(conn, from_sql, where, [*join_params, *params])
+            sensitive_count = _count_where_join(
+                conn,
+                from_sql,
+                f"{where} AND COALESCE(e.is_sensitive_override, 0) = 1",
+                [*join_params, *params],
+            )
+            by_day = _group_count(conn, from_sql, "t.date", where, [*join_params, *params])
+            by_category = _group_count(
+                conn,
+                from_sql,
+                "COALESCE(NULLIF(e.category, ''), '其他')",
+                where,
+                [*join_params, *params],
+            )
+            return count, sensitive_count, 0, by_day, Counter(by_category)
+
+        where = f"date IN ({placeholders}) AND is_deleted = 0"
+        params = list(days)
+        if sensitive is not None:
+            where += " AND is_sensitive = ?"
+            params.append(int(sensitive))
+        count = _count_where(conn, table, where, params)
+        sensitive_count = _count_where(conn, table, f"{where} AND is_sensitive = 1", params)
+        deleted_count = _count_where(conn, table, f"date IN ({placeholders}) AND is_deleted = 1", list(days))
+        by_day = _group_count(conn, table, "date", where, params)
+        return count, sensitive_count, deleted_count, by_day, Counter()
+
     def get_data_center_analytics(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
         filters = params.get("filters") if isinstance(params.get("filters"), dict) else params
@@ -335,7 +506,7 @@ class GuiService:
         }
         days = _date_range_days(params, filters, self.provider.today())
         charts: dict[str, Any] = {}
-        summary = self.get_data_center_summary(params)
+        summary = self.get_data_center_summary(params) if not chart_types else None
         conn = self.provider.connect()
         try:
             if "dailyRecordTrend" in requested:
@@ -350,7 +521,7 @@ class GuiService:
                 charts["sensitiveSourceDistribution"] = self._analytics_sensitive_source_distribution(conn, days)
         finally:
             conn.close()
-        return {"summary": summary, "charts": charts}
+        return {"summary": summary or {}, "charts": charts}
 
     def list_app_profiles(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         return self.app_profile_service.list_profiles(params)
@@ -1316,3 +1487,37 @@ def _count_where(conn, table_name: str, where_sql: str, params: list[Any]) -> in
         return 0
     row = conn.execute(f"SELECT COUNT(*) AS n FROM {table_name} WHERE {where_sql}", tuple(params)).fetchone()
     return int(row["n"] if row else 0)
+
+
+def _count_where_join(conn, from_sql: str, where_sql: str, params: list[Any]) -> int:
+    row = conn.execute(f"SELECT COUNT(*) AS n FROM {from_sql} WHERE {where_sql}", tuple(params)).fetchone()
+    return int(row["n"] if row else 0)
+
+
+def _group_count(conn, from_sql: str, group_expr: str, where_sql: str, params: list[Any]) -> dict[str, int]:
+    rows = conn.execute(
+        f"""
+        SELECT {group_expr} AS key, COUNT(*) AS n
+        FROM {from_sql}
+        WHERE {where_sql}
+        GROUP BY key
+        """,
+        tuple(params),
+    ).fetchall()
+    return {str(row["key"] or ""): int(row["n"] or 0) for row in rows}
+
+
+def _can_use_fast_summary(filters: dict[str, Any]) -> bool:
+    if str(filters.get("keyword") or "").strip():
+        return False
+    return not _normalize_category_filter(filters)
+
+
+def _summary_source_types(filters: dict[str, Any]) -> set[str]:
+    raw = filters.get("sourceTypes") or filters.get("source_types")
+    if isinstance(raw, str):
+        raw = [raw] if raw else None
+    if not isinstance(raw, list) or not raw:
+        return {"app", "browser", "clipboard", "ai_prompt"}
+    normalized = {"ai_prompt" if str(item) == "ai" else str(item) for item in raw}
+    return normalized & {"app", "browser", "clipboard", "ai_prompt"}
