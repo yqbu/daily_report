@@ -106,10 +106,13 @@ class PythonBridge(QObject):
     @Slot(str, result=str)
     def updateEntrySelection(self, payload: str = "") -> str:  # noqa: N802
         def run(data: dict[str, Any]) -> dict[str, Any]:
+            raw_ids = data.get("ids") or data.get("sourceIds") or data.get("source_ids")
+            source_ids = [int(item) for item in raw_ids] if isinstance(raw_ids, list) else None
             return self.service.update_entry_selection(
                 str(data.get("sourceType") or data.get("source_type") or ""),
                 int(data.get("id") or 0),
                 bool(data.get("selected")),
+                source_ids,
             )
 
         return self._call(payload, run)

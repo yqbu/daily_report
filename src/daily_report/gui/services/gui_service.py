@@ -29,7 +29,7 @@ from daily_report.service.category import infer_category_for_browser
 from daily_report.service.material_service import MaterialService
 from daily_report.service.overview_service import OverviewService
 from daily_report.service.report_service import ReportService
-from daily_report.service.timeline_service import TimelineService
+from daily_report.service.timeline_service import TimelineEvent, TimelineService
 from daily_report.storage.database import create_connection, init_database
 from daily_report.storage.repositories.annotation_repository import AnnotationRepository
 
@@ -237,9 +237,17 @@ class GuiService:
     ) -> dict[str, Any] | None:
         return self.timeline_service.get_entry_detail(source_type, entry_id, source_ids=source_ids)
 
-    def update_entry_selection(self, source_type: str, entry_id: int, selected: bool) -> dict[str, Any]:
-        self.timeline_service.update_entry_selection(source_type, entry_id, selected)
-        return {"source_type": source_type, "id": entry_id, "selected": selected}
+    def update_entry_selection(
+        self,
+        source_type: str,
+        entry_id: int,
+        selected: bool,
+        source_ids: list[int] | None = None,
+    ) -> dict[str, Any]:
+        ids = [int(item) for item in (source_ids or [entry_id]) if int(item) > 0]
+        for source_id in ids:
+            self.timeline_service.update_entry_selection(source_type, source_id, selected)
+        return {"source_type": source_type, "id": entry_id, "ids": ids, "selected": selected}
 
     def mark_entry_deleted(self, source_type: str, entry_id: int) -> dict[str, Any]:
         self.timeline_service.mark_entry_deleted(source_type, entry_id)
@@ -585,27 +593,29 @@ class GuiService:
             offset=0,
             sort_order="desc",
         )
+        material_candidates = self._aggregate_report_material_events(all_filtered)
+        material_candidates_with_sensitive = self._aggregate_report_material_events(all_with_sensitive)
         offset = max(0, int(pagination.get("offset") or 0))
         limit = max(1, min(200, int(pagination.get("limit") or 50)))
-        items = all_filtered[offset : offset + limit]
-        selected_count = sum(1 for item in all_with_sensitive if item.is_selected and not item.is_sensitive)
-        sensitive_excluded_count = sum(1 for item in all_with_sensitive if item.is_sensitive)
-        pending_count = sum(1 for item in all_filtered if not item.is_selected)
+        items = material_candidates[offset : offset + limit]
+        selected_count = sum(1 for item in material_candidates_with_sensitive if item.is_selected and not item.is_sensitive)
+        sensitive_excluded_count = sum(1 for item in material_candidates_with_sensitive if item.is_sensitive)
+        pending_count = sum(1 for item in material_candidates if not item.is_selected)
         estimated_chars = sum(
             len((item.title or "") + (item.subtitle or "") + (item.content_preview or ""))
-            for item in all_with_sensitive
+            for item in material_candidates_with_sensitive
             if item.is_selected and not item.is_sensitive
         )
         return {
             "summary": {
-                "total_count": len(all_filtered),
+                "total_count": len(material_candidates),
                 "selected_count": selected_count,
                 "sensitive_excluded_count": sensitive_excluded_count,
                 "pending_count": pending_count,
                 "estimated_prompt_chars": estimated_chars,
             },
             "items": [self._material_candidate(item) for item in items],
-            "hasMore": offset + limit < len(all_filtered),
+            "hasMore": offset + limit < len(material_candidates),
         }
 
     def batch_update_entry_selection(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -750,6 +760,100 @@ class GuiService:
         self.report_service.delete_report(int(report_id))
         return {"ok": True, "id": int(report_id)}
 
+    @classmethod
+    def _aggregate_report_material_events(cls, items: list[TimelineEvent]) -> list[TimelineEvent]:
+        app_groups: dict[tuple[str, str, bool], list[TimelineEvent]] = defaultdict(list)
+        passthrough: list[TimelineEvent] = []
+
+        for item in items:
+            if item.source_type == "app":
+                app_groups[(item.title or "前台应用", item.category or "其他", item.is_sensitive)].append(item)
+            else:
+                passthrough.append(item)
+
+        aggregated: list[TimelineEvent] = []
+        for (title, category, is_sensitive), group in app_groups.items():
+            sorted_group = sorted(group, key=lambda item: (item.start_time or "", item.source_id))
+            if not sorted_group:
+                continue
+
+            source_ids: list[int] = []
+            subtitles: list[str] = []
+            total_seconds = 0
+            for item in sorted_group:
+                raw_ids = item.source_ids or [item.source_id]
+                source_ids.extend(int(source_id) for source_id in raw_ids if int(source_id) > 0)
+                total_seconds += cls._event_duration_seconds(item)
+                subtitle = (item.content_preview or item.subtitle or "").strip()
+                if subtitle and subtitle not in subtitles:
+                    subtitles.append(subtitle)
+
+            first = sorted_group[0]
+            last = sorted_group[-1]
+            slices = cls._format_app_time_slices(sorted_group)
+            subtitle_text = f"{len(source_ids)} 条前台应用记录 · 使用约 {cls._format_seconds_zh(total_seconds)}"
+            preview_parts = [f"时间段：{slices}"]
+            if subtitles:
+                preview_parts.append("窗口线索：" + "；".join(subtitles[:6]))
+
+            aggregated.append(
+                TimelineEvent(
+                    event_id=f"app-material:{source_ids[0] if source_ids else first.source_id}-{source_ids[-1] if source_ids else last.source_id}",
+                    source_type="app",
+                    source_id=source_ids[0] if source_ids else first.source_id,
+                    source_ids=source_ids or [first.source_id],
+                    item_count=len(source_ids) or len(sorted_group),
+                    aggregate_kind="app_material_group",
+                    start_time=first.start_time,
+                    end_time=last.end_time or last.start_time,
+                    title=title,
+                    subtitle=subtitle_text,
+                    content_preview="；".join(preview_parts),
+                    category=category,
+                    is_selected=any(item.is_selected for item in sorted_group),
+                    is_sensitive=is_sensitive,
+                    is_deleted=all(item.is_deleted for item in sorted_group),
+                )
+            )
+
+        return sorted([*passthrough, *aggregated], key=lambda item: (item.start_time or "", item.source_id), reverse=True)
+
+    @staticmethod
+    def _format_app_time_slices(items: list[TimelineEvent]) -> str:
+        slices: list[str] = []
+        for item in items[:8]:
+            start = str(item.start_time or "")
+            end = str(item.end_time or "")
+            if len(start) >= 16 and len(end) >= 16:
+                text = f"{start[11:16]}-{end[11:16]}"
+            else:
+                text = start[11:16] if len(start) >= 16 else start
+            if text and text not in slices:
+                slices.append(text)
+        suffix = " 等" if len(items) > len(slices) and len(items) > 8 else ""
+        return "、".join(slices) + suffix if slices else "-"
+
+    @staticmethod
+    def _event_duration_seconds(item: TimelineEvent) -> int:
+        start = _parse_local_datetime(item.start_time)
+        end = _parse_local_datetime(item.end_time or item.start_time)
+        if start is None or end is None or end <= start:
+            return 0
+        return max(0, int((end - start).total_seconds()))
+
+    @staticmethod
+    def _format_seconds_zh(seconds: int) -> str:
+        seconds = max(0, int(seconds or 0))
+        hours, rem = divmod(seconds, 3600)
+        minutes, _ = divmod(rem, 60)
+        if hours and minutes:
+            return f"{hours}小时{minutes}分钟"
+        if hours:
+            return f"{hours}小时"
+        if minutes:
+            return f"{minutes}分钟"
+        return f"{seconds}秒"
+
     @staticmethod
     def _material_candidate(item: Any) -> dict[str, Any]:
         start = str(getattr(item, "start_time", "") or "")
@@ -768,6 +872,7 @@ class GuiService:
         return {
             "source_type": getattr(item, "source_type", ""),
             "source_id": int(getattr(item, "source_id", 0) or 0),
+            "source_ids": getattr(item, "source_ids", None),
             "title": str(getattr(item, "title", "") or ""),
             "summary": str(getattr(item, "content_preview", "") or getattr(item, "subtitle", "") or ""),
             "time_range": time_range,
@@ -1463,6 +1568,16 @@ def _date_range_days(params: dict[str, Any], filters: dict[str, Any], fallback: 
         start, end = end, start
     span = min((end - start).days, 366)
     return [(start + timedelta(days=index)).isoformat() for index in range(span + 1)]
+
+
+def _parse_local_datetime(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
 
 
 def _requires_annotation_sensitive(source_type: str, sensitive: bool | None) -> bool:

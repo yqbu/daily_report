@@ -95,7 +95,6 @@ const sourceMeta = computed(() => ({
   overflow-y: auto;
   padding-right: 4px;
   padding-top: 4px;
-  scrollbar-gutter: stable;
 }
 
 .material-row {

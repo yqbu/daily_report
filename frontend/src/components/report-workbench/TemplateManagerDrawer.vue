@@ -86,7 +86,7 @@ watch(
 <template>
   <el-drawer
     :model-value="modelValue"
-    size="min(720px, 92vw)"
+    size="min(860px, 94vw)"
     class="template-drawer"
     title="模板管理"
     @update:model-value="emit('update:modelValue', $event)"
@@ -153,7 +153,7 @@ watch(
 .template-shell {
   min-height: 0;
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 260px minmax(0, 1fr);
   gap: 14px;
 }
 
@@ -170,6 +170,16 @@ watch(
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.template-list-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.template-list-actions :deep(.el-button) {
+  width: 100%;
+  margin-left: 0;
 }
 
 .template-item {

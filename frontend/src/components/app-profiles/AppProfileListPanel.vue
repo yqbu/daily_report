@@ -785,7 +785,6 @@ defineExpose({
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
   background: #ffffff;
 }
 
@@ -841,7 +840,7 @@ defineExpose({
   width: 100%;
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
   align-items: start;
   align-content: start;
   gap: 14px;
@@ -1095,7 +1094,7 @@ defineExpose({
 .config-grid {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(200px, 1fr) minmax(148px, 0.45fr);
+  grid-template-columns: minmax(0, 1fr) minmax(112px, 0.42fr);
   gap: 11px;
 }
 
@@ -1353,6 +1352,21 @@ defineExpose({
 
 @media (max-width: 520px) {
   .config-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .switch-inline-group {
+    flex-wrap: wrap;
+    height: auto;
+  }
+}
+
+@container (max-width: 360px) {
+  .config-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .switch-field {
     grid-template-columns: minmax(0, 1fr);
   }
 

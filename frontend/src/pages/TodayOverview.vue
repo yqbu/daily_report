@@ -673,11 +673,10 @@ onMounted(() => {
   grid-template-rows: auto auto minmax(0, 1fr);
   align-content: stretch;
   gap: 12px;
-  min-width: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   color: var(--overview-text);
   background: #fbfcfd;
-  scrollbar-gutter: stable;
 }
 
 .overview-topbar,
@@ -1455,7 +1454,7 @@ onMounted(() => {
 @keyframes overview-card-enter {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(-6px);
   }
 
   to {

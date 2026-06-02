@@ -1,17 +1,14 @@
 <script setup lang="ts">
-import { Refresh, Select } from '@element-plus/icons-vue'
+import type { ReportTopbarAction } from '../../types/reportWorkbench'
 
 defineProps<{
   selectedDate: string
-  loading: boolean
-  generating: boolean
-  canGenerate: boolean
+  actions: ReportTopbarAction[]
 }>()
 
 const emit = defineEmits<{
   'update:selectedDate': [value: string]
-  refresh: []
-  generate: []
+  action: [id: string]
 }>()
 </script>
 
@@ -32,26 +29,31 @@ const emit = defineEmits<{
         class="date-picker"
         @update:model-value="emit('update:selectedDate', String($event))"
       />
-      <button
-        class="top-button"
-        type="button"
-        :disabled="loading"
-        title="刷新当前日报素材"
-        @click="emit('refresh')"
-      >
-        <Refresh class="action-icon" :class="{ 'action-icon--spin': loading }" />
-        <span>刷新素材</span>
-      </button>
-      <button
-        class="top-button top-button--primary"
-        type="button"
-        :disabled="generating || !canGenerate"
-        title="生成当前日期日报"
-        @click="emit('generate')"
-      >
-        <Select class="action-icon" />
-        <span>生成日报</span>
-      </button>
+
+      <TransitionGroup name="topbar-action" tag="div" class="action-group">
+        <button
+          v-for="action in actions"
+          :key="action.id"
+          class="top-button"
+          :class="{
+            'top-button--primary': action.tone === 'primary',
+            'top-button--success': action.tone === 'success',
+            'top-button--danger': action.tone === 'danger'
+          }"
+          type="button"
+          :disabled="action.disabled || action.loading"
+          :title="action.title || action.label"
+          @click="emit('action', action.id)"
+        >
+          <component
+            :is="action.icon"
+            v-if="action.icon"
+            class="action-icon"
+            :class="{ 'action-icon--spin': action.loading }"
+          />
+          <span>{{ action.label }}</span>
+        </button>
+      </TransitionGroup>
     </div>
   </header>
 </template>
@@ -74,6 +76,7 @@ const emit = defineEmits<{
 
 .topbar-title {
   min-width: 0;
+  flex: 0 0 auto;
 }
 
 .workspace-label {
@@ -90,9 +93,11 @@ const emit = defineEmits<{
   font-weight: 720;
   line-height: 1.15;
   letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .topbar-actions {
+  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   align-items: center;
@@ -101,7 +106,21 @@ const emit = defineEmits<{
 }
 
 .date-picker {
+  flex: 0 0 auto;
   width: 176px;
+}
+
+.action-group {
+  position: relative;
+  flex: 0 1 720px;
+  width: min(720px, 54vw);
+  min-height: 38px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  overflow: hidden;
 }
 
 .report-workbench-topbar :deep(.date-picker.el-date-editor.el-input) {
@@ -151,6 +170,12 @@ const emit = defineEmits<{
   font-size: 13px;
   white-space: nowrap;
   cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    opacity 160ms ease,
+    transform 160ms ease;
 }
 
 .top-button:hover {
@@ -171,6 +196,30 @@ const emit = defineEmits<{
   background: #1d4ed8;
 }
 
+.top-button--success {
+  color: #15803d;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.top-button--success:hover {
+  color: #166534;
+  border-color: #86efac;
+  background: #dcfce7;
+}
+
+.top-button--danger {
+  color: #dc2626;
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.top-button--danger:hover {
+  color: #b91c1c;
+  border-color: #fca5a5;
+  background: #fee2e2;
+}
+
 .top-button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
@@ -186,7 +235,30 @@ const emit = defineEmits<{
   animation: report-workbench-spin 900ms linear infinite;
 }
 
-@media (max-width: 760px) {
+.topbar-action-enter-active,
+.topbar-action-leave-active {
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.topbar-action-leave-active {
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.topbar-action-enter-from,
+.topbar-action-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.topbar-action-move {
+  transition: transform 180ms ease;
+}
+
+@media (max-width: 960px) {
   .report-workbench-topbar {
     align-items: flex-start;
     flex-direction: column;
@@ -194,8 +266,17 @@ const emit = defineEmits<{
 
   .topbar-actions {
     width: 100%;
+    align-items: flex-start;
     flex-wrap: wrap;
     justify-content: flex-start;
+  }
+
+  .action-group {
+    flex: 1 1 100%;
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    overflow: visible;
   }
 }
 

@@ -30,7 +30,7 @@ export async function getReportMaterials(payload: ReportMaterialsPayload): Promi
   }
 }
 
-export async function updateEntrySelection(payload: MaterialIdentity & { selected: boolean }): Promise<void> {
+export async function updateEntrySelection(payload: MaterialIdentity & { selected: boolean; ids?: number[] }): Promise<void> {
   await callBridge('updateEntrySelection', payload)
 }
 
@@ -105,4 +105,3 @@ function normalizeGenerateResult(response: Partial<GenerateReportResult>): Gener
     warnings: response.warnings
   }
 }
-

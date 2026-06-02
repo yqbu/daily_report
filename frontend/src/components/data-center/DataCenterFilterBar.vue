@@ -81,8 +81,8 @@ const sensitiveOptions: Array<{ label: string; value: SensitiveFilter }> = [
 
 .filter-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.78fr) minmax(0, 0.84fr) minmax(0, 1.5fr) auto;
-  gap: 12px;
+  grid-template-columns: minmax(118px, 1fr) minmax(104px, 0.72fr) minmax(112px, 0.78fr) minmax(180px, 1.25fr) auto;
+  gap: 10px;
   align-items: end;
 }
 
@@ -108,7 +108,7 @@ const sensitiveOptions: Array<{ label: string; value: SensitiveFilter }> = [
   justify-content: flex-end;
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 900px) {
   .filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -124,7 +124,7 @@ const sensitiveOptions: Array<{ label: string; value: SensitiveFilter }> = [
   }
 }
 
-@container (max-width: 1180px) {
+@container (max-width: 900px) {
   .filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

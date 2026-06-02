@@ -81,9 +81,11 @@ function viewPrompt(prompt: string): void {
 
 <style scoped>
 .history-pane {
+  height: 100%;
+  min-height: 0;
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+  grid-template-columns: minmax(360px, 0.78fr) minmax(0, 1.22fr);
   gap: 14px;
   align-items: stretch;
 }

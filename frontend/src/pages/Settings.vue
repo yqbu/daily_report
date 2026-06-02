@@ -824,8 +824,8 @@ onMounted(() => {
 .settings-tabs :deep(.el-tabs__content) {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  padding-right: 4px;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .settings-tabs :deep(.el-tab-pane) {
@@ -976,7 +976,7 @@ onMounted(() => {
 @keyframes settings-field-rise {
   from {
     opacity: 0;
-    transform: translateY(7px);
+    transform: translateY(-6px);
   }
 
   to {

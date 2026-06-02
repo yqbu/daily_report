@@ -190,7 +190,7 @@ export const useReportWorkbenchStore = defineStore('reportWorkbench', () => {
   }
 
   async function toggleMaterial(item: MaterialCandidate, selected: boolean): Promise<void> {
-    await updateEntrySelection({ sourceType: item.source_type, id: item.source_id, selected })
+    await updateEntrySelection({ sourceType: item.source_type, id: item.source_id, ids: item.source_ids, selected })
     materialItems.value = materialItems.value.map((row) =>
       row.source_type === item.source_type && row.source_id === item.source_id ? { ...row, is_selected: selected } : row
     )

@@ -13,6 +13,7 @@ const props = defineProps<{
   items: MaterialCandidate[]
   loading: boolean
   hasMore: boolean
+  showHeader?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -60,7 +61,7 @@ function updateFilters(patch: Partial<MaterialFilters>): void {
 
 <template>
   <section class="workbench-card material-card">
-    <header class="card-header">
+    <header v-if="showHeader !== false" class="card-header">
       <div>
         <h2 class="card-title">素材选择</h2>
         <p class="card-subtitle">从四类本地记录中筛选本次日报素材</p>
@@ -241,7 +242,15 @@ function updateFilters(patch: Partial<MaterialFilters>): void {
   }
 }
 
-@media (max-width: 1120px) {
+@media (max-width: 900px) {
+  .material-card {
+    height: auto;
+  }
+
+  .material-scroll {
+    max-height: clamp(260px, 48vh, 420px);
+  }
+
   .summary-grid {
     grid-template-columns: repeat(3, minmax(90px, 1fr));
   }
@@ -261,6 +270,16 @@ function updateFilters(patch: Partial<MaterialFilters>): void {
 @container (max-width: 520px) {
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 900px) {
+  .material-card {
+    height: auto;
+  }
+
+  .material-scroll {
+    max-height: clamp(260px, 48vh, 420px);
   }
 }
 

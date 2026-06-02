@@ -127,9 +127,9 @@ class MaterialService:
             (day,),
         ).fetchall()
         annotations = AnnotationRepository(conn).get_annotations_for_ids('app', [int(row['id']) for row in rows])
-        grouped: dict[tuple[str, str], list[sqlite3.Row]] = defaultdict(list)
+        grouped: dict[str, list[sqlite3.Row]] = defaultdict(list)
         for row in rows:
-            grouped[(_profile_display_name(row), _profile_window_title(row))].append(row)
+            grouped[_profile_display_name(row)].append(row)
 
         materials: list[MaterialCard] = []
         for group_rows in grouped.values():
@@ -142,7 +142,12 @@ class MaterialService:
                 first['window_title'],
             )
             title = _profile_display_name(first)
-            evidence = _profile_window_title(first) or title
+            window_titles = _unique_non_empty(_profile_window_title(row) for row in group_rows)
+            time_ranges = _format_time_ranges(group_rows)
+            evidence_parts = [f'时间段：{time_ranges}']
+            if window_titles:
+                evidence_parts.append('窗口线索：' + '；'.join(window_titles[:8]))
+            evidence = '；'.join(evidence_parts)
             materials.append(
                 MaterialCard(
                     source_type='app',
@@ -150,7 +155,7 @@ class MaterialService:
                     time_range=f"{_hhmm(first['start_time'])}-{_hhmm(group_rows[-1]['end_time'])}",
                     category=category,
                     title=title,
-                    summary=f"{title} 使用约 {_format_seconds(active_sec)}，相关窗口 {len(group_rows)} 次。",
+                    summary=f"{title} 使用约 {_format_seconds(active_sec)}，包含 {len(group_rows)} 个前台应用时间段。",
                     evidence=evidence,
                     importance=int(annotation.get('importance') or 0),
                     is_sensitive=False,
@@ -331,6 +336,28 @@ def _format_seconds(value: float) -> str:
     if minutes:
         return f'{minutes}m'
     return f'{seconds}s'
+
+
+def _unique_non_empty(values) -> list[str]:
+    items: list[str] = []
+    for value in values:
+        text = str(value or '').strip()
+        if text and text not in items:
+            items.append(text)
+    return items
+
+
+def _format_time_ranges(rows: list[sqlite3.Row]) -> str:
+    ranges: list[str] = []
+    for row in rows[:8]:
+        start = _hhmm(row['start_time'])
+        end = _hhmm(row['end_time'])
+        text = f'{start}-{end}' if start and end else start or end
+        if text and text not in ranges:
+            ranges.append(text)
+    if len(rows) > 8:
+        ranges.append('等')
+    return '、'.join(ranges) if ranges else '-'
 
 
 def _profile_display_name(row: sqlite3.Row) -> str:

@@ -12,6 +12,8 @@ const props = defineProps<{
   saved: boolean
   selectedDate: string
   templateName: string
+  showHeader?: boolean
+  showActions?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -45,12 +47,12 @@ function exportMarkdown(): void {
 
 <template>
   <section class="workbench-card result-card">
-    <header class="result-header">
+    <header v-if="showHeader !== false" class="result-header">
       <div>
         <h2 class="card-title">生成结果预览</h2>
         <p class="card-subtitle">Markdown 预览、原文和本次 Prompt 会保留在这里</p>
       </div>
-      <div class="result-actions">
+      <div v-if="showActions !== false" class="result-actions">
         <el-button :icon="Refresh" :loading="loading" :disabled="!markdown" @click="emit('regenerate')">重新生成</el-button>
         <el-button :icon="CopyDocument" :disabled="!markdown" @click="emit('copy', markdown)">复制 Markdown</el-button>
         <el-button :icon="Download" :disabled="!markdown" @click="exportMarkdown">导出 .md</el-button>
@@ -89,11 +91,25 @@ function exportMarkdown(): void {
       </el-tab-pane>
 
       <el-tab-pane label="原始 Markdown" name="markdown">
-        <el-input :model-value="markdown" type="textarea" :rows="16" resize="none" readonly placeholder="暂无生成结果" />
+        <el-input
+          :model-value="markdown"
+          class="result-textarea"
+          type="textarea"
+          resize="none"
+          readonly
+          placeholder="暂无生成结果"
+        />
       </el-tab-pane>
 
       <el-tab-pane label="Prompt" name="prompt">
-        <el-input :model-value="promptText" type="textarea" :rows="16" resize="none" readonly placeholder="尚未构建 Prompt" />
+        <el-input
+          :model-value="promptText"
+          class="result-textarea"
+          type="textarea"
+          resize="none"
+          readonly
+          placeholder="尚未构建 Prompt"
+        />
       </el-tab-pane>
     </el-tabs>
   </section>
@@ -102,6 +118,11 @@ function exportMarkdown(): void {
 <style scoped>
 .result-card {
   min-width: 0;
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .result-header {
@@ -140,12 +161,33 @@ function exportMarkdown(): void {
 
 .result-tabs {
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.result-tabs :deep(.el-tabs__header) {
+  flex: 0 0 auto;
+  margin: 0 0 10px;
+}
+
+.result-tabs :deep(.el-tabs__content) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.result-tabs :deep(.el-tab-pane) {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .markdown-preview,
 .result-loading {
-  min-height: 260px;
-  max-height: 420px;
+  height: 100%;
+  min-height: 0;
   overflow: auto;
   padding: 18px;
   border: 1px solid #e3ebf6;
@@ -203,6 +245,16 @@ function exportMarkdown(): void {
   border-radius: 8px;
   background: #172033;
   color: #e5edf7;
+}
+
+.result-textarea {
+  height: 100%;
+}
+
+.result-textarea :deep(.el-textarea__inner) {
+  height: 100%;
+  min-height: 0 !important;
+  overflow: auto;
 }
 
 @keyframes result-spin {

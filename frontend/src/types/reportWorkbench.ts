@@ -1,8 +1,21 @@
+import type { Component } from 'vue'
 import type { AnyRecord, SourceType } from '../api/types'
 
 export type ReportWorkbenchTab = 'generate' | 'history'
 export type SensitiveMaterialFilter = 'non_sensitive' | 'sensitive' | 'all'
 export type ReportResultView = 'preview' | 'markdown' | 'prompt'
+export type GenerateStep = 0 | 1 | 2 | 3
+export type ReportTopbarActionTone = 'default' | 'primary' | 'success' | 'danger'
+
+export interface ReportTopbarAction {
+  id: string
+  label: string
+  title?: string
+  icon?: Component
+  disabled?: boolean
+  loading?: boolean
+  tone?: ReportTopbarActionTone
+}
 
 export interface ReportTemplate {
   id: string
@@ -43,6 +56,7 @@ export interface MaterialSummary {
 export interface MaterialCandidate {
   source_type: SourceType
   source_id: number
+  source_ids?: number[]
   title: string
   summary: string
   evidence?: string
