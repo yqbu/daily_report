@@ -91,25 +91,11 @@ function exportMarkdown(): void {
       </el-tab-pane>
 
       <el-tab-pane label="原始 Markdown" name="markdown">
-        <el-input
-          :model-value="markdown"
-          class="result-textarea"
-          type="textarea"
-          resize="none"
-          readonly
-          placeholder="暂无生成结果"
-        />
+        <pre class="result-raw-panel">{{ markdown || '暂无生成结果' }}</pre>
       </el-tab-pane>
 
       <el-tab-pane label="Prompt" name="prompt">
-        <el-input
-          :model-value="promptText"
-          class="result-textarea"
-          type="textarea"
-          resize="none"
-          readonly
-          placeholder="尚未构建 Prompt"
-        />
+        <pre class="result-raw-panel">{{ promptText || '尚未构建 Prompt' }}</pre>
       </el-tab-pane>
     </el-tabs>
   </section>
@@ -175,17 +161,23 @@ function exportMarkdown(): void {
 .result-tabs :deep(.el-tabs__content) {
   flex: 1 1 auto;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
 .result-tabs :deep(.el-tab-pane) {
-  height: 100%;
+  flex: 1 1 auto;
+  height: auto;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
 .markdown-preview,
-.result-loading {
+.result-loading,
+.result-raw-panel {
   height: 100%;
   min-height: 0;
   overflow: auto;
@@ -247,14 +239,13 @@ function exportMarkdown(): void {
   color: #e5edf7;
 }
 
-.result-textarea {
-  height: 100%;
-}
-
-.result-textarea :deep(.el-textarea__inner) {
-  height: 100%;
-  min-height: 0 !important;
-  overflow: auto;
+.result-raw-panel {
+  margin: 0;
+  color: #344054;
+  font: inherit;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 @keyframes result-spin {

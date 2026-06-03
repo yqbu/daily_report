@@ -129,14 +129,7 @@ function blockText(block: string, marker: string): string {
         </el-tab-pane>
 
         <el-tab-pane label="原始 Markdown" name="markdown">
-          <el-input
-            :model-value="report.report_markdown || ''"
-            type="textarea"
-            :rows="18"
-            resize="none"
-            readonly
-            placeholder="暂无日报正文"
-          />
+          <pre class="raw-block">{{ report.report_markdown || '暂无日报正文' }}</pre>
         </el-tab-pane>
 
         <el-tab-pane label="素材明细" name="materials">
@@ -162,20 +155,22 @@ function blockText(block: string, marker: string): string {
   min-height: 0;
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr);
-  gap: 14px;
-  padding: 20px;
+  gap: 12px;
+  padding: 18px;
   border: 1px solid #dce3ee;
   border-radius: 8px;
   background: #fff;
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.05);
+  overflow: hidden;
 }
 
 .detail-header {
   min-width: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 14px;
+  gap: 16px;
 }
 
 .detail-heading {
@@ -185,9 +180,10 @@ function blockText(block: string, marker: string): string {
 .detail-title {
   margin: 0;
   color: #172033;
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 860;
   line-height: 1.2;
+  white-space: nowrap;
 }
 
 .detail-subtitle {
@@ -202,16 +198,22 @@ function blockText(block: string, marker: string): string {
 
 .detail-actions {
   min-width: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, max-content);
   justify-content: flex-end;
-  flex-wrap: wrap;
   gap: 8px;
+}
+
+.detail-actions :deep(.el-button) {
+  min-height: 36px;
+  margin-left: 0;
+  border-radius: 8px;
 }
 
 .info-grid {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   margin: 0;
 }
@@ -249,7 +251,7 @@ function blockText(block: string, marker: string): string {
 .material-overview {
   min-width: 0;
   display: grid;
-  gap: 12px;
+  gap: 10px;
   padding: 14px;
   border: 1px solid #e3ebf6;
   border-radius: 8px;
@@ -266,7 +268,7 @@ function blockText(block: string, marker: string): string {
 .source-strip {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
 }
 
@@ -280,9 +282,19 @@ function blockText(block: string, marker: string): string {
   background: #fff;
 }
 
+.source-card .el-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #f3f7ff;
+}
+
 .source-card :deep(svg) {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 
 .source-card span {
@@ -330,6 +342,7 @@ function blockText(block: string, marker: string): string {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .detail-tabs :deep(.el-tabs__header) {
@@ -339,19 +352,25 @@ function blockText(block: string, marker: string): string {
 .detail-tabs :deep(.el-tabs__content) {
   flex: 1 1 auto;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
 .detail-tabs :deep(.el-tab-pane) {
-  height: 100%;
+  flex: 1 1 auto;
+  height: auto;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .markdown-preview,
 .raw-block,
 .version-empty {
   height: 100%;
-  min-height: 280px;
+  min-height: 0;
   overflow: auto;
   padding: 18px;
   border: 1px solid #e3ebf6;
@@ -422,11 +441,16 @@ function blockText(block: string, marker: string): string {
 
 @media (max-width: 1020px) {
   .detail-header {
-    flex-direction: column;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .detail-actions {
+    grid-template-columns: repeat(auto-fit, minmax(128px, max-content));
     justify-content: flex-start;
+  }
+
+  .detail-title {
+    white-space: normal;
   }
 }
 

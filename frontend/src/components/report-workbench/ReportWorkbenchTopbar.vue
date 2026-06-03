@@ -1,13 +1,13 @@
 <script setup lang="ts">
+import { Loading } from '@element-plus/icons-vue'
+
 import type { ReportTopbarAction } from '../../types/reportWorkbench'
 
 defineProps<{
-  selectedDate: string
   actions: ReportTopbarAction[]
 }>()
 
 const emit = defineEmits<{
-  'update:selectedDate': [value: string]
   action: [id: string]
 }>()
 </script>
@@ -20,16 +20,6 @@ const emit = defineEmits<{
     </div>
 
     <div class="topbar-actions">
-      <el-date-picker
-        :model-value="selectedDate"
-        type="date"
-        value-format="YYYY-MM-DD"
-        format="YYYY-MM-DD"
-        :clearable="false"
-        class="date-picker"
-        @update:model-value="emit('update:selectedDate', String($event))"
-      />
-
       <TransitionGroup name="topbar-action" tag="div" class="action-group">
         <button
           v-for="action in actions"
@@ -45,11 +35,14 @@ const emit = defineEmits<{
           :title="action.title || action.label"
           @click="emit('action', action.id)"
         >
+          <Loading
+            v-if="action.loading"
+            class="action-icon action-icon--spin"
+          />
           <component
             :is="action.icon"
-            v-if="action.icon"
+            v-else-if="action.icon"
             class="action-icon"
-            :class="{ 'action-icon--spin': action.loading }"
           />
           <span>{{ action.label }}</span>
         </button>
@@ -105,11 +98,6 @@ const emit = defineEmits<{
   gap: 8px;
 }
 
-.date-picker {
-  flex: 0 0 auto;
-  width: 176px;
-}
-
 .action-group {
   position: relative;
   flex: 0 1 720px;
@@ -121,40 +109,6 @@ const emit = defineEmits<{
   justify-content: flex-end;
   gap: 8px;
   overflow: hidden;
-}
-
-.report-workbench-topbar :deep(.date-picker.el-date-editor.el-input) {
-  height: 38px;
-}
-
-.report-workbench-topbar :deep(.date-picker.el-date-editor .el-input__wrapper) {
-  height: 38px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 0 0 1px #dce3ee inset;
-}
-
-.report-workbench-topbar :deep(.date-picker.el-date-editor .el-input__wrapper:hover),
-.report-workbench-topbar :deep(.date-picker.el-date-editor .el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px #c9dcff inset;
-}
-
-.report-workbench-topbar :deep(.date-picker.el-date-editor .el-input__inner) {
-  height: 38px;
-  color: #172033;
-  font-size: 13px;
-  line-height: 38px;
-}
-
-.report-workbench-topbar :deep(.date-picker.el-date-editor .el-input__prefix),
-.report-workbench-topbar :deep(.date-picker.el-date-editor .el-input__suffix) {
-  color: #7b8797;
-}
-
-.report-workbench-topbar :deep(.date-picker.el-date-editor .el-input__prefix-inner > :last-child) {
-  margin-right: 6px;
 }
 
 .top-button {

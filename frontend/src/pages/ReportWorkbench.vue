@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, shallowRef, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   Check,
@@ -27,6 +28,8 @@ import type { DetailSavePayload, GenerateStep, ReportTopbarAction } from '../typ
 
 const store = useReportWorkbenchStore()
 const settingsStore = useSettingsStore()
+const route = useRoute()
+const router = useRouter()
 const activeGenerateStep = shallowRef<GenerateStep>(0)
 const materialPreviewVisible = shallowRef(false)
 const promptOrganizedPreviewVisible = shallowRef(false)
@@ -297,8 +300,27 @@ watch(
     if (tab === 'history') {
       void store.loadHistory()
     }
+    const currentTab = normalizeReportTab(route.query.tab)
+    if (tab !== currentTab) {
+      void router.replace({ query: { ...route.query, tab } })
+    }
   }
 )
+
+watch(
+  () => route.query.tab,
+  (tab) => {
+    const normalized = normalizeReportTab(tab)
+    if (store.activeTab !== normalized) {
+      store.activeTab = normalized
+    }
+  },
+  { immediate: true }
+)
+
+function normalizeReportTab(value: unknown): 'generate' | 'history' {
+  return value === 'history' ? 'history' : 'generate'
+}
 
 onMounted(async () => {
   await Promise.all([store.refreshMaterials(), store.loadHistory(), settingsStore.loadSettings()])
@@ -308,24 +330,23 @@ onMounted(async () => {
 <template>
   <div class="report-workbench-page">
     <ReportWorkbenchTopbar
-      :selected-date="store.selectedDate"
       :actions="topbarActions"
-      @update:selected-date="changeDate"
       @action="handleTopbarAction"
     />
 
-    <main class="report-workbench-body">
-      <ReportWorkbenchTabs
-        v-model:active-tab="store.activeTab"
-        :generate-step="activeGenerateStep"
-        :completed-steps="completedGenerateSteps"
-        :disabled-steps="disabledGenerateSteps"
-        :model-label="modelLabel"
-        @update:generate-step="changeGenerateStep"
-        @build-prompt="buildPrompt(false)"
-        @generate="generateReport"
-      />
-    </main>
+    <ReportWorkbenchTabs
+      class="report-workbench-content"
+      :active-tab="store.activeTab"
+      :selected-date="store.selectedDate"
+      :generate-step="activeGenerateStep"
+      :completed-steps="completedGenerateSteps"
+      :disabled-steps="disabledGenerateSteps"
+      :model-label="modelLabel"
+      @update:selected-date="changeDate"
+      @update:generate-step="changeGenerateStep"
+      @build-prompt="buildPrompt(false)"
+      @generate="generateReport"
+    />
 
     <el-drawer
       v-model="materialPreviewVisible"
@@ -401,24 +422,18 @@ onMounted(async () => {
   height: 100%;
   min-height: 0;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
   overflow: hidden;
   color: #172033;
   background: #fbfcfd;
 }
 
-.report-workbench-body {
-  flex: 1 1 auto;
+.report-workbench-content {
   min-height: 0;
   min-width: 0;
   overflow: hidden;
-  padding: 14px 16px 16px;
-  border: 1px solid #dce3ee;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 8px 24px rgba(15, 31, 61, 0.04);
 }
 
 :global(.report-preview-drawer .el-drawer__body) {

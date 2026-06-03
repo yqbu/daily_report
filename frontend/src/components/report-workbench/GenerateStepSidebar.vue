@@ -9,12 +9,14 @@ interface StepItem {
 }
 
 const props = defineProps<{
+  selectedDate: string
   activeStep: GenerateStep
   completedSteps: number[]
   disabledSteps?: number[]
 }>()
 
 const emit = defineEmits<{
+  'update:selectedDate': [value: string]
   change: [step: GenerateStep]
 }>()
 
@@ -43,6 +45,19 @@ function selectStep(index: number): void {
 
 <template>
   <aside class="generate-step-sidebar">
+    <div class="step-date-panel">
+      <span>日报日期</span>
+      <el-date-picker
+        :model-value="selectedDate"
+        type="date"
+        value-format="YYYY-MM-DD"
+        format="YYYY-MM-DD"
+        :clearable="false"
+        class="step-date-picker"
+        @update:model-value="emit('update:selectedDate', String($event))"
+      />
+    </div>
+
     <div class="step-sidebar-header">
       <span>日报流程</span>
       <strong>{{ activeStep + 1 }} / {{ steps.length }}</strong>
@@ -82,14 +97,67 @@ function selectStep(index: number): void {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 14px;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
   padding: 16px;
   border: 1px solid #dfe8f5;
   border-radius: 14px;
   background: #fff;
   box-shadow: 0 8px 24px rgba(15, 31, 61, 0.04);
   overflow: hidden;
+}
+
+.step-date-panel {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5edf7;
+}
+
+.step-date-panel > span {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.step-date-picker {
+  width: 100%;
+}
+
+.generate-step-sidebar :deep(.step-date-picker.el-date-editor.el-input) {
+  height: 38px;
+  width: 100%;
+}
+
+.generate-step-sidebar :deep(.step-date-picker.el-date-editor .el-input__wrapper) {
+  height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #dce3ee inset;
+}
+
+.generate-step-sidebar :deep(.step-date-picker.el-date-editor .el-input__wrapper:hover),
+.generate-step-sidebar :deep(.step-date-picker.el-date-editor .el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px #c9dcff inset;
+}
+
+.generate-step-sidebar :deep(.step-date-picker.el-date-editor .el-input__inner) {
+  height: 38px;
+  color: #172033;
+  font-size: 13px;
+  line-height: 38px;
+}
+
+.generate-step-sidebar :deep(.step-date-picker.el-date-editor .el-input__prefix),
+.generate-step-sidebar :deep(.step-date-picker.el-date-editor .el-input__suffix) {
+  color: #7b8797;
+}
+
+.generate-step-sidebar :deep(.step-date-picker.el-date-editor .el-input__prefix-inner > :last-child) {
+  margin-right: 6px;
 }
 
 .step-sidebar-header {

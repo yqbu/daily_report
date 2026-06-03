@@ -145,9 +145,10 @@ const checks = computed(() => [
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto auto minmax(86px, 1fr) auto;
+  align-content: start;
   gap: 9px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .card-header {
@@ -230,12 +231,11 @@ const checks = computed(() => [
 }
 
 .category-list {
-  max-height: 74px;
-  overflow: auto;
+  overflow: visible;
 }
 
 .check-list {
-  overflow: auto;
+  overflow: visible;
 }
 
 .check-list li {

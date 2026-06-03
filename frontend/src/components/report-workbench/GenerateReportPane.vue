@@ -9,6 +9,7 @@ import { useReportWorkbenchStore } from '../../stores/reportWorkbench'
 import type { GenerateStep, MaterialFilters, PromptOptions } from '../../types/reportWorkbench'
 
 defineProps<{
+  selectedDate: string
   activeStep: GenerateStep
   completedSteps: number[]
   disabledSteps: number[]
@@ -16,6 +17,7 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
+  'update:selectedDate': [value: string]
   'update:activeStep': [value: GenerateStep]
   buildPrompt: []
   generate: []
@@ -58,9 +60,11 @@ function updateOutputFocus(value: string[]): void {
   <div class="generate-pane">
     <div class="generate-step-layout">
       <GenerateStepSidebar
+        :selected-date="selectedDate"
         :active-step="activeStep"
         :completed-steps="completedSteps"
         :disabled-steps="disabledSteps"
+        @update:selected-date="emit('update:selectedDate', $event)"
         @change="emit('update:activeStep', $event)"
       />
 

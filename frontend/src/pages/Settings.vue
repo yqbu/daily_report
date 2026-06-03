@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, shallowRef } from 'vue'
+import { computed, nextTick, onMounted, ref, shallowRef, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   ElButton,
   ElIcon,
@@ -10,8 +11,6 @@ import {
   ElSelect,
   ElSlider,
   ElSwitch,
-  ElTabPane,
-  ElTabs,
   ElTag
 } from 'element-plus'
 import {
@@ -54,6 +53,8 @@ const operationMessage = shallowRef('')
 const keywordInput = shallowRef('')
 const settingsLoadRequestId = shallowRef(0)
 const activeSettingsTab = shallowRef<SettingsTab>('collector')
+const route = useRoute()
+const router = useRouter()
 
 const collectorCards = computed(() => {
   const settings = draftSettings.value
@@ -337,6 +338,32 @@ function joinPath(directory: string, fileName: string): string {
   return trimmed.endsWith('/') || trimmed.endsWith('\\') ? `${trimmed}${fileName}` : `${trimmed}${separator}${fileName}`
 }
 
+function normalizeSettingsTab(value: unknown): SettingsTab {
+  if (value === 'privacy' || value === 'model' || value === 'system') {
+    return value
+  }
+
+  return 'collector'
+}
+
+watch(
+  () => route.query.tab,
+  (tab) => {
+    const normalizedTab = normalizeSettingsTab(tab)
+    if (activeSettingsTab.value !== normalizedTab) {
+      activeSettingsTab.value = normalizedTab
+    }
+  },
+  { immediate: true }
+)
+
+watch(activeSettingsTab, (tab) => {
+  const currentTab = normalizeSettingsTab(route.query.tab)
+  if (tab !== currentTab) {
+    void router.replace({ query: { ...route.query, tab } })
+  }
+})
+
 onMounted(() => {
   void loadSettings()
 })
@@ -390,11 +417,8 @@ onMounted(() => {
     </div>
 
     <div v-else-if="draftSettings" class="settings-scroll">
-      <div class="settings-tab-panel">
-        <el-tabs type="card" v-model="activeSettingsTab" class="settings-tabs">
-          <el-tab-pane label="采集设置" name="collector">
             <SettingsSection
-              v-show="activeSettingsTab === 'collector'"
+              v-if="activeSettingsTab === 'collector'"
               title="采集设置"
               description="控制桌面活动、剪贴板、浏览器历史和 AI Prompt 进入素材池的方式。"
               :icon="DataAnalysis"
@@ -438,11 +462,9 @@ onMounted(() => {
                 </div>
               </SettingsField>
             </SettingsSection>
-          </el-tab-pane>
 
-          <el-tab-pane label="隐私规则" name="privacy">
             <SettingsSection
-              v-show="activeSettingsTab === 'privacy'"
+              v-else-if="activeSettingsTab === 'privacy'"
               title="隐私规则"
               description="设置敏感内容的默认处理方式，降低日报生成前泄露私密信息的风险。"
               :icon="Lock"
@@ -493,11 +515,9 @@ onMounted(() => {
                 </div>
               </SettingsField>
             </SettingsSection>
-          </el-tab-pane>
 
-          <el-tab-pane label="模型设置" name="model">
             <SettingsSection
-              v-show="activeSettingsTab === 'model'"
+              v-else-if="activeSettingsTab === 'model'"
               title="模型设置"
               description="配置日报生成使用的模型服务。"
               :icon="Cpu"
@@ -566,11 +586,9 @@ onMounted(() => {
                 </div>
               </SettingsField>
             </SettingsSection>
-          </el-tab-pane>
 
-          <el-tab-pane label="系统集成" name="system">
             <SettingsSection
-              v-show="activeSettingsTab === 'system'"
+              v-else
               title="系统集成"
               description="维护状态栏联动、日志保留和配置文件位置。"
               :icon="Monitor"
@@ -632,9 +650,6 @@ onMounted(() => {
                 </el-input>
               </SettingsField>
             </SettingsSection>
-          </el-tab-pane>
-        </el-tabs>
-      </div>
     </div>
   </div>
 </template>
@@ -792,72 +807,43 @@ onMounted(() => {
 
 .settings-scroll {
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-.settings-tab-panel {
+.settings-scroll :deep(.settings-section) {
   flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 14px 16px 16px;
-  border: 1px solid #dce3ee;
-  border-radius: 8px;
-  background: #ffffff;
-  overflow: hidden;
-}
-
-.settings-tabs {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.settings-tabs :deep(.el-tabs__header) {
-  margin: 0 0 14px;
-  padding: 0 2px;
-}
-
-.settings-tabs :deep(.el-tabs__content) {
-  flex: 1;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-
-.settings-tabs :deep(.el-tab-pane) {
   min-height: 0;
   height: 100%;
 }
 
-.settings-tabs :deep(.el-tab-pane:not([aria-hidden='true']) .settings-field) {
+.settings-scroll :deep(.settings-field) {
   animation: settings-field-rise 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.settings-tabs :deep(.el-tab-pane:not([aria-hidden='true']) .settings-field:nth-child(2)) {
+.settings-scroll :deep(.settings-field:nth-child(2)) {
   animation-delay: 35ms;
 }
 
-.settings-tabs :deep(.el-tab-pane:not([aria-hidden='true']) .settings-field:nth-child(3)) {
+.settings-scroll :deep(.settings-field:nth-child(3)) {
   animation-delay: 70ms;
 }
 
-.settings-tabs :deep(.el-tab-pane:not([aria-hidden='true']) .settings-field:nth-child(4)) {
+.settings-scroll :deep(.settings-field:nth-child(4)) {
   animation-delay: 105ms;
 }
 
-.settings-tabs :deep(.el-tab-pane:not([aria-hidden='true']) .settings-field:nth-child(5)) {
+.settings-scroll :deep(.settings-field:nth-child(5)) {
   animation-delay: 140ms;
 }
 
-.settings-tabs :deep(.el-tab-pane:not([aria-hidden='true']) .settings-field:nth-child(6)) {
+.settings-scroll :deep(.settings-field:nth-child(6)) {
   animation-delay: 175ms;
 }
 
-.settings-tabs :deep(.el-tab-pane:not([aria-hidden='true']) .settings-field:nth-child(7)) {
+.settings-scroll :deep(.settings-field:nth-child(7)) {
   animation-delay: 210ms;
 }
 
@@ -986,7 +972,7 @@ onMounted(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .settings-tabs :deep(.el-tab-pane .settings-field) {
+  .settings-scroll :deep(.settings-field) {
     animation: none;
   }
 }

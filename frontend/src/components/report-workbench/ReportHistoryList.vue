@@ -99,7 +99,14 @@ function weekday(date: string): string {
         <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
       </el-select>
 
-      <el-button :icon="Filter" :loading="loading" @click="emit('refresh')">筛选</el-button>
+      <el-button
+        class="history-filter-button"
+        :icon="Filter"
+        :loading="loading"
+        aria-label="刷新筛选结果"
+        title="刷新筛选结果"
+        @click="emit('refresh')"
+      />
     </div>
 
     <div class="history-list-toolbar">
@@ -154,6 +161,7 @@ function weekday(date: string): string {
   border-radius: 8px;
   background: #fff;
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.05);
+  overflow: hidden;
 }
 
 .history-card-header {
@@ -179,19 +187,46 @@ function weekday(date: string): string {
 .history-search,
 .date-range-filter {
   width: 100%;
+  min-width: 0;
+}
+
+.history-list-card :deep(.el-input),
+.history-list-card :deep(.el-select),
+.history-list-card :deep(.el-date-editor) {
+  width: 100%;
+  min-width: 0;
 }
 
 .history-list-card :deep(.el-input__wrapper),
-.history-list-card :deep(.el-select__wrapper) {
+.history-list-card :deep(.el-select__wrapper),
+.history-list-card :deep(.el-date-editor.el-input__wrapper) {
   min-height: 38px;
   border-radius: 8px;
   box-shadow: 0 0 0 1px #dce3ee inset;
 }
 
+.history-list-card :deep(.el-date-editor .el-range-input) {
+  min-width: 0;
+  font-size: 13px;
+}
+
+.history-list-card :deep(.el-date-editor .el-range-separator) {
+  flex: 0 0 auto;
+  padding: 0 4px;
+}
+
 .history-filter-row {
   display: grid;
-  grid-template-columns: minmax(190px, 1.4fr) minmax(120px, 0.75fr) minmax(112px, 0.7fr) auto;
+  grid-template-columns: minmax(0, 1.35fr) minmax(108px, 0.72fr) minmax(108px, 0.72fr) 40px;
   gap: 8px;
+  min-width: 0;
+}
+
+.history-filter-button {
+  width: 40px;
+  min-width: 40px;
+  margin-left: 0;
+  border-radius: 8px;
 }
 
 .history-list-toolbar {
@@ -296,6 +331,7 @@ function weekday(date: string): string {
 
 .history-pagination {
   min-width: 0;
+  overflow: hidden;
 }
 
 @media (max-width: 760px) {

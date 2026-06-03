@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed} from 'vue'
+import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from 'vue'
 import {ChatDotRound, CopyDocument, Link, Monitor, View} from '@element-plus/icons-vue'
 
 import type {MaterialCandidate} from '../../types/reportWorkbench'
@@ -16,16 +16,37 @@ const emit = defineEmits<{
   loadMore: []
 }>()
 
+const sentinel = shallowRef<HTMLElement | null>(null)
+const listEl = shallowRef<HTMLElement | null>(null)
+let observer: IntersectionObserver | null = null
+
 const sourceMeta = computed(() => ({
   app: {label: '前台应用', icon: Monitor, className: 'source-app'},
   browser: {label: '浏览器历史', icon: Link, className: 'source-browser'},
   clipboard: {label: '剪切板', icon: CopyDocument, className: 'source-clipboard'},
   ai_prompt: {label: 'AI 提问', icon: ChatDotRound, className: 'source-ai'}
 }))
+
+function bindObserver(): void {
+  observer?.disconnect()
+  if (!sentinel.value) {
+    return
+  }
+  observer = new IntersectionObserver((entries) => {
+    if (entries.some((entry) => entry.isIntersecting) && props.hasMore && !props.loading) {
+      emit('loadMore')
+    }
+  }, { root: listEl.value, rootMargin: '180px 0px' })
+  observer.observe(sentinel.value)
+}
+
+onMounted(bindObserver)
+onBeforeUnmount(() => observer?.disconnect())
+watch([sentinel, listEl], bindObserver)
 </script>
 
 <template>
-  <div class="material-list">
+  <div ref="listEl" class="material-list">
     <article
         v-for="item in items"
         :key="`${item.source_type}:${item.source_id}`"
@@ -73,10 +94,9 @@ const sourceMeta = computed(() => ({
       当前日期暂无可用素材，请确认采集服务是否运行，或切换日期。
     </div>
 
-    <div class="material-list-footer">
-      <el-button v-if="hasMore" :loading="loading" @click="emit('loadMore')">
-        加载更多
-      </el-button>
+    <div v-if="loading || items.length" ref="sentinel" class="material-list-footer">
+      <el-skeleton v-if="loading && items.length" class="footer-skeleton" :rows="2" animated />
+      <span v-else-if="hasMore" class="footer-text footer-text--loading">继续向下滑动加载当天下一批素材</span>
       <span v-else-if="items.length" class="footer-text">已加载全部素材</span>
     </div>
   </div>
@@ -205,14 +225,24 @@ const sourceMeta = computed(() => ({
 }
 
 .material-list-footer {
-  display: flex;
-  justify-content: center;
-  padding: 4px 0 0;
+  min-height: 58px;
+  display: grid;
+  place-items: center;
+  padding: 8px 0 2px;
+  text-align: center;
 }
 
 .footer-text {
-  color: #98a2b3;
+  color: #a3adbc;
   font-size: 12px;
+}
+
+.footer-text--loading {
+  color: #a3adbc;
+}
+
+.footer-skeleton {
+  width: min(420px, 100%);
 }
 
 @media (max-width: 620px) {

@@ -248,7 +248,7 @@ function updateFilters(patch: Partial<MaterialFilters>): void {
   }
 
   .material-scroll {
-    max-height: clamp(260px, 48vh, 420px);
+    max-height: clamp(320px, 54vh, 480px);
   }
 
   .summary-grid {
@@ -279,7 +279,7 @@ function updateFilters(patch: Partial<MaterialFilters>): void {
   }
 
   .material-scroll {
-    max-height: clamp(260px, 48vh, 420px);
+    max-height: clamp(320px, 54vh, 480px);
   }
 }
 

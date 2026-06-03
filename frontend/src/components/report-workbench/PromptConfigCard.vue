@@ -72,6 +72,10 @@ function optionCardClass(active: boolean): Record<string, boolean> {
   }
 }
 
+function summaryCardIcon(index: number) {
+  return [CollectionTag, Document, Calendar, MagicStick][index] ?? Document
+}
+
 function focusDescription(value: string): string {
   const descriptions: Record<string, string> = {
     '完成事项': '今日完成的工作内容',
@@ -103,18 +107,20 @@ function focusDescription(value: string): string {
 
     <div class="prompt-top-grid">
       <div class="prompt-section prompt-section--template">
-        <h3 class="section-title">1. 日报模板</h3>
         <div class="template-row">
-          <div class="template-select-shell">
-            <Document class="template-icon" />
-            <el-select
-              :model-value="selectedTemplateName"
-              class="template-select"
-              @update:model-value="emit('update:selectedTemplateName', String($event))"
-            >
-              <el-option v-for="item in templates" :key="item.id" :label="item.name" :value="item.id" />
-            </el-select>
-            <p class="template-desc">{{ selectedTemplate?.description }}</p>
+          <div class="section-main">
+            <h3 class="section-title">1. 日报模板</h3>
+            <div class="template-select-shell">
+              <Document class="template-icon" />
+              <el-select
+                :model-value="selectedTemplateName"
+                class="template-select"
+                @update:model-value="emit('update:selectedTemplateName', String($event))"
+              >
+                <el-option v-for="item in templates" :key="item.id" :label="item.name" :value="item.id" />
+              </el-select>
+              <p class="template-desc">{{ selectedTemplate?.description }}</p>
+            </div>
           </div>
 
           <aside class="template-note">
@@ -127,18 +133,20 @@ function focusDescription(value: string): string {
       </div>
 
       <div class="prompt-section">
-        <h3 class="section-title">2. 补充要求 <span>可选</span></h3>
         <div class="requirement-row">
-          <el-input
-            :model-value="extraRequirements"
-            type="textarea"
-            :rows="4"
-            resize="none"
-            maxlength="500"
-            show-word-limit
-            placeholder="请输入本次日报的补充要求，例如：突出今日完成的开发工作、弱化浏览记录、输出风格偏正式。"
-            @update:model-value="emit('update:extraRequirements', String($event))"
-          />
+          <div class="section-main">
+            <h3 class="section-title">2. 补充要求 <span>可选</span></h3>
+            <el-input
+              :model-value="extraRequirements"
+              type="textarea"
+              :rows="4"
+              resize="none"
+              maxlength="500"
+              show-word-limit
+              placeholder="请输入本次日报的补充要求，例如：突出今日完成的开发工作、弱化浏览记录、输出风格偏正式。"
+              @update:model-value="emit('update:extraRequirements', String($event))"
+            />
+          </div>
           <aside class="writing-tip">
             <strong><MagicStick />写作建议</strong>
             <p>描述希望强调的内容、弱化的内容、风格偏好等，模型会根据你的要求生成更贴合需求的日报。</p>
@@ -149,25 +157,27 @@ function focusDescription(value: string): string {
     </div>
 
     <div class="prompt-section">
-      <h3 class="section-title">3. 输出重点 <span>可多选</span></h3>
       <div class="focus-layout">
-        <el-checkbox-group
-          :model-value="outputFocus"
-          class="focus-card-grid"
-          @update:model-value="emit('update:outputFocus', $event as string[])"
-        >
-          <el-checkbox
-            v-for="item in outputFocusOptions"
-            :key="item"
-            class="focus-card"
-            :class="{ 'focus-card--active': outputFocus.includes(item) }"
-            :label="item"
-            :value="item"
+        <div class="section-main">
+          <h3 class="section-title">3. 输出重点 <span>可多选</span></h3>
+          <el-checkbox-group
+            :model-value="outputFocus"
+            class="focus-card-grid"
+            @update:model-value="emit('update:outputFocus', $event as string[])"
           >
-            <strong>{{ item }}</strong>
-            <span>{{ focusDescription(item) }}</span>
-          </el-checkbox>
-        </el-checkbox-group>
+            <el-checkbox
+              v-for="item in outputFocusOptions"
+              :key="item"
+              class="focus-card"
+              :class="{ 'focus-card--active': outputFocus.includes(item) }"
+              :label="item"
+              :value="item"
+            >
+              <strong>{{ item }}</strong>
+              <span>{{ focusDescription(item) }}</span>
+            </el-checkbox>
+          </el-checkbox-group>
+        </div>
 
         <aside class="focus-note-panel">
           <strong><CollectionTag />聚焦重点</strong>
@@ -223,12 +233,14 @@ function focusDescription(value: string): string {
     </div>
 
     <div class="prompt-summary">
-      <div v-for="item in summaryCards" :key="item.label" class="summary-card">
+      <div v-for="(item, index) in summaryCards" :key="item.label" class="summary-card">
+        <component :is="summaryCardIcon(index)" />
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
         <small>{{ item.caption }}</small>
       </div>
       <div class="summary-card summary-card--prompt" :class="{ 'summary-card--ready': !promptDirty }">
+        <MagicStick />
         <span>{{ promptDirty ? '需要重新构建 Prompt' : 'Prompt 已构建' }}</span>
         <strong>{{ promptDirty ? '配置已修改' : '可提交' }}</strong>
         <small>{{ promptDirty ? '请先点击构建 Prompt' : '当前配置已同步' }}</small>
@@ -308,8 +320,7 @@ function focusDescription(value: string): string {
 .prompt-section {
   min-width: 0;
   display: grid;
-  gap: 8px;
-  padding: 10px 12px;
+  padding: 9px 11px;
   border: 1px solid #e3ebf6;
   border-radius: 12px;
   background: #fff;
@@ -340,8 +351,15 @@ function focusDescription(value: string): string {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 220px;
-  gap: 12px;
+  gap: 10px;
   align-items: stretch;
+}
+
+.section-main {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 7px;
 }
 
 .template-select-shell {
@@ -349,9 +367,9 @@ function focusDescription(value: string): string {
   position: relative;
   display: grid;
   gap: 5px;
-  min-height: 66px;
+  min-height: 62px;
   align-content: center;
-  padding: 10px 10px 10px 40px;
+  padding: 9px 10px 9px 38px;
   border: 1px solid #dfe8f5;
   border-radius: 10px;
   background: #fbfdff;
@@ -360,9 +378,9 @@ function focusDescription(value: string): string {
 .template-icon {
   position: absolute;
   left: 12px;
-  top: 16px;
-  width: 18px;
-  height: 18px;
+  top: 15px;
+  width: 17px;
+  height: 17px;
   color: #2563eb;
 }
 
@@ -394,8 +412,8 @@ function focusDescription(value: string): string {
   display: grid;
   min-width: 0;
   align-content: start;
-  gap: 5px;
-  padding: 11px 12px;
+  gap: 4px;
+  padding: 10px 11px;
   border-radius: 10px;
   color: #526070;
   font-size: 12px;
@@ -449,14 +467,14 @@ function focusDescription(value: string): string {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 220px;
-  gap: 12px;
+  gap: 10px;
   align-items: stretch;
 }
 
 .focus-card-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 7px;
 }
 
 .focus-card {
@@ -468,34 +486,54 @@ function focusDescription(value: string): string {
 .focus-card :deep(.el-checkbox__label) {
   min-width: 0;
   display: grid;
-  gap: 3px;
+  gap: 2px;
   color: #172033;
+  line-height: 1.25;
 }
 
 .focus-card :deep(.el-checkbox__label span) {
   color: #667085;
-  font-size: 12px;
+  font-size: 11px;
   white-space: normal;
+}
+
+.focus-card :deep(.el-checkbox__label strong) {
+  font-size: 12px;
 }
 
 .focus-card :deep(.el-checkbox__input) {
   align-self: center;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: 14px;
+  line-height: 1;
 }
 
 .focus-card :deep(.el-checkbox__inner) {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
+  display: inline-block;
 }
 
-.focus-card :deep(.el-checkbox__label) {
-  line-height: 1.25;
+.focus-card :deep(.el-checkbox__inner::after) {
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 7px;
+  transform: translate(-45%, -60%) rotate(45deg) scaleY(0);
+  transform-origin: 50%;
+}
+
+.focus-card :deep(.el-checkbox__input.is-checked .el-checkbox__inner::after) {
+  transform: translate(-45%, -60%) rotate(45deg) scaleY(1);
 }
 
 .focus-card {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 7px;
+  padding: 7px 9px;
   border: 1px solid #dfe8f5;
   border-radius: 8px;
   background: #fbfdff;
@@ -510,13 +548,13 @@ function focusDescription(value: string): string {
   min-width: 0;
   display: grid;
   align-content: center;
-  gap: 8px;
-  padding: 12px;
+  gap: 6px;
+  padding: 10px 11px;
   border-radius: 10px;
   background: linear-gradient(135deg, #fbf7ff, #f6f3ff);
   color: #526070;
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 11px;
+  line-height: 1.42;
 }
 
 .focus-note-panel strong {
@@ -593,26 +631,19 @@ function focusDescription(value: string): string {
 .prompt-summary {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0;
-  align-items: stretch;
-  padding: 0;
-  border: 1px solid #dfe8f5;
-  border-radius: 12px;
-  overflow: hidden;
-  background: linear-gradient(135deg, #fbfdff, #f7fbff);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 104px), 1fr));
+  gap: 8px;
 }
 
 .summary-card {
   min-width: 0;
   display: grid;
   gap: 4px;
-  padding: 12px 14px;
-  border-right: 1px solid #e3ebf6;
-}
-
-.summary-card:last-child {
-  border-right: 0;
+  padding: 10px;
+  border: 1px solid #e5edf7;
+  border-radius: 10px;
+  background: #f8fbff;
+  color: #667085;
 }
 
 .summary-card span,
@@ -628,21 +659,32 @@ function focusDescription(value: string): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-card svg {
+  width: 15px;
+  height: 15px;
+  color: #2563eb;
 }
 
 .summary-card--prompt {
+  border-color: #fed7aa;
   background: #fff7ed;
 }
 
-.summary-card--prompt strong {
+.summary-card--prompt strong,
+.summary-card--prompt svg {
   color: #d97706;
 }
 
 .summary-card--ready {
+  border-color: #bbf7d0;
   background: #f0fdf4;
 }
 
-.summary-card--ready strong {
+.summary-card--ready strong,
+.summary-card--ready svg {
   color: #16a34a;
 }
 
@@ -659,18 +701,8 @@ function focusDescription(value: string): string {
 @media (max-width: 1080px) {
   .template-row,
   .requirement-row,
-  .focus-layout,
-  .prompt-summary {
+  .focus-layout {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .summary-card {
-    border-right: 0;
-    border-bottom: 1px solid #e3ebf6;
-  }
-
-  .summary-card:last-child {
-    border-bottom: 0;
   }
 }
 

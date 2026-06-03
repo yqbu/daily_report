@@ -365,7 +365,7 @@ function resetBoundaryScrolls(): void {
 }
 
 .timeline-end {
-  color: #7b8797;
+  color: #a3adbc;
   font-size: 13px;
 }
 
@@ -378,15 +378,15 @@ function resetBoundaryScrolls(): void {
   min-height: 42px;
   padding: 0 16px;
   border: 0;
-  color: #1d4ed8;
+  color: #98a2b3;
   background: transparent;
   font-size: 13px;
-  font-weight: 780;
+  font-weight: 700;
   cursor: pointer;
 }
 
 .timeline-day-boundary:hover {
-  color: #2563eb;
+  color: #7b8797;
   background: transparent;
 }
 

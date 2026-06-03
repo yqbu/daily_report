@@ -85,9 +85,10 @@ function viewPrompt(prompt: string): void {
   min-height: 0;
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(360px, 0.78fr) minmax(0, 1.22fr);
-  gap: 14px;
+  grid-template-columns: minmax(400px, clamp(420px, 36vw, 520px)) minmax(0, 1fr);
+  gap: 16px;
   align-items: stretch;
+  overflow: hidden;
 }
 
 @media (max-width: 1120px) {

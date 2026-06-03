@@ -6,9 +6,13 @@ import {
   ArrowRight,
   Calendar,
   Connection,
+  Cpu,
   DataAnalysis,
   Document,
   MagicStick,
+  Link,
+  Lock,
+  Monitor,
   Search,
   Setting
 } from '@element-plus/icons-vue'
@@ -32,6 +36,7 @@ const router = useRouter()
 const searchKeyword = shallowRef('')
 const collectorStatus = shallowRef<CollectorStatus>('checking')
 const collectorBusy = shallowRef(false)
+const dismissedCollapsedPopoverName = shallowRef('')
 let statusTimer: number | undefined
 let statusRefreshInFlight = false
 
@@ -54,7 +59,11 @@ const navItems = [
     to: '/reports',
     name: 'report-workbench',
     label: '日报工作台',
-    icon: Document
+    icon: Document,
+    children: [
+      { to: '/reports?tab=generate', key: 'generate', label: '日报生成', shortLabel: '生', icon: Document },
+      { to: '/reports?tab=history', key: 'history', label: '历史日报', shortLabel: '历', icon: Calendar }
+    ]
   },
   {
     to: '/apps',
@@ -66,11 +75,18 @@ const navItems = [
     to: '/settings',
     name: 'settings',
     label: '设置',
-    icon: Setting
+    icon: Setting,
+    children: [
+      { to: '/settings?tab=collector', key: 'collector', label: '采集设置', shortLabel: '采', icon: DataAnalysis },
+      { to: '/settings?tab=privacy', key: 'privacy', label: '隐私规则', shortLabel: '隐', icon: Lock },
+      { to: '/settings?tab=model', key: 'model', label: '模型设置', shortLabel: '模', icon: Cpu },
+      { to: '/settings?tab=system', key: 'system', label: '系统集成', shortLabel: '集', icon: Monitor }
+    ]
   }
 ] as const
 
 const activeRouteName = computed(() => String(route.name || 'today'))
+const activeSecondaryKey = computed(() => String(route.query.tab || ''))
 const collectorRunning = computed(() => collectorStatus.value === 'running')
 const collectorStatusLabel = computed(() => {
   if (collectorBusy.value || collectorStatus.value === 'checking') return '状态检查中'
@@ -107,6 +123,19 @@ function openFirstSearchMatch(): void {
 function openSearchMatch(to: string): void {
   router.push(to)
   searchKeyword.value = ''
+}
+
+function dismissCollapsedPopover(name: string): void {
+  dismissedCollapsedPopoverName.value = name
+  if (document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur()
+  }
+}
+
+function resetDismissedCollapsedPopover(name: string): void {
+  if (dismissedCollapsedPopoverName.value === name) {
+    dismissedCollapsedPopoverName.value = ''
+  }
 }
 
 async function refreshCollectorStatus(options: { force?: boolean } = {}): Promise<void> {
@@ -267,17 +296,65 @@ onBeforeUnmount(() => {
     </div>
 
     <nav class="nav-list" aria-label="主导航">
-      <RouterLink
-          v-for="item in navItems"
-          :key="item.name"
-          class="nav-item"
-          :class="{ 'nav-item--active': activeRouteName === item.name }"
-          :to="item.to"
-          :title="item.label"
+      <div
+        v-for="item in navItems"
+        :key="item.name"
+        class="nav-group"
+        :class="{ 'nav-group--collapsed-popover-dismissed': dismissedCollapsedPopoverName === item.name }"
+        @mouseleave="resetDismissedCollapsedPopover(item.name)"
       >
-        <component :is="item.icon" class="nav-icon"/>
-        <span class="nav-label">{{ item.label }}</span>
-      </RouterLink>
+        <RouterLink
+            class="nav-item"
+            :class="{ 'nav-item--active': activeRouteName === item.name }"
+            :to="item.to"
+            :title="item.label"
+        >
+          <component :is="item.icon" class="nav-icon"/>
+          <span class="nav-label">{{ item.label }}</span>
+          <ArrowRight
+            v-if="props.expanded && 'children' in item && item.children"
+            class="nav-parent-arrow"
+            :class="{ 'nav-parent-arrow--expanded': activeRouteName === item.name }"
+          />
+        </RouterLink>
+
+        <div
+          v-if="!props.expanded && 'children' in item && item.children"
+          class="collapsed-sub-nav-popover"
+          :aria-label="`${item.label}次级导航`"
+        >
+          <span class="collapsed-sub-nav-title">{{ item.label }}</span>
+          <RouterLink
+            v-for="child in item.children"
+            :key="child.key"
+            class="collapsed-sub-nav-item"
+            :class="{ 'collapsed-sub-nav-item--active': activeRouteName === item.name && (activeSecondaryKey === child.key || (!activeSecondaryKey && child.key === item.children[0].key)) }"
+            :to="child.to"
+            @click="dismissCollapsedPopover(item.name)"
+          >
+            <span><component :is="child.icon" /></span>
+            <strong>{{ child.label }}</strong>
+          </RouterLink>
+        </div>
+
+        <div
+          v-if="props.expanded && 'children' in item && item.children && activeRouteName === item.name"
+          class="sub-nav-list"
+          :aria-label="`${item.label}次级导航`"
+        >
+          <RouterLink
+            v-for="child in item.children"
+            :key="child.key"
+            class="sub-nav-item"
+            :class="{ 'sub-nav-item--active': activeSecondaryKey === child.key || (!activeSecondaryKey && child.key === item.children[0].key) }"
+            :to="child.to"
+          >
+            <component :is="child.icon" class="sub-nav-icon" />
+            <span>{{ child.label }}</span>
+            <ArrowRight class="sub-nav-arrow" />
+          </RouterLink>
+        </div>
+      </div>
     </nav>
 
     <button
@@ -308,7 +385,7 @@ onBeforeUnmount(() => {
   padding: 14px;
   border-right: 1px solid #dce3ee;
   background: rgba(255, 255, 255, 0.9);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .brand,
@@ -531,6 +608,15 @@ onBeforeUnmount(() => {
   gap: 8px;
   align-items: center;
   justify-content: flex-start;
+  overflow: visible;
+}
+
+.nav-group {
+  width: 56px;
+  min-width: 0;
+  position: relative;
+  display: grid;
+  gap: 6px;
 }
 
 .nav-item,
@@ -596,9 +682,18 @@ onBeforeUnmount(() => {
   transition: opacity 120ms ease;
 }
 
+.nav-parent-arrow {
+  display: none;
+}
+
 .nav-item:hover .nav-label,
 .nav-item:focus-visible .nav-label {
   opacity: 1;
+}
+
+.nav-group:has(.collapsed-sub-nav-popover):hover .nav-label,
+.nav-group:has(.collapsed-sub-nav-popover):focus-within .nav-label {
+  opacity: 0;
 }
 
 .bridge-status {
@@ -684,9 +779,13 @@ onBeforeUnmount(() => {
   align-items: stretch;
 }
 
+.sidebar--expanded .nav-group {
+  width: 100%;
+}
+
 .sidebar--expanded .nav-item,
 .sidebar--expanded .bridge-status {
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;
   justify-items: start;
   gap: 12px;
@@ -720,6 +819,229 @@ onBeforeUnmount(() => {
   color: #1d4ed8;
 }
 
+.sidebar--expanded .nav-parent-arrow {
+  width: 13px;
+  height: 13px;
+  display: block;
+  justify-self: end;
+  color: #667085;
+  transform: rotate(0deg);
+  transition:
+    color 160ms ease,
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sidebar--expanded .nav-item--active .nav-parent-arrow {
+  color: #2563eb;
+}
+
+.sidebar--expanded .nav-parent-arrow--expanded {
+  transform: rotate(90deg);
+}
+
+.collapsed-sub-nav-popover {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: -2px;
+  z-index: 60;
+  width: 156px;
+  display: grid;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.14);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-4px) scale(0.98);
+  transform-origin: left top;
+  transition:
+    opacity 140ms ease,
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.collapsed-sub-nav-popover::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 0;
+  width: 10px;
+  height: 100%;
+}
+
+.nav-group:hover .collapsed-sub-nav-popover,
+.nav-group:focus-within .collapsed-sub-nav-popover {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0) scale(1);
+}
+
+.nav-group--collapsed-popover-dismissed:hover .collapsed-sub-nav-popover,
+.nav-group--collapsed-popover-dismissed:focus-within .collapsed-sub-nav-popover {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-4px) scale(0.98);
+}
+
+.collapsed-sub-nav-title {
+  padding: 2px 4px 4px;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 720;
+  line-height: 1;
+}
+
+.collapsed-sub-nav-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  color: #526179;
+  text-decoration: none;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease;
+}
+
+.collapsed-sub-nav-item span {
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid #e3e9f3;
+  border-radius: 7px;
+  color: #667085;
+  background: #ffffff;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.collapsed-sub-nav-item span :deep(svg) {
+  width: 14px;
+  height: 14px;
+}
+
+.collapsed-sub-nav-item strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 720;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collapsed-sub-nav-item:hover,
+.collapsed-sub-nav-item:focus-visible {
+  color: #2563eb;
+  background: #f2f6ff;
+  outline: 0;
+}
+
+.collapsed-sub-nav-item:hover span,
+.collapsed-sub-nav-item:focus-visible span {
+  color: #2563eb;
+  border-color: #cfe0ff;
+  background: #eff6ff;
+}
+
+.collapsed-sub-nav-item--active {
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.collapsed-sub-nav-item--active span {
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+  background: #dbeafe;
+}
+
+.sub-nav-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 2px;
+  padding: 10px;
+  border: 1px solid #e6ebf3;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.sub-nav-item {
+  min-width: 0;
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border: 1px solid #e3e9f3;
+  border-radius: 7px;
+  color: #526179;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.sub-nav-icon,
+.sub-nav-arrow {
+  width: 16px;
+  height: 16px;
+  color: #667085;
+  transition: color 160ms ease;
+}
+
+.sub-nav-icon {
+  justify-self: center;
+}
+
+.sub-nav-arrow {
+  justify-self: end;
+  opacity: 0.78;
+}
+
+.sub-nav-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sub-nav-item:hover {
+  color: #2563eb;
+  border-color: #cfe0ff;
+  background: #f2f6ff;
+}
+
+.sub-nav-item:hover .sub-nav-icon,
+.sub-nav-item:hover .sub-nav-arrow {
+  color: #2563eb;
+}
+
+.sub-nav-item--active {
+  color: #1d4ed8;
+  border-color: #c7dcff;
+  background: #eef5ff;
+  box-shadow: inset 2px 0 0 #409eff;
+}
+
+.sub-nav-item--active .sub-nav-icon,
+.sub-nav-item--active .sub-nav-arrow {
+  color: #2563eb;
+}
+
 .sidebar--expanded .bridge-label {
   display: block;
 }
@@ -733,6 +1055,7 @@ onBeforeUnmount(() => {
     padding: 10px 12px;
     border-top: 1px solid #dce3ee;
     border-right: 0;
+    overflow: hidden;
   }
 
   .brand,
@@ -764,6 +1087,14 @@ onBeforeUnmount(() => {
   .nav-list {
     flex-direction: row;
     justify-content: center;
+  }
+
+  .nav-group {
+    width: auto;
+  }
+
+  .collapsed-sub-nav-popover {
+    display: none;
   }
 
   .nav-label,
