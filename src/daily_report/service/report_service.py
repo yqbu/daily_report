@@ -58,6 +58,7 @@ class ReportService:
             clipboard_items=[m.evidence for m in materials if m.source_type == 'clipboard'],
             browser_items=[m.summary for m in materials if m.source_type == 'browser'],
             ai_prompts=[m.summary for m in materials if m.source_type == 'ai_prompt'],
+            browser_events=[m.summary for m in materials if m.source_type == 'browser_event'],
         )
 
     def build_prompt(
@@ -258,7 +259,8 @@ class ReportService:
             counts = {}
         return (
             f"date={day}; app={counts.get('app', 0)}; browser={counts.get('browser', 0)}; "
-            f"clipboard={counts.get('clipboard', 0)}; ai_prompt={counts.get('ai_prompt', 0)}"
+            f"clipboard={counts.get('clipboard', 0)}; ai_prompt={counts.get('ai_prompt', 0)}; "
+            f"browser_event={counts.get('browser_event', 0)}"
         )
 
 

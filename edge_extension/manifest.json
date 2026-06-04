@@ -1,20 +1,23 @@
 {
   "manifest_version": 3,
-  "name": "Daily Report AI Prompt Collector",
-  "version": "0.1.0",
-  "description": "Capture user prompts sent on ChatGPT and DeepSeek pages and send them to the local daily_report receiver.",
+  "name": "Daily Report Browser Event Collector",
+  "version": "0.2.0",
+  "description": "Collect lightweight browser activity events and AI prompt submissions for local daily_report only.",
   "host_permissions": [
+    "http://localhost:8765/*",
+    "http://127.0.0.1:8765/*",
+    "http://*/*",
+    "https://*/*",
     "https://chatgpt.com/*",
     "https://chat.openai.com/*",
-    "https://chat.deepseek.com/*",
-    "http://127.0.0.1:8765/*"
+    "https://chat.deepseek.com/*"
   ],
+  "permissions": ["storage"],
   "content_scripts": [
     {
       "matches": [
-        "https://chatgpt.com/*",
-        "https://chat.openai.com/*",
-        "https://chat.deepseek.com/*"
+        "http://*/*",
+        "https://*/*"
       ],
       "js": ["content_script.js"],
       "run_at": "document_idle"

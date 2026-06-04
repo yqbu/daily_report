@@ -37,6 +37,7 @@ def cleanup_database(
         ('clipboard_entries', 'date'),
         ('browser_history_entries', 'date'),
         ('ai_prompt_entries', 'date'),
+        ('browser_events', 'date'),
     ]
 
     for table, date_col in table_date_columns:

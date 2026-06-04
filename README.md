@@ -6,7 +6,7 @@ daily reports.
 
 The project is designed for personal productivity scenarios. It collects local
 activity data such as foreground application usage, clipboard text, Edge browser
-history, and AI prompt records. The desktop UI lets the user review useful
+history, lightweight browser behavior events, and AI prompt records. The desktop UI lets the user review useful
 materials before generating a Markdown daily report with a DeepSeek-compatible
 chat model.
 
@@ -122,12 +122,15 @@ Available endpoints:
 
 - `GET /api/health`
 - `GET /api/health/collectors`
+- `GET /api/extension/health`
 - `GET /api/overview?date=YYYY-MM-DD`
 - `GET /api/timeline?date=YYYY-MM-DD&source_type=all&limit=500&offset=0&order=asc`
 - `GET /api/entries/{source_type}`
 - `GET /api/entries/{source_type}/{id}`
 - `PATCH /api/entries/{source_type}/{id}/selection`
 - `PATCH /api/entries/{source_type}/{id}/deleted`
+- `POST /api/events/browser`
+- `POST /api/ai-prompt`
 - `POST /api/reports/build-prompt`
 - `POST /api/reports/generate`
 - `GET /api/reports/latest?date=YYYY-MM-DD`
@@ -168,6 +171,56 @@ Set `VITE_API_MODE=http` for normal browser development with a manually started
 Python API. Set `VITE_API_MODE=mock` to work on the UI without the Python API.
 Set `VITE_API_MODE=qwebchannel` when running through the existing PySide6
 QWebChannel path.
+
+## SourceAdapter Boundary
+
+Phase 1 introduces an internal `daily_report.sources` abstraction. This does not
+change the REST API contract or Vue data shapes. It moves source-specific
+normalization and material conversion out of `TimelineService` and
+`MaterialService`.
+
+Enabled sources:
+
+- `app`: foreground application sessions from `app_sessions`
+- `browser`: Edge browser history from `browser_history_entries`
+- `clipboard`: clipboard text previews from `clipboard_entries`
+- `ai_prompt`: ChatGPT / DeepSeek prompt records from `ai_prompt_entries`
+- `browser_event`: lightweight browser events from `browser_events`
+
+Compatibility aliases:
+
+- `browser_history` and `edge_history` map to `browser`
+- `ai` maps to `ai_prompt`
+- `browser_events` maps to `browser_event`
+
+Reserved adapters exist for later phases:
+
+- `bilibili`: Phase 3 placeholder only
+
+Browser event collection is intentionally lightweight. Supported event types are
+`page_view`, `tab_active`, `tab_inactive`, `page_leave`, `dwell_time`, `search`,
+`copy`, and `ai_prompt_submit`. Search events are selected by default when they
+are not sensitive; other browser events are available for review but are not
+automatically treated as daily report material.
+
+This phase intentionally does not add Bilibili/video collection, screenshots or
+OCR, Git/mail/calendar collection, WebSocket push, cookie sync, page-body or form
+input collection, vector search, or Python sidecar packaging.
+
+## Privacy Principles
+
+- Data is stored locally in SQLite.
+- Sensitive clipboard and AI prompt records are excluded from report materials
+  by default.
+- Clipboard materials use `content_preview`, not full clipboard `content`.
+- AI prompt materials use `prompt_preview`, not full `prompt_text`.
+- App profiles can disable window-title capture; disabled titles are not exposed
+  as material evidence.
+- Browser history collection does not collect page body text.
+- Browser behavior event collection stores lightweight metadata only. Copy event
+  capture is disabled in the extension by default.
+- Cookies are not synchronized.
+- Model calls are made from user-selected materials.
 
 ## Tauri Development Preview
 

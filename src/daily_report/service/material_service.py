@@ -17,11 +17,20 @@ from daily_report.service.category import (
 from daily_report.service.sensitivity import make_preview
 from daily_report.storage.database import create_connection, default_db_path, init_database
 from daily_report.storage.repositories.annotation_repository import AnnotationRepository
+from daily_report.sources.registry import SourceRegistry, create_default_source_registry
+from daily_report.service.timeline_service import TimelineService
 
 
 class MaterialService:
-    def __init__(self, db_path: str | Path | None = None):
+    def __init__(
+        self,
+        db_path: str | Path | None = None,
+        registry: SourceRegistry | None = None,
+        timeline_service: TimelineService | None = None,
+    ):
         self.db_path = Path(db_path) if db_path is not None else default_db_path()
+        self.registry = registry or create_default_source_registry(self.db_path)
+        self.timeline_service = timeline_service or TimelineService(self.db_path, registry=self.registry)
 
     def build_materials(
         self,
@@ -29,12 +38,26 @@ class MaterialService:
         include_sensitive: bool = False,
     ) -> list[MaterialCard]:
         day = date or date_cls.today().isoformat()
-        with self._connect() as conn:
-            materials: list[MaterialCard] = []
-            materials.extend(self._build_app_materials(conn, day))
-            materials.extend(self._build_browser_materials(conn, day))
-            materials.extend(self._build_clipboard_materials(conn, day, include_sensitive))
-            materials.extend(self._build_ai_prompt_materials(conn, day, include_sensitive))
+        events = self.timeline_service.list_timeline(
+            date=day,
+            selected=True,
+            limit=100000,
+            offset=0,
+            sort_order='asc',
+        )
+        materials: list[MaterialCard] = []
+        for event in events:
+            if event.is_deleted:
+                continue
+            if event.is_sensitive and not include_sensitive:
+                continue
+            try:
+                adapter = self.registry.get(event.source_type)
+            except ValueError:
+                continue
+            material = adapter.to_material(event)
+            if material is not None:
+                materials.append(material)
         materials.sort(key=lambda item: (item.category, item.time_range, item.source_type))
         return materials
 
@@ -96,6 +119,16 @@ class MaterialService:
                     """
                     SELECT COUNT(*) AS n
                     FROM ai_prompt_entries
+                    WHERE date = ? AND is_selected = 1 AND is_deleted = 0
+                      AND (? = 1 OR is_sensitive = 0)
+                    """,
+                    (day, int(include_sensitive)),
+                ),
+                'browser_event': _count(
+                    conn,
+                    """
+                    SELECT COUNT(*) AS n
+                    FROM browser_events
                     WHERE date = ? AND is_selected = 1 AND is_deleted = 0
                       AND (? = 1 OR is_sensitive = 0)
                     """,

@@ -141,6 +141,34 @@ def _run_pre_schema_migrations(conn: sqlite3.Connection) -> None:
     )
     _ensure_columns(
         conn,
+        'browser_events',
+        {
+            'date': 'TEXT NOT NULL DEFAULT ""',
+            'timestamp': 'TEXT NOT NULL DEFAULT ""',
+            'event_type': 'TEXT NOT NULL DEFAULT "page_view"',
+            'url': 'TEXT',
+            'title': 'TEXT',
+            'domain': 'TEXT',
+            'tab_id': 'TEXT',
+            'window_id': 'TEXT',
+            'duration_sec': 'REAL NOT NULL DEFAULT 0',
+            'content_preview': 'TEXT',
+            'search_engine': 'TEXT',
+            'search_query': 'TEXT',
+            'referrer': 'TEXT',
+            'payload_json': 'TEXT',
+            'client_event_id': 'TEXT',
+            'source': "TEXT NOT NULL DEFAULT 'edge_extension'",
+            'is_sensitive': 'INTEGER NOT NULL DEFAULT 0',
+            'sensitivity_reason': 'TEXT',
+            'is_selected': 'INTEGER NOT NULL DEFAULT 0',
+            'is_deleted': 'INTEGER NOT NULL DEFAULT 0',
+            'created_at': 'TEXT NOT NULL DEFAULT ""',
+            'updated_at': 'TEXT NOT NULL DEFAULT ""',
+        },
+    )
+    _ensure_columns(
+        conn,
         'entry_annotations',
         {
             'is_sensitive_override': 'INTEGER',
@@ -202,6 +230,34 @@ def _run_safe_migrations(conn: sqlite3.Connection) -> None:
             'material_summary': 'TEXT',
             'source_counts_json': "TEXT NOT NULL DEFAULT '{}'",
             'updated_at': "TEXT NOT NULL DEFAULT ''",
+        },
+    )
+    _ensure_columns(
+        conn,
+        'browser_events',
+        {
+            'date': 'TEXT NOT NULL DEFAULT ""',
+            'timestamp': 'TEXT NOT NULL DEFAULT ""',
+            'event_type': 'TEXT NOT NULL DEFAULT "page_view"',
+            'url': 'TEXT',
+            'title': 'TEXT',
+            'domain': 'TEXT',
+            'tab_id': 'TEXT',
+            'window_id': 'TEXT',
+            'duration_sec': 'REAL NOT NULL DEFAULT 0',
+            'content_preview': 'TEXT',
+            'search_engine': 'TEXT',
+            'search_query': 'TEXT',
+            'referrer': 'TEXT',
+            'payload_json': 'TEXT',
+            'client_event_id': 'TEXT',
+            'source': "TEXT NOT NULL DEFAULT 'edge_extension'",
+            'is_sensitive': 'INTEGER NOT NULL DEFAULT 0',
+            'sensitivity_reason': 'TEXT',
+            'is_selected': 'INTEGER NOT NULL DEFAULT 0',
+            'is_deleted': 'INTEGER NOT NULL DEFAULT 0',
+            'created_at': 'TEXT NOT NULL DEFAULT ""',
+            'updated_at': 'TEXT NOT NULL DEFAULT ""',
         },
     )
     _ensure_columns(
@@ -300,6 +356,30 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_ai_prompt_entries_date_timestamp
         ON ai_prompt_entries(date, timestamp)
         """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_browser_events_date
+        ON browser_events(date)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_browser_events_timestamp
+        ON browser_events(timestamp)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_browser_events_type
+        ON browser_events(date, event_type)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_browser_events_domain
+        ON browser_events(date, domain)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_browser_events_selected
+        ON browser_events(date, is_selected, is_deleted)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_browser_events_search
+        ON browser_events(date, search_engine, is_deleted)
+        """,
     ]
     for sql in statements:
         try:
@@ -322,6 +402,21 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
         )
     except sqlite3.Error:
         logger.debug('Failed to create ai prompt unique index.', exc_info=True)
+
+    try:
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_browser_events_client_event
+            ON browser_events(client_event_id)
+            WHERE client_event_id IS NOT NULL AND client_event_id <> ''
+            """
+        )
+    except sqlite3.IntegrityError:
+        logger.warning(
+            'Skipped unique browser_events(client_event_id) index because existing duplicate rows are present.'
+        )
+    except sqlite3.Error:
+        logger.debug('Failed to create browser event unique index.', exc_info=True)
 
 
 def _ensure_columns(

@@ -257,6 +257,7 @@ async function buildDataCenterSummaryHttp<T>(payload: unknown): Promise<T> {
     browser: 0,
     clipboard: 0,
     ai_prompt: 0,
+    browser_event: 0,
     sensitive: 0,
     deleted: 0,
     categories: [] as Array<{ category: string; count: number }>,
@@ -268,14 +269,15 @@ async function buildDataCenterSummaryHttp<T>(payload: unknown): Promise<T> {
     summary.browser += item.browser_count || 0
     summary.clipboard += item.clipboard_count || 0
     summary.ai_prompt += item.ai_prompt_count || 0
+    summary.browser_event += item.browser_event_count || 0
     summary.sensitive += item.sensitive_count || 0
-    const dayCount = (item.app_session_count || 0) + (item.browser_count || 0) + (item.clipboard_count || 0) + (item.ai_prompt_count || 0)
+    const dayCount = (item.app_session_count || 0) + (item.browser_count || 0) + (item.clipboard_count || 0) + (item.ai_prompt_count || 0) + (item.browser_event_count || 0)
     summary.days.push({ date: item.date, count: dayCount })
     for (const category of item.category_distribution || []) {
       categories.set(category.category, (categories.get(category.category) || 0) + category.count)
     }
   }
-  summary.total = summary.app + summary.browser + summary.clipboard + summary.ai_prompt
+  summary.total = summary.app + summary.browser + summary.clipboard + summary.ai_prompt + summary.browser_event
   summary.categories = [...categories.entries()].map(([category, count]) => ({ category, count }))
   return summary as T
 }
@@ -334,6 +336,7 @@ async function buildReportMaterialsHttp<T>(payload: unknown): Promise<T> {
 
 function getPayloadSourceType(payload: unknown): SourceType {
   const raw = String(getPayloadValue(payload, 'sourceType') || getPayloadValue(payload, 'source_type') || 'app')
+  if (raw === 'browser_events') return 'browser_event'
   return (raw === 'ai' ? 'ai_prompt' : raw) as SourceType
 }
 
@@ -695,6 +698,7 @@ function emptyOverview(date: string): OverviewPayload {
     browser_count: 0,
     clipboard_count: 0,
     ai_prompt_count: 0,
+    browser_event_count: 0,
     selected_material_count: 0,
     sensitive_count: 0,
     report_status: 'not_generated',
@@ -712,9 +716,11 @@ function emptyDataCenterSummary() {
     browser: 0,
     clipboard: 0,
     ai_prompt: 0,
+    browser_event: 0,
     sensitive: 0,
     deleted: 0,
-    categories: []
+    categories: [],
+    days: []
   }
 }
 
@@ -737,7 +743,8 @@ function emptyDashboardSummary(date: string): DashboardSummary {
       app_sessions: 0,
       clipboard: 0,
       browser: 0,
-      ai_prompts: 0
+      ai_prompts: 0,
+      browser_events: 0
     },
     top_apps: [],
     time_distribution: [],

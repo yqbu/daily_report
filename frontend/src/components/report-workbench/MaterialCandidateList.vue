@@ -24,7 +24,8 @@ const sourceMeta = computed(() => ({
   app: {label: '前台应用', icon: Monitor, className: 'source-app'},
   browser: {label: '浏览器历史', icon: Link, className: 'source-browser'},
   clipboard: {label: '剪切板', icon: CopyDocument, className: 'source-clipboard'},
-  ai_prompt: {label: 'AI 提问', icon: ChatDotRound, className: 'source-ai'}
+  ai_prompt: {label: 'AI 提问', icon: ChatDotRound, className: 'source-ai'},
+  browser_event: {label: '浏览器事件', icon: Link, className: 'source-browser-event'}
 }))
 
 function bindObserver(): void {
@@ -161,6 +162,11 @@ watch([sentinel, listEl], bindObserver)
 .source-browser {
   background: #eefaf2;
   color: #16a34a;
+}
+
+.source-browser-event {
+  background: #eff6ff;
+  color: #2563eb;
 }
 
 .source-clipboard {

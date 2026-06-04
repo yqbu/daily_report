@@ -31,7 +31,7 @@ function updateFilters(patch: Partial<ReportHistoryFilters>): void {
 
 function materialCount(row: ReportHistoryRow): number {
   const counts = row.source_counts ?? {}
-  return ['app', 'browser', 'clipboard', 'ai_prompt'].reduce((total, key) => total + Number(counts[key] || 0), 0)
+  return ['app', 'browser', 'clipboard', 'ai_prompt', 'browser_event'].reduce((total, key) => total + Number(counts[key] || 0), 0)
 }
 
 function createdTime(row: ReportHistoryRow): string {

@@ -33,7 +33,8 @@ export const SOURCE_OPTIONS: Array<{ label: string; value: SourceType }> = [
   { label: '前台应用', value: 'app' },
   { label: '浏览器历史', value: 'browser' },
   { label: '剪切板', value: 'clipboard' },
-  { label: 'AI 提问', value: 'ai_prompt' }
+  { label: 'AI 提问', value: 'ai_prompt' },
+  { label: '浏览器事件', value: 'browser_event' }
 ]
 
 export const CATEGORY_OPTIONS = [
@@ -61,6 +62,9 @@ export function recordId(record: DataCenterRecord): number {
 
 export function recordSource(record: DataCenterRecord): SourceType {
   const sourceType = String(record.source_type || 'app')
+  if (sourceType === 'browser_events') {
+    return 'browser_event'
+  }
   return (sourceType === 'ai' ? 'ai_prompt' : sourceType) as SourceType
 }
 
@@ -78,6 +82,9 @@ export function recordTitle(record: DataCenterRecord): string {
   if (sourceType === 'clipboard') {
     return '剪切板文本'
   }
+  if (sourceType === 'browser_event') {
+    return String(getValue(record, 'search_query') || getValue(record, 'title') || getValue(record, 'domain') || '浏览器事件')
+  }
   return `${String(getValue(record, 'platform') || 'AI')} 提问`
 }
 
@@ -87,6 +94,7 @@ export function recordPreview(record: DataCenterRecord): string {
       getValue(record, 'prompt_preview') ||
       getValue(record, 'content') ||
       getValue(record, 'prompt_text') ||
+      getValue(record, 'search_query') ||
       record.subtitle ||
       getValue(record, 'window_title') ||
       getValue(record, 'url') ||

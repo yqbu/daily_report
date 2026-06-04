@@ -168,6 +168,54 @@ ON browser_history_entries(date, is_selected, is_deleted);
 CREATE INDEX IF NOT EXISTS idx_browser_history_entries_visit_time_chrome
 ON browser_history_entries(browser, profile_name, visit_time_chrome);
 
+CREATE TABLE IF NOT EXISTS browser_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    url TEXT,
+    title TEXT,
+    domain TEXT,
+    tab_id TEXT,
+    window_id TEXT,
+    duration_sec REAL NOT NULL DEFAULT 0,
+    content_preview TEXT,
+    search_engine TEXT,
+    search_query TEXT,
+    referrer TEXT,
+    payload_json TEXT,
+    client_event_id TEXT,
+    source TEXT NOT NULL DEFAULT 'edge_extension',
+    is_sensitive INTEGER NOT NULL DEFAULT 0,
+    sensitivity_reason TEXT,
+    is_selected INTEGER NOT NULL DEFAULT 0,
+    is_deleted INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_browser_events_client_event
+ON browser_events(client_event_id)
+WHERE client_event_id IS NOT NULL AND client_event_id <> '';
+
+CREATE INDEX IF NOT EXISTS idx_browser_events_date
+ON browser_events(date);
+
+CREATE INDEX IF NOT EXISTS idx_browser_events_timestamp
+ON browser_events(timestamp);
+
+CREATE INDEX IF NOT EXISTS idx_browser_events_type
+ON browser_events(date, event_type);
+
+CREATE INDEX IF NOT EXISTS idx_browser_events_domain
+ON browser_events(date, domain);
+
+CREATE INDEX IF NOT EXISTS idx_browser_events_selected
+ON browser_events(date, is_selected, is_deleted);
+
+CREATE INDEX IF NOT EXISTS idx_browser_events_search
+ON browser_events(date, search_engine, is_deleted);
+
 CREATE TABLE IF NOT EXISTS ai_prompt_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 

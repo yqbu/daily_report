@@ -63,6 +63,7 @@ const summaryItems = computed(() => [
   { key: 'total', label: '共', suffix: '条记录', value: summary.value.total, icon: Collection, tone: 'slate' },
   { key: 'app', label: '应用', suffix: '', value: summary.value.app, icon: Monitor, tone: 'blue' },
   { key: 'browser', label: '浏览器', suffix: '', value: summary.value.browser, icon: Link, tone: 'green' },
+  { key: 'browser_event', label: '浏览事件', suffix: '', value: summary.value.browser_event, icon: Link, tone: 'blue' },
   { key: 'clipboard', label: '剪贴板', suffix: '', value: summary.value.clipboard, icon: CopyDocument, tone: 'orange' },
   { key: 'ai', label: 'AI 提问', suffix: '', value: summary.value.ai_prompt, icon: ChatDotRound, tone: 'purple' }
 ])
@@ -299,6 +300,7 @@ function emptySummary(): DataCenterSummaryPayload {
     total: 0,
     app: 0,
     browser: 0,
+    browser_event: 0,
     clipboard: 0,
     ai_prompt: 0,
     sensitive: 0,

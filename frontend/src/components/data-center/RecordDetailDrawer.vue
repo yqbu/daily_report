@@ -77,6 +77,19 @@ const baseFields = computed(() => {
       ['内容哈希', row.content_hash]
     ]
   }
+  if (sourceType.value === 'browser_event') {
+    return [
+      ['事件类型', row.event_type],
+      ['发生时间', formatDateTime(row.timestamp)],
+      ['标题', row.title],
+      ['域名', row.domain],
+      ['搜索引擎', row.search_engine],
+      ['搜索词', row.search_query],
+      ['停留时长', formatDuration(row.duration_sec)],
+      ['URL', row.url],
+      ['来源', row.source]
+    ]
+  }
   return [
     ['平台', row.platform],
     ['来源', row.source],
@@ -96,7 +109,8 @@ function sourceLabelText(value: SourceType): string {
     app: '应用记录',
     browser: '浏览记录',
     clipboard: '剪切板记录',
-    ai_prompt: 'AI 提问'
+    ai_prompt: 'AI 提问',
+    browser_event: '浏览器事件'
   }[value]
 }
 

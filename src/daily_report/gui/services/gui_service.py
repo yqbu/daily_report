@@ -30,6 +30,7 @@ from daily_report.service.material_service import MaterialService
 from daily_report.service.overview_service import OverviewService
 from daily_report.service.report_service import ReportService
 from daily_report.service.timeline_service import TimelineEvent, TimelineService
+from daily_report.sources.aliases import normalize_source_type
 from daily_report.storage.database import create_connection, init_database
 from daily_report.storage.repositories.annotation_repository import AnnotationRepository
 
@@ -260,11 +261,19 @@ class GuiService:
         payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         payload = payload or {}
+        normalized = self._normalize_source_type(source_type)
+        if normalized == "browser_event":
+            return {
+                "source_type": normalized,
+                "source_id": int(entry_id),
+                "skipped": True,
+                "reason": "annotation_not_supported",
+            }
         conn = create_connection(self.provider.db_path)
         try:
             init_database(conn)
             row = AnnotationRepository(conn).update_annotation(
-                source_type=source_type,
+                source_type=normalized,
                 source_id=int(entry_id),
                 category=payload.get("category"),
                 note=payload.get("note"),
@@ -294,20 +303,30 @@ class GuiService:
                 conn.executemany(
                     """
                     UPDATE clipboard_entries
-                    SET is_sensitive = ?, sensitivity_reason = ?, updated_at = datetime('now', 'localtime')
+                    SET is_sensitive = ?, sensitivity_reason = ?, is_selected = CASE WHEN ? = 1 THEN 0 ELSE is_selected END, updated_at = datetime('now', 'localtime')
                     WHERE id = ?
                     """,
-                    [(int(sensitive), clean_reason, item) for item in ids],
+                    [(int(sensitive), clean_reason, int(sensitive), item) for item in ids],
                 )
                 conn.commit()
             elif normalized == "ai_prompt":
                 conn.executemany(
                     """
                     UPDATE ai_prompt_entries
-                    SET is_sensitive = ?, sensitivity_reason = ?, updated_at = datetime('now', 'localtime')
+                    SET is_sensitive = ?, sensitivity_reason = ?, is_selected = CASE WHEN ? = 1 THEN 0 ELSE is_selected END, updated_at = datetime('now', 'localtime')
                     WHERE id = ?
                     """,
-                    [(int(sensitive), clean_reason, item) for item in ids],
+                    [(int(sensitive), clean_reason, int(sensitive), item) for item in ids],
+                )
+                conn.commit()
+            elif normalized == "browser_event":
+                conn.executemany(
+                    """
+                    UPDATE browser_events
+                    SET is_sensitive = ?, sensitivity_reason = ?, is_selected = CASE WHEN ? = 1 THEN 0 ELSE is_selected END, updated_at = datetime('now', 'localtime')
+                    WHERE id = ?
+                    """,
+                    [(int(sensitive), clean_reason, int(sensitive), item) for item in ids],
                 )
                 conn.commit()
             else:
@@ -350,6 +369,7 @@ class GuiService:
             "browser": by_source.get("browser", 0),
             "clipboard": by_source.get("clipboard", 0),
             "ai_prompt": by_source.get("ai_prompt", 0),
+            "browser_event": by_source.get("browser_event", 0),
             "sensitive": sensitive_count,
             "deleted": deleted_count,
             "categories": [{"category": key, "count": value} for key, value in category_counts.most_common()],
@@ -366,6 +386,7 @@ class GuiService:
             "browser": 0,
             "clipboard": 0,
             "ai_prompt": 0,
+            "browser_event": 0,
             "sensitive": 0,
             "deleted": 0,
             "categories": [],
@@ -460,6 +481,7 @@ class GuiService:
             "browser": "browser_history_entries",
             "clipboard": "clipboard_entries",
             "ai_prompt": "ai_prompt_entries",
+            "browser_event": "browser_events",
         }.get(source_type)
         if table is None or not _service_table_exists(conn, table):
             return 0, 0, 0, {}, Counter()
@@ -906,6 +928,7 @@ class GuiService:
                 "clipboard": raw.get("clipboard_count", 0),
                 "browser": raw.get("browser_count", 0),
                 "ai_prompts": raw.get("ai_prompt_count", 0),
+                "browser_events": raw.get("browser_event_count", 0),
             },
             "top_apps": raw.get("top_apps", []),
             "time_distribution": self._build_time_distribution(sessions),
@@ -1264,10 +1287,7 @@ class GuiService:
 
     @staticmethod
     def _normalize_source_type(source_type: str) -> str:
-        normalized = "ai_prompt" if source_type == "ai" else str(source_type or "")
-        if normalized not in {"app", "browser", "clipboard", "ai_prompt"}:
-            raise ValueError(f"Unsupported source type: {source_type}")
-        return normalized
+        return normalize_source_type(source_type)
 
     def _merge_entry_row(
         self,
@@ -1277,7 +1297,11 @@ class GuiService:
     ) -> dict[str, Any]:
         normalized = self._normalize_source_type(source_type)
         item = dict(row)
-        annotation = annotation_repo.get_annotation(normalized, int(item.get("id") or 0))
+        annotation = (
+            annotation_repo.get_annotation(normalized, int(item.get("id") or 0))
+            if normalized in {"app", "browser", "clipboard", "ai_prompt"}
+            else None
+        )
         annotation_data = dict(annotation) if annotation else {}
         item["source_type"] = normalized
         item["source_id"] = int(item.get("id") or 0)
@@ -1293,6 +1317,8 @@ class GuiService:
                 item.get("is_search"),
                 item.get("search_query"),
             )
+        elif normalized == "browser_event":
+            item["category"] = _browser_event_category(str(item.get("event_type") or ""))
         else:
             item["category"] = annotation_data.get("category")
 
@@ -1326,6 +1352,7 @@ class GuiService:
                     "browser_count": _count_where(conn, "browser_history_entries", "date = ? AND is_deleted = 0", [day]),
                     "clipboard_count": _count_where(conn, "clipboard_entries", "date = ? AND is_deleted = 0", [day]),
                     "ai_prompt_count": _count_where(conn, "ai_prompt_entries", "date = ? AND is_deleted = 0", [day]),
+                    "browser_event_count": _count_where(conn, "browser_events", "date = ? AND is_deleted = 0", [day]),
                 }
             )
         return rows
@@ -1426,6 +1453,15 @@ class GuiService:
                     days,
                 ),
             },
+            {
+                "source_type": "browser_event",
+                "count": _count_where(
+                    conn,
+                    "browser_events",
+                    f"date IN ({','.join('?' for _ in days)}) AND is_deleted = 0 AND is_sensitive = 1",
+                    days,
+                ),
+            },
         ]
         if _service_table_exists(conn, "entry_annotations"):
             for source_type in ("app", "browser"):
@@ -1444,12 +1480,13 @@ class GuiService:
 
     @staticmethod
     def _source_table(source_type: str) -> str:
-        normalized = "ai_prompt" if source_type == "ai" else str(source_type or "")
+        normalized = normalize_source_type(source_type)
         mapping = {
             "app": "app_sessions",
             "browser": "browser_history_entries",
             "clipboard": "clipboard_entries",
             "ai_prompt": "ai_prompt_entries",
+            "browser_event": "browser_events",
         }
         if normalized not in mapping:
             raise ValueError(f"Unsupported source type: {source_type}")
@@ -1457,22 +1494,24 @@ class GuiService:
 
     @staticmethod
     def _source_time_column(source_type: str) -> str:
-        normalized = "ai_prompt" if source_type == "ai" else str(source_type or "")
+        normalized = normalize_source_type(source_type)
         return {
             "app": "start_time",
             "browser": "visit_time",
             "clipboard": "last_seen_at",
             "ai_prompt": "timestamp",
+            "browser_event": "timestamp",
         }.get(normalized, "id")
 
     @staticmethod
     def _keyword_columns(source_type: str) -> list[str]:
-        normalized = "ai_prompt" if source_type == "ai" else str(source_type or "")
+        normalized = normalize_source_type(source_type)
         return {
             "app": ["app_name", "process_name", "window_title"],
             "browser": ["title", "url", "domain", "search_query"],
             "clipboard": ["content_preview", "content"],
             "ai_prompt": ["platform", "page_title", "prompt_preview", "prompt_text"],
+            "browser_event": ["event_type", "title", "url", "domain", "search_engine", "search_query", "content_preview"],
         }.get(normalized, ["id"])
 
     @staticmethod
@@ -1581,7 +1620,7 @@ def _parse_local_datetime(value: Any) -> datetime | None:
 
 
 def _requires_annotation_sensitive(source_type: str, sensitive: bool | None) -> bool:
-    normalized = "ai_prompt" if source_type == "ai" else str(source_type or "")
+    normalized = normalize_source_type(source_type)
     return sensitive is not None and normalized in {"app", "browser"}
 
 
@@ -1634,6 +1673,19 @@ def _summary_source_types(filters: dict[str, Any]) -> set[str]:
     if isinstance(raw, str):
         raw = [raw] if raw else None
     if not isinstance(raw, list) or not raw:
-        return {"app", "browser", "clipboard", "ai_prompt"}
-    normalized = {"ai_prompt" if str(item) == "ai" else str(item) for item in raw}
-    return normalized & {"app", "browser", "clipboard", "ai_prompt"}
+        return {"app", "browser", "clipboard", "ai_prompt", "browser_event"}
+    normalized: set[str] = set()
+    for item in raw:
+        try:
+            normalized.add(normalize_source_type(str(item)))
+        except ValueError:
+            continue
+    return normalized & {"app", "browser", "clipboard", "ai_prompt", "browser_event"}
+
+
+def _browser_event_category(event_type: str) -> str:
+    if event_type in {"search", "copy", "dwell_time"}:
+        return "资料调研"
+    if event_type == "ai_prompt_submit":
+        return "AI 辅助"
+    return "其他"

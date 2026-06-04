@@ -20,6 +20,7 @@ export function mockOverview(date = today()): OverviewDTO {
     browser_count: 12,
     clipboard_count: 6,
     ai_prompt_count: 4,
+    browser_event_count: 9,
     selected_material_count: 11,
     sensitive_count: 1,
     report_status: '未生成',
@@ -31,7 +32,8 @@ export function mockOverview(date = today()): OverviewDTO {
       { source_type: 'app', count: 18 },
       { source_type: 'browser', count: 12 },
       { source_type: 'clipboard', count: 6 },
-      { source_type: 'ai_prompt', count: 4 }
+      { source_type: 'ai_prompt', count: 4 },
+      { source_type: 'browser_event', count: 9 }
     ],
     category_distribution: [
       { category: '开发编码', count: 8 },
@@ -73,6 +75,20 @@ export function mockTimeline(date = today()): PagedResult<TimelineEvent> {
       subtitle: '本地 API 改造',
       content_preview: '如何设计 FastAPI sidecar API client',
       category: 'AI 辅助',
+      is_selected: true,
+      is_sensitive: false,
+      is_deleted: false
+    },
+    {
+      event_id: 'browser_event:1',
+      source_type: 'browser_event',
+      source_id: 1,
+      start_time: `${date} 11:20:00`,
+      end_time: null,
+      title: '搜索: FastAPI sidecar API client',
+      subtitle: 'google.com · 搜索',
+      content_preview: 'FastAPI sidecar API client',
+      category: '资料调研',
       is_selected: true,
       is_sensitive: false,
       is_deleted: false

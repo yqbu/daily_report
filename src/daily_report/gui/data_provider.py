@@ -96,6 +96,7 @@ class GuiDataProvider:
                 "clipboard_count": self._count(conn, "clipboard_entries", day),
                 "browser_count": self._count(conn, "browser_history_entries", day),
                 "ai_prompt_count": self._count(conn, "ai_prompt_entries", day),
+                "browser_event_count": self._count(conn, "browser_events", day),
                 "top_apps": [
                     {
                         "name": row["app_name"],
@@ -600,6 +601,28 @@ class GuiDataProvider:
                         sensitive=bool(r["is_sensitive"]),
                     )
                 )
+            for r in self._safe_fetchall(
+                conn,
+                """
+                SELECT id, is_selected, timestamp, event_type, title, domain, search_query, content_preview, is_sensitive
+                FROM browser_events
+                WHERE date = ? AND is_deleted = 0
+                ORDER BY timestamp DESC
+                """,
+                (day,),
+            ):
+                preview = r["search_query"] or r["content_preview"] or r["title"] or r["domain"] or r["event_type"]
+                rows.append(
+                    MaterialRow(
+                        key=f"browser_events:{r['id']}",
+                        selected=bool(r["is_selected"]),
+                        time=self._time_part(r["timestamp"]),
+                        source_type="浏览器事件",
+                        preview=preview,
+                        source=r["domain"] or "Edge",
+                        sensitive=bool(r["is_sensitive"]),
+                    )
+                )
             rows.sort(key=lambda x: x.time, reverse=True)
             return rows
         finally:
@@ -607,7 +630,7 @@ class GuiDataProvider:
 
     def update_material_selected(self, key: str, selected: bool) -> None:
         table, id_text = key.split(":", 1)
-        if table not in {"app_sessions", "clipboard_entries", "browser_history_entries", "ai_prompt_entries"}:
+        if table not in {"app_sessions", "clipboard_entries", "browser_history_entries", "ai_prompt_entries", "browser_events"}:
             raise ValueError(f"Unsupported material table: {table}")
         conn = self.connect()
         try:
@@ -621,7 +644,7 @@ class GuiDataProvider:
 
     def soft_delete_material(self, key: str) -> None:
         table, id_text = key.split(":", 1)
-        if table not in {"clipboard_entries", "browser_history_entries", "ai_prompt_entries"}:
+        if table not in {"clipboard_entries", "browser_history_entries", "ai_prompt_entries", "browser_events"}:
             raise ValueError(f"Unsupported soft delete table: {table}")
         conn = self.connect()
         try:
@@ -653,6 +676,7 @@ class GuiDataProvider:
                 "clipboard_entries",
                 "browser_history_entries",
                 "ai_prompt_entries",
+                "browser_events",
             } else ""
             row = conn.execute(f"SELECT COUNT(*) AS n FROM {table} WHERE date = ?{deleted_clause}", (day,)).fetchone()
             return int(row["n"] if row else 0)

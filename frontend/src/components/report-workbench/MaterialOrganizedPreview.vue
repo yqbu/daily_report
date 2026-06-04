@@ -31,7 +31,8 @@ const sourceLabels: Record<string, string> = {
   app: '前台应用',
   browser: '浏览器历史',
   clipboard: '剪切板',
-  ai_prompt: 'AI 提问'
+  ai_prompt: 'AI 提问',
+  browser_event: '浏览器事件'
 }
 
 const selectedItems = computed(() => props.items.filter((item) => item.is_selected))

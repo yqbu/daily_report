@@ -78,6 +78,7 @@ def build_status_payload(
                 "数据源: "
                 f"前台 {overview.get('app_session_count', 0)} / "
                 f"浏览 {overview.get('browser_count', 0)} / "
+                f"浏览器事件 {overview.get('browser_event_count', 0)} / "
                 f"剪切板 {overview.get('clipboard_count', 0)} / "
                 f"AI {overview.get('ai_prompt_count', 0)}"
             ),
@@ -98,6 +99,7 @@ def build_status_payload(
         'top_apps_inline': top_apps_inline,
         'app_session_count': int(overview.get('app_session_count') or 0),
         'browser_count': int(overview.get('browser_count') or 0),
+        'browser_event_count': int(overview.get('browser_event_count') or 0),
         'clipboard_count': int(overview.get('clipboard_count') or 0),
         'ai_prompt_count': int(overview.get('ai_prompt_count') or 0),
         'selected_material_count': int(overview.get('selected_material_count') or 0),
@@ -116,7 +118,7 @@ def print_status(
 ) -> None:
     payload = build_status_payload(target_date=target_date, limit=limit)
     if as_json:
-        print(json.dumps(payload, ensure_ascii=False))
+        print(json.dumps(payload, ensure_ascii=True))
     else:
         print(payload['tooltip'])
 
@@ -132,6 +134,7 @@ def _empty_status(day: str, message: str) -> dict[str, Any]:
         'top_apps_inline': '暂无数据',
         'app_session_count': 0,
         'browser_count': 0,
+        'browser_event_count': 0,
         'clipboard_count': 0,
         'ai_prompt_count': 0,
         'selected_material_count': 0,

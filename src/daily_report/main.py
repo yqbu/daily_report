@@ -151,7 +151,11 @@ def run_pyside_gui_cmd(args: argparse.Namespace) -> None:
 def run_api_cmd(args: argparse.Namespace) -> None:
     from daily_report.api.server import run_api_server
 
-    run_api_server(host=args.host, port=args.port, token=args.token)
+    try:
+        run_api_server(host=args.host, port=args.port, token=args.token)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(1) from exc
 
 
 def build_parser() -> argparse.ArgumentParser:

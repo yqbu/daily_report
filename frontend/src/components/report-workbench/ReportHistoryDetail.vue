@@ -37,6 +37,7 @@ const sourceCards = computed(() => {
   const items = [
     { key: 'app', label: '前台应用', value: Number(counts.app || 0), icon: Monitor, tone: 'blue' },
     { key: 'browser', label: '浏览器历史', value: Number(counts.browser || 0), icon: Link, tone: 'green' },
+    { key: 'browser_event', label: '浏览器事件', value: Number(counts.browser_event || 0), icon: Link, tone: 'blue' },
     { key: 'clipboard', label: '剪切板', value: Number(counts.clipboard || 0), icon: Tickets, tone: 'orange' },
     { key: 'ai_prompt', label: 'AI 提问', value: Number(counts.ai_prompt || 0), icon: ChatDotRound, tone: 'purple' }
   ]

@@ -32,14 +32,14 @@ export interface PageResult<T> {
   [key: string]: unknown
 }
 
-export type SourceType = 'app' | 'browser' | 'clipboard' | 'ai_prompt'
+export type SourceType = 'app' | 'browser' | 'clipboard' | 'ai_prompt' | 'browser_event'
 export type TemplateName = 'daily_standard' | 'daily_technical' | 'daily_brief'
 
 /**
  * 兼容旧页面/旧 store 的来源类型。
  * 新页面应优先使用 SourceType。
  */
-export type RecordKind = 'app' | 'clipboard' | 'browser' | 'ai'
+export type RecordKind = 'app' | 'clipboard' | 'browser' | 'ai' | 'browser_event'
 
 export type OverviewDTO = OverviewPayload
 
@@ -54,6 +54,7 @@ export interface OverviewPayload {
   browser_count: number
   clipboard_count: number
   ai_prompt_count: number
+  browser_event_count: number
   selected_material_count: number
   sensitive_count: number
   report_status: string
@@ -157,6 +158,7 @@ export interface DataCenterSummaryPayload {
   browser: number
   clipboard: number
   ai_prompt: number
+  browser_event: number
   sensitive: number
   deleted: number
   categories: Array<{ category: string; count: number }>
@@ -490,6 +492,7 @@ export interface DashboardSummary {
     clipboard: number
     browser: number
     ai_prompts: number
+    browser_events?: number
   }
   top_apps: Array<{ name: string; seconds: number; session_count: number }>
   time_distribution: Array<{ label: string; active: number }>

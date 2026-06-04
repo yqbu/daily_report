@@ -28,6 +28,7 @@ const sourceOptions = [
   { label: '全部', value: '' },
   { label: '前台应用', value: 'app' },
   { label: '浏览器历史', value: 'browser' },
+  { label: '浏览器事件', value: 'browser_event' },
   { label: '剪切板', value: 'clipboard' },
   { label: 'AI 提问', value: 'ai_prompt' }
 ] as const

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from daily_report.api.deps import get_timeline_service
 from daily_report.api.response import ApiError, ok
 from daily_report.service.timeline_service import TimelineService
+from daily_report.sources.aliases import normalize_source_type
 
 router = APIRouter(prefix='/api', tags=['timeline'])
 
@@ -48,11 +49,7 @@ def _source_types(source_type: str) -> list[str] | None:
     normalized = str(source_type or 'all').strip()
     if normalized == 'all':
         return None
-    if normalized == 'ai':
-        normalized = 'ai_prompt'
-    if normalized not in {'app', 'browser', 'clipboard', 'ai_prompt'}:
-        raise ValueError(f'Unsupported source_type: {source_type}')
-    return [normalized]
+    return [normalize_source_type(normalized)]
 
 
 def _sort_order(order: str) -> str:

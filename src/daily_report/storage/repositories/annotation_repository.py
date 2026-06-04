@@ -4,6 +4,8 @@ import sqlite3
 from datetime import datetime
 from typing import Any
 
+from daily_report.sources.aliases import normalize_source_type
+
 SOURCE_TYPES = {'app', 'browser', 'clipboard', 'ai_prompt'}
 
 
@@ -23,6 +25,7 @@ class AnnotationRepository:
         is_sensitive_override: bool | None = None,
         sensitivity_reason_override: str | None = None,
     ) -> sqlite3.Row:
+        source_type = normalize_source_type(source_type)
         self._validate_source_type(source_type)
         existing = self.get_annotation(source_type, source_id)
         now = _now()
@@ -85,6 +88,7 @@ class AnnotationRepository:
         return row
 
     def get_annotation(self, source_type: str, source_id: int) -> sqlite3.Row | None:
+        source_type = normalize_source_type(source_type)
         self._validate_source_type(source_type)
         return self.conn.execute(
             """
@@ -114,6 +118,7 @@ class AnnotationRepository:
         source_type: str,
         source_ids: list[int],
     ) -> dict[int, dict[str, Any]]:
+        source_type = normalize_source_type(source_type)
         self._validate_source_type(source_type)
         if not source_ids:
             return {}
@@ -130,7 +135,7 @@ class AnnotationRepository:
 
     @staticmethod
     def _validate_source_type(source_type: str) -> None:
-        if source_type not in SOURCE_TYPES:
+        if normalize_source_type(source_type) not in SOURCE_TYPES:
             raise ValueError(f'Unsupported annotation source_type: {source_type}')
 
 

@@ -6,6 +6,7 @@ from daily_report.api.deps import get_timeline_service
 from daily_report.api.response import ApiError, ok
 from daily_report.api.schemas import DeletedUpdateRequest, SelectionUpdateRequest
 from daily_report.service.timeline_service import TimelineService
+from daily_report.sources.aliases import normalize_source_type
 
 router = APIRouter(prefix='/api/entries', tags=['entries'])
 
@@ -96,8 +97,5 @@ def update_entry_deleted(
 
 
 def _normalize_source_type(source_type: str) -> str:
-    normalized = 'ai_prompt' if source_type == 'ai' else str(source_type or '').strip()
-    if normalized not in {'app', 'browser', 'clipboard', 'ai_prompt'}:
-        raise ValueError(f'Unsupported source_type: {source_type}')
-    return normalized
+    return normalize_source_type(source_type)
 

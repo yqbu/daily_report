@@ -15,7 +15,8 @@ const iconMap = {
   app: Monitor,
   browser: Link,
   clipboard: CopyDocument,
-  ai_prompt: ChatDotRound
+  ai_prompt: ChatDotRound,
+  browser_event: Link
 }
 </script>
 
@@ -55,6 +56,12 @@ const iconMap = {
   color: var(--datacenter-green, #67c23a);
   background: #f0f9eb;
   border-color: #e1f3d8;
+}
+
+.source-badge--browser_event {
+  color: #2563eb;
+  background: #eff6ff;
+  border-color: #c9dcff;
 }
 
 .source-badge--clipboard {

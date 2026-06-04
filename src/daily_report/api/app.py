@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from daily_report.api.deps import verify_token
 from daily_report.api.response import ApiError, error_response
-from daily_report.api.routes import entries, gui, health, overview, reports, settings, timeline
+from daily_report.api.routes import browser_events, entries, gui, health, overview, reports, settings, timeline
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +23,20 @@ def create_app(api_token: str | None = None) -> FastAPI:
         allow_origin_regex=r'^(http://(localhost|127\.0\.0\.1)(:\d+)?|tauri://localhost)$',
         allow_credentials=True,
         allow_methods=['GET', 'POST', 'PUT', 'PATCH', 'OPTIONS'],
-        allow_headers=['Authorization', 'Content-Type'],
+        allow_headers=['Authorization', 'Content-Type', 'X-Daily-Report-Token'],
     )
 
     app.include_router(health.router)
-    protected = [overview.router, timeline.router, entries.router, reports.router, settings.router, gui.router]
+    app.include_router(browser_events.public_router)
+    protected = [
+        overview.router,
+        timeline.router,
+        entries.router,
+        reports.router,
+        settings.router,
+        gui.router,
+        browser_events.protected_router,
+    ]
     for router in protected:
         app.include_router(router, dependencies=[Depends(verify_token)])
 

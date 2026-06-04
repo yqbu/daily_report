@@ -38,6 +38,11 @@ class OverviewService:
                 "SELECT COUNT(*) AS n FROM ai_prompt_entries WHERE date = ? AND is_deleted = 0",
                 (day,),
             )
+            browser_event_count = self._count(
+                conn,
+                "SELECT COUNT(*) AS n FROM browser_events WHERE date = ? AND is_deleted = 0",
+                (day,),
+            )
             selected_material_count = self._selected_count(conn, day)
             sensitive_count = self._sensitive_count(conn, day)
             top_apps = self._top_apps(conn, day)
@@ -53,6 +58,7 @@ class OverviewService:
             {'source_type': 'browser', 'count': browser_count},
             {'source_type': 'clipboard', 'count': clipboard_count},
             {'source_type': 'ai_prompt', 'count': ai_prompt_count},
+            {'source_type': 'browser_event', 'count': browser_event_count},
         ]
 
         return {
@@ -69,6 +75,7 @@ class OverviewService:
             'browser_count': browser_count,
             'clipboard_count': clipboard_count,
             'ai_prompt_count': ai_prompt_count,
+            'browser_event_count': browser_event_count,
             'selected_material_count': selected_material_count,
             'sensitive_count': sensitive_count,
             'report_status': report_status,
@@ -207,6 +214,7 @@ class OverviewService:
             "SELECT COUNT(*) AS n FROM browser_history_entries WHERE date = ? AND is_selected = 1 AND is_deleted = 0",
             "SELECT COUNT(*) AS n FROM clipboard_entries WHERE date = ? AND is_selected = 1 AND is_deleted = 0",
             "SELECT COUNT(*) AS n FROM ai_prompt_entries WHERE date = ? AND is_selected = 1 AND is_deleted = 0",
+            "SELECT COUNT(*) AS n FROM browser_events WHERE date = ? AND is_selected = 1 AND is_deleted = 0",
         )
         return sum(OverviewService._count(conn, sql, (day,)) for sql in queries)
 
@@ -215,6 +223,7 @@ class OverviewService:
         queries = (
             "SELECT COUNT(*) AS n FROM clipboard_entries WHERE date = ? AND is_sensitive = 1 AND is_deleted = 0",
             "SELECT COUNT(*) AS n FROM ai_prompt_entries WHERE date = ? AND is_sensitive = 1 AND is_deleted = 0",
+            "SELECT COUNT(*) AS n FROM browser_events WHERE date = ? AND is_sensitive = 1 AND is_deleted = 0",
         )
         return sum(OverviewService._count(conn, sql, (day,)) for sql in queries)
 

@@ -100,12 +100,14 @@ function optionFor(chartType: string): EChartsOption | null {
             + Number(row.browser_count || 0)
             + Number(row.clipboard_count || 0)
             + Number(row.ai_prompt_count || 0)
+            + Number(row.browser_event_count || 0)
           ))
         },
         seriesLine('应用', rows, 'app_count'),
         seriesLine('浏览', rows, 'browser_count'),
         seriesLine('剪切板', rows, 'clipboard_count'),
-        seriesLine('AI', rows, 'ai_prompt_count')
+        seriesLine('AI', rows, 'ai_prompt_count'),
+        seriesLine('浏览器事件', rows, 'browser_event_count')
       ] as EChartsOption['series']
     }
   }
@@ -258,6 +260,7 @@ function sourceTypeLabel(value: string): string {
     browser: '浏览器',
     clipboard: '剪贴板',
     ai_prompt: 'AI 提问'
+    ,browser_event: '浏览器事件'
   }[value] ?? value
 }
 

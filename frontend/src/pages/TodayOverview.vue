@@ -75,7 +75,8 @@ const sourceMeta: Record<SourceType, { label: string; color: string; tone: Tone 
   app: { label: '前台应用', color: '#2563eb', tone: 'blue' },
   browser: { label: '浏览器历史', color: '#10b981', tone: 'green' },
   clipboard: { label: '剪贴板', color: '#f59e0b', tone: 'orange' },
-  ai_prompt: { label: 'AI 提问', color: '#7c3aed', tone: 'purple' }
+  ai_prompt: { label: 'AI 提问', color: '#7c3aed', tone: 'purple' },
+  browser_event: { label: '浏览器事件', color: '#2563eb', tone: 'blue' }
 }
 
 const categoryPalette = ['#2563eb', '#10b981', '#f59e0b', '#7c3aed', '#6366f1', '#98a2b3']
@@ -135,6 +136,14 @@ const metrics = computed<MetricItem[]>(() => [
     helper: '网页与搜索线索',
     icon: Link,
     tone: 'green'
+  },
+  {
+    id: 'browser_event',
+    title: '浏览事件',
+    value: aggregated.value.browserEvents,
+    helper: '轻量行为事件',
+    icon: Link,
+    tone: 'blue'
   },
   {
     id: 'ai',
@@ -303,6 +312,7 @@ function aggregateOverview(days: OverviewPayload[]) {
   let browser = 0
   let clipboard = 0
   let aiPrompts = 0
+  let browserEvents = 0
 
   for (const day of days) {
     activeSec += day.active_time_sec ?? 0
@@ -311,6 +321,7 @@ function aggregateOverview(days: OverviewPayload[]) {
     browser += day.browser_count ?? 0
     clipboard += day.clipboard_count ?? 0
     aiPrompts += day.ai_prompt_count ?? 0
+    browserEvents += day.browser_event_count ?? 0
 
     for (const app of day.top_apps ?? []) {
       const id = app.app_key || app.name || app.app_name || 'unknown'
@@ -356,6 +367,7 @@ function aggregateOverview(days: OverviewPayload[]) {
     browser,
     clipboard,
     aiPrompts,
+    browserEvents,
     topApps,
     categories,
     categoryTotal,
@@ -369,7 +381,7 @@ function isReportGenerated(status: string): boolean {
 }
 
 function sourceIcon(sourceType: SourceType): unknown {
-  if (sourceType === 'browser') return Link
+  if (sourceType === 'browser' || sourceType === 'browser_event') return Link
   if (sourceType === 'clipboard') return CopyDocument
   if (sourceType === 'ai_prompt') return ChatDotRound
   return Monitor
@@ -830,7 +842,7 @@ onMounted(() => {
 
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 12px;
 }
 

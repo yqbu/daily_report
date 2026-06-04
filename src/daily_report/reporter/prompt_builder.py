@@ -24,6 +24,7 @@ class ReportMaterialBundle:
     clipboard_items: list[str] = field(default_factory=list)
     browser_items: list[str] = field(default_factory=list)
     ai_prompts: list[str] = field(default_factory=list)
+    browser_events: list[str] = field(default_factory=list)
 
 
 class PromptBuilder:
@@ -79,6 +80,7 @@ class PromptBuilder:
 - 总记录时长：{stats.get('total_time', '0m')}
 - 前台应用素材：{stats.get('app', 0)}
 - 浏览器素材：{stats.get('browser', 0)}
+- 浏览器事件素材：{stats.get('browser_event', 0)}
 - 剪切板素材：{stats.get('clipboard', 0)}
 - AI 提问素材：{stats.get('ai_prompt', 0)}
 
@@ -175,6 +177,7 @@ def build_daily_report_prompt(bundle: ReportMaterialBundle, *, max_chars: int = 
         ('clipboard', '其他', bundle.clipboard_items),
         ('browser', '资料调研', bundle.browser_items),
         ('ai_prompt', 'AI 辅助', bundle.ai_prompts),
+        ('browser_event', '资料调研', bundle.browser_events),
     ):
         for index, item in enumerate(items, start=1):
             materials.append(
@@ -197,6 +200,7 @@ def build_daily_report_prompt(bundle: ReportMaterialBundle, *, max_chars: int = 
         'clipboard': len(bundle.clipboard_items),
         'browser': len(bundle.browser_items),
         'ai_prompt': len(bundle.ai_prompts),
+        'browser_event': len(bundle.browser_events),
     }
     return build_prompt_from_materials(
         date=bundle.date,
@@ -210,5 +214,6 @@ def build_material_summary(bundle: ReportMaterialBundle) -> str:
     return (
         f'date={bundle.date}; active_time={bundle.active_time}; total_time={bundle.total_time}; '
         f'app={len(bundle.app_sessions)}; clipboard={len(bundle.clipboard_items)}; '
-        f'browser={len(bundle.browser_items)}; ai_prompt={len(bundle.ai_prompts)}'
+        f'browser={len(bundle.browser_items)}; ai_prompt={len(bundle.ai_prompts)}; '
+        f'browser_event={len(bundle.browser_events)}'
     )
