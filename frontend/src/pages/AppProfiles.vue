@@ -9,7 +9,7 @@ const APP_PROFILE_CACHE_TTL_MS = 60_000
 <script setup lang="ts">
 import { computed, onMounted, shallowRef, useTemplateRef } from 'vue'
 import { ElDrawer, ElMessage } from 'element-plus'
-import { Check, Close, Refresh } from '@element-plus/icons-vue'
+import { Check, Close, Download, Refresh } from '@element-plus/icons-vue'
 
 import { callTypedBridge } from '../api/bridge'
 import type {
@@ -53,6 +53,8 @@ const savingAppKey = shallowRef('')
 const categorySaving = shallowRef(false)
 const appProfileDirty = shallowRef(false)
 const bulkSaving = shallowRef(false)
+const extractingAppProfiles = shallowRef(false)
+const extractedPreviewActive = shallowRef(false)
 const categoryDrawerVisible = shallowRef(false)
 let appProfileLoadRequestId = 0
 
@@ -68,6 +70,13 @@ const appProfileSummary = computed(() => {
 })
 const selectedCategory = computed(() => appProfileFilters.value.category || '')
 const saveStatus = computed(() => {
+  if (extractingAppProfiles.value) {
+    return {
+      text: '提取中',
+      tone: 'saving' as const
+    }
+  }
+
   if (bulkSaving.value) {
     return {
       text: '保存中',
@@ -105,11 +114,15 @@ async function loadAppProfileBootstrap(): Promise<void> {
       filters: normalizedCatalogFilters.value,
       page: 1,
       pageSize: appProfilePageSize.value,
-      include_unobserved: true
+      include_unobserved: true,
+      mode: 'saved',
+      extract_if_empty: true,
+      observed_scope: 'all'
     })
     if (requestId !== appProfileLoadRequestId) return
     appProfiles.value = profilesPayload
     appCategories.value = profilesPayload.categories
+    extractedPreviewActive.value = profilesPayload.items.some((profile) => profile.requires_save && !profile.is_configured)
     appProfileCache = profilesPayload
     appProfileCacheUpdatedAt = Date.now()
   } catch (error) {
@@ -118,6 +131,42 @@ async function loadAppProfileBootstrap(): Promise<void> {
   } finally {
     if (requestId === appProfileLoadRequestId) {
       appProfileLoading.value = false
+    }
+  }
+}
+
+async function extractAppProfilesFromForeground(): Promise<void> {
+  const requestId = appProfileLoadRequestId + 1
+  appProfileLoadRequestId = requestId
+  extractingAppProfiles.value = true
+  appProfileLoading.value = true
+  appProfileError.value = ''
+  try {
+    const profilesPayload = await callTypedBridge('extractAppProfiles', {
+      filters: normalizedCatalogFilters.value,
+      page: 1,
+      pageSize: appProfilePageSize.value,
+      include_unobserved: true,
+      observed_scope: 'all'
+    })
+    if (requestId !== appProfileLoadRequestId) return
+    appProfiles.value = profilesPayload
+    appCategories.value = profilesPayload.categories
+    extractedPreviewActive.value = true
+    appProfileCache = null
+    appProfileCacheUpdatedAt = 0
+    if (profilesPayload.items.length === 0) {
+      flashOperationMessage('未提取到前台应用数据')
+    } else {
+      ElMessage.success(`已提取 ${profilesPayload.items.length} 个应用，点击保存后持久化`)
+    }
+  } catch (error) {
+    if (requestId !== appProfileLoadRequestId) return
+    showAppProfileError(error)
+  } finally {
+    if (requestId === appProfileLoadRequestId) {
+      appProfileLoading.value = false
+      extractingAppProfiles.value = false
     }
   }
 }
@@ -171,6 +220,7 @@ function hydrateAppProfileCache(): boolean {
 
   appProfiles.value = appProfileCache
   appCategories.value = appProfileCache.categories
+  extractedPreviewActive.value = appProfileCache.items.some((profile) => profile.requires_save && !profile.is_configured)
   return Date.now() - appProfileCacheUpdatedAt < APP_PROFILE_CACHE_TTL_MS
 }
 
@@ -245,6 +295,14 @@ async function saveAllAppProfileDrafts(): Promise<void> {
 }
 
 function cancelAllAppProfileDrafts(): void {
+  if (extractedPreviewActive.value) {
+    extractedPreviewActive.value = false
+    profileListPanel.value?.resetAllDrafts()
+    void loadAppProfileBootstrap()
+    flashOperationMessage('已取消提取预览')
+    return
+  }
+
   profileListPanel.value?.resetAllDrafts()
   flashOperationMessage('已取消未保存修改')
 }
@@ -469,7 +527,17 @@ function profileDisplayName(profile: AppProfileConfig): string {
         <button
           class="top-button"
           type="button"
-          :disabled="appProfileLoading || bulkSaving"
+          :disabled="appProfileLoading || bulkSaving || extractingAppProfiles"
+          title="从前台应用数据提取用过的应用"
+          @click="extractAppProfilesFromForeground"
+        >
+          <Download class="action-icon" />
+          <span>提取应用</span>
+        </button>
+        <button
+          class="top-button"
+          type="button"
+          :disabled="appProfileLoading || bulkSaving || extractingAppProfiles"
           title="刷新应用配置"
           @click="loadAppProfileBootstrap"
         >
@@ -481,7 +549,7 @@ function profileDisplayName(profile: AppProfileConfig): string {
         <button
           class="top-button"
           type="button"
-          :disabled="!appProfileDirty || bulkSaving"
+          :disabled="!appProfileDirty || bulkSaving || extractingAppProfiles"
           @click="cancelAllAppProfileDrafts"
         >
           <Close class="action-icon" />
@@ -490,7 +558,7 @@ function profileDisplayName(profile: AppProfileConfig): string {
         <button
           class="top-button top-button--primary"
           type="button"
-          :disabled="!appProfileDirty || bulkSaving"
+          :disabled="!appProfileDirty || bulkSaving || extractingAppProfiles"
           @click="saveAllAppProfileDrafts"
         >
           <Check class="action-icon" />

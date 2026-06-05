@@ -29,10 +29,10 @@ const modeOptions = [
 
 const sourceLabels: Record<string, string> = {
   app: '前台应用',
-  browser: '浏览器历史',
+  browser: '浏览器',
   clipboard: '剪切板',
-  ai_prompt: 'AI 提问',
-  browser_event: '浏览器事件'
+  ai_prompt: '浏览器',
+  browser_event: '浏览器'
 }
 
 const selectedItems = computed(() => props.items.filter((item) => item.is_selected))

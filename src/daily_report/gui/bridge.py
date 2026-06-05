@@ -99,6 +99,7 @@ class PythonBridge(QObject):
                 str(data.get("sourceType") or data.get("source_type") or ""),
                 int(data.get("id") or 0),
                 source_ids,
+                str(data.get("entryKey") or data.get("entry_key") or "").strip() or None,
             )
 
         return self._call(payload, run)
@@ -113,6 +114,7 @@ class PythonBridge(QObject):
                 int(data.get("id") or 0),
                 bool(data.get("selected")),
                 source_ids,
+                str(data.get("entryKey") or data.get("entry_key") or "").strip() or None,
             )
 
         return self._call(payload, run)
@@ -123,6 +125,7 @@ class PythonBridge(QObject):
             return self.service.mark_entry_deleted(
                 str(data.get("sourceType") or data.get("source_type") or ""),
                 int(data.get("id") or 0),
+                str(data.get("entryKey") or data.get("entry_key") or "").strip() or None,
             )
 
         return self._call(payload, run)
@@ -135,6 +138,7 @@ class PythonBridge(QObject):
                 str(data.get("sourceType") or data.get("source_type") or ""),
                 int(data.get("id") or 0),
                 annotation_payload,
+                str(data.get("entryKey") or data.get("entry_key") or "").strip() or None,
             )
 
         return self._call(payload, run)
@@ -150,6 +154,7 @@ class PythonBridge(QObject):
                 bool(data.get("sensitive")),
                 str(data.get("reason") or "").strip() or None,
                 source_ids,
+                str(data.get("entryKey") or data.get("entry_key") or "").strip() or None,
             )
 
         return self._call(payload, run)
@@ -173,6 +178,10 @@ class PythonBridge(QObject):
     @Slot(str, result=str)
     def listAppProfiles(self, payload: str = "") -> str:  # noqa: N802
         return self._call(payload, self.service.list_app_profiles)
+
+    @Slot(str, result=str)
+    def extractAppProfiles(self, payload: str = "") -> str:  # noqa: N802
+        return self._call(payload, self.service.extract_app_profiles)
 
     @Slot(str, result=str)
     def saveAppProfile(self, payload: str = "") -> str:  # noqa: N802

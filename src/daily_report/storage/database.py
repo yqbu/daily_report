@@ -145,7 +145,8 @@ def _run_pre_schema_migrations(conn: sqlite3.Connection) -> None:
         {
             'date': 'TEXT NOT NULL DEFAULT ""',
             'timestamp': 'TEXT NOT NULL DEFAULT ""',
-            'event_type': 'TEXT NOT NULL DEFAULT "page_view"',
+            'record_type': 'TEXT NOT NULL DEFAULT "page_view"',
+            'event_type': 'TEXT',
             'url': 'TEXT',
             'title': 'TEXT',
             'domain': 'TEXT',
@@ -159,6 +160,7 @@ def _run_pre_schema_migrations(conn: sqlite3.Connection) -> None:
             'payload_json': 'TEXT',
             'client_event_id': 'TEXT',
             'source': "TEXT NOT NULL DEFAULT 'edge_extension'",
+            'importance': 'INTEGER NOT NULL DEFAULT 0',
             'is_sensitive': 'INTEGER NOT NULL DEFAULT 0',
             'sensitivity_reason': 'TEXT',
             'is_selected': 'INTEGER NOT NULL DEFAULT 0',
@@ -238,7 +240,8 @@ def _run_safe_migrations(conn: sqlite3.Connection) -> None:
         {
             'date': 'TEXT NOT NULL DEFAULT ""',
             'timestamp': 'TEXT NOT NULL DEFAULT ""',
-            'event_type': 'TEXT NOT NULL DEFAULT "page_view"',
+            'record_type': 'TEXT NOT NULL DEFAULT "page_view"',
+            'event_type': 'TEXT',
             'url': 'TEXT',
             'title': 'TEXT',
             'domain': 'TEXT',
@@ -252,6 +255,7 @@ def _run_safe_migrations(conn: sqlite3.Connection) -> None:
             'payload_json': 'TEXT',
             'client_event_id': 'TEXT',
             'source': "TEXT NOT NULL DEFAULT 'edge_extension'",
+            'importance': 'INTEGER NOT NULL DEFAULT 0',
             'is_sensitive': 'INTEGER NOT NULL DEFAULT 0',
             'sensitivity_reason': 'TEXT',
             'is_selected': 'INTEGER NOT NULL DEFAULT 0',
@@ -283,6 +287,20 @@ def _run_safe_migrations(conn: sqlite3.Connection) -> None:
             UPDATE daily_reports
             SET updated_at = COALESCE(NULLIF(updated_at, ''), created_at, datetime('now', 'localtime'))
             WHERE updated_at IS NULL OR updated_at = ''
+            """
+        )
+
+    if _table_exists(conn, 'browser_events') and _column_exists(conn, 'browser_events', 'record_type'):
+        conn.execute(
+            """
+            UPDATE browser_events
+            SET record_type = CASE
+                WHEN record_type IS NOT NULL AND record_type <> '' THEN record_type
+                WHEN event_type = 'ai_prompt_submit' THEN 'ai_prompt'
+                WHEN event_type IS NOT NULL AND event_type <> '' THEN event_type
+                ELSE 'page_view'
+            END
+            WHERE record_type IS NULL OR record_type = ''
             """
         )
 
@@ -365,8 +383,8 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
         ON browser_events(timestamp)
         """,
         """
-        CREATE INDEX IF NOT EXISTS idx_browser_events_type
-        ON browser_events(date, event_type)
+        CREATE INDEX IF NOT EXISTS idx_browser_events_record_type
+        ON browser_events(date, record_type)
         """,
         """
         CREATE INDEX IF NOT EXISTS idx_browser_events_domain
@@ -379,6 +397,22 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_browser_events_search
         ON browser_events(date, search_engine, is_deleted)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_entry_annotations_v2_entry_key
+        ON entry_annotations_v2(entry_key)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_entry_annotations_v2_source
+        ON entry_annotations_v2(source_type, record_type)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_entry_annotations_v2_importance
+        ON entry_annotations_v2(source_type, importance)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_entry_annotations_v2_sensitive
+        ON entry_annotations_v2(source_type, is_sensitive_override)
         """,
     ]
     for sql in statements:

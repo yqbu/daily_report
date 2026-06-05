@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from 'vue'
-import {ChatDotRound, CopyDocument, Link, Monitor, View} from '@element-plus/icons-vue'
+import {CopyDocument, Link, Monitor, View} from '@element-plus/icons-vue'
 
 import type {MaterialCandidate} from '../../types/reportWorkbench'
+import { browserRecordTypeLabel } from '../data-center/types'
 
 const props = defineProps<{
   items: MaterialCandidate[]
@@ -22,10 +23,10 @@ let observer: IntersectionObserver | null = null
 
 const sourceMeta = computed(() => ({
   app: {label: '前台应用', icon: Monitor, className: 'source-app'},
-  browser: {label: '浏览器历史', icon: Link, className: 'source-browser'},
+  browser: {label: '浏览器', icon: Link, className: 'source-browser'},
   clipboard: {label: '剪切板', icon: CopyDocument, className: 'source-clipboard'},
-  ai_prompt: {label: 'AI 提问', icon: ChatDotRound, className: 'source-ai'},
-  browser_event: {label: '浏览器事件', icon: Link, className: 'source-browser-event'}
+  ai_prompt: {label: '浏览器', icon: Link, className: 'source-browser'},
+  browser_event: {label: '浏览器', icon: Link, className: 'source-browser-event'}
 }))
 
 function bindObserver(): void {
@@ -71,6 +72,9 @@ watch([sentinel, listEl], bindObserver)
       <div class="material-main">
         <div class="material-title-line">
           <el-tag disable-transitions size="small" effect="plain">{{ sourceMeta[item.source_type].label }}</el-tag>
+          <el-tag disable-transitions v-if="item.record_type" size="small" effect="plain">
+            {{ browserRecordTypeLabel(item.record_type) }}
+          </el-tag>
           <strong class="material-title">{{ item.title }}</strong>
           <el-tag disable-transitions v-if="item.category" size="small" type="info" effect="light">{{
               item.category

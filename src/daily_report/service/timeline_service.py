@@ -9,6 +9,7 @@ from daily_report.sources.aliases import normalize_source_type, normalize_source
 from daily_report.sources.base import TimelineEvent
 from daily_report.sources.registry import SourceRegistry, create_default_source_registry
 from daily_report.storage.database import default_db_path
+from daily_report.storage.repositories.entry_annotation_v2_repository import EntryAnnotationV2Repository
 
 
 SourceType = str
@@ -31,6 +32,7 @@ class TimelineService:
         sensitive: bool | None = None,
         category: str | list[str] | None = None,
         keyword: str | None = None,
+        record_type: str | None = None,
         limit: int = 500,
         offset: int = 0,
         sort_order: str = 'asc',
@@ -49,6 +51,7 @@ class TimelineService:
                 selected=selected,
                 sensitive=sensitive,
                 keyword=str(keyword or '').strip() or None,
+                record_type=record_type,
                 include_deleted=False,
                 limit=query_limit,
                 offset=0,
@@ -114,6 +117,75 @@ class TimelineService:
             data['aggregate_count'] = len(aggregate_items)
         return data
 
+    def get_entry_detail_by_key(self, entry_key: str) -> dict[str, Any] | None:
+        parsed = _parse_entry_key(entry_key)
+        if parsed is None:
+            raise ValueError(f'Unsupported entry_key: {entry_key}')
+        source_type, _origin, source_id = parsed
+        adapter = self.registry.get(source_type)
+        if source_type == 'browser' and hasattr(adapter, 'get_raw_detail_by_entry_key'):
+            return adapter.get_raw_detail_by_entry_key(entry_key)
+        data = adapter.get_raw_detail(source_id)
+        if data is None:
+            return None
+        data['entry_key'] = entry_key
+        with adapter._connect() as conn:
+            annotation = EntryAnnotationV2Repository(conn).get_by_entry_key(entry_key)
+            data['annotation_v2'] = dict(annotation) if annotation else None
+            data['annotation'] = data['annotation_v2'] or data.get('annotation')
+        return data
+
+    def update_entry_selection_by_key(self, entry_key: str, selected: bool) -> None:
+        parsed = _parse_entry_key(entry_key)
+        if parsed is None:
+            raise ValueError(f'Unsupported entry_key: {entry_key}')
+        source_type, record_type, source_id = parsed
+        adapter = self.registry.get(source_type)
+        if source_type == 'browser' and hasattr(adapter, 'update_selected_by_entry_key'):
+            adapter.update_selected_by_entry_key(entry_key, selected)
+            return
+        adapter.update_selected(source_id, selected)
+        with adapter._connect() as conn:
+            EntryAnnotationV2Repository(conn).upsert_annotation(
+                entry_key=entry_key,
+                source_type=source_type,
+                record_type=record_type,
+                is_selected_override=selected,
+            )
+
+    def update_entry_deleted_by_key(self, entry_key: str, deleted: bool) -> None:
+        parsed = _parse_entry_key(entry_key)
+        if parsed is None:
+            raise ValueError(f'Unsupported entry_key: {entry_key}')
+        source_type, _record_type, source_id = parsed
+        adapter = self.registry.get(source_type)
+        if source_type == 'browser' and hasattr(adapter, 'update_deleted_by_entry_key'):
+            adapter.update_deleted_by_entry_key(entry_key, deleted)
+            return
+        adapter.update_deleted(source_id, deleted)
+
+    def update_entry_annotation_by_key(self, entry_key: str, payload: dict[str, Any]) -> dict[str, Any]:
+        parsed = _parse_entry_key(entry_key)
+        if parsed is None:
+            raise ValueError(f'Unsupported entry_key: {entry_key}')
+        source_type, record_type, _source_id = parsed
+        adapter = self.registry.get(source_type)
+        if source_type == 'browser' and hasattr(adapter, 'update_annotation_by_entry_key'):
+            return adapter.update_annotation_by_entry_key(entry_key, payload)
+        with adapter._connect() as conn:
+            row = EntryAnnotationV2Repository(conn).upsert_annotation(
+                entry_key=entry_key,
+                source_type=source_type,
+                record_type=record_type,
+                category=payload.get('category'),
+                note=payload.get('note'),
+                importance=payload.get('importance'),
+                is_selected_override=_optional_bool(payload.get('is_selected_override')),
+                is_sensitive_override=_optional_bool(payload.get('is_sensitive_override')),
+                sensitivity_reason_override=payload.get('sensitivity_reason_override'),
+            )
+            return dict(row)
+
     @classmethod
     def _normalize_source_types(cls, source_types: list[str] | None) -> set[str]:
         return set(normalize_source_types(source_types))
@@ -127,9 +199,7 @@ class TimelineService:
         mapping = {
             'app': 'app_sessions',
             'browser': 'browser_history_entries',
-            'browser_event': 'browser_events',
             'clipboard': 'clipboard_entries',
-            'ai_prompt': 'ai_prompt_entries',
         }
         return mapping[normalize_source_type(source_type)]
 
@@ -151,6 +221,40 @@ def _requires_full_scan(
     if _normalize_categories(category):
         return True
     return sensitive is not None and bool(set(source_types) & {'app', 'browser'})
+
+
+def _parse_entry_key(entry_key: str) -> tuple[str, str | None, int] | None:
+    parts = str(entry_key or '').split(':')
+    if len(parts) != 3:
+        return None
+    source, kind, raw_id = parts
+    try:
+        source_id = int(raw_id)
+    except ValueError:
+        return None
+    if source == 'app' and kind == 'session':
+        return 'app', None, source_id
+    if source == 'clipboard' and kind == 'entry':
+        return 'clipboard', None, source_id
+    if source == 'browser' and kind in {'history', 'ai_prompt', 'event'}:
+        record_type = {'history': None, 'ai_prompt': 'ai_prompt', 'event': None}.get(kind)
+        return 'browser', record_type, source_id
+    return None
+
+
+def _optional_bool(value: Any) -> bool | None:
+    if value is None or value == '':
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in {'true', '1', 'yes', 'selected'}:
+        return True
+    if text in {'false', '0', 'no', 'unselected'}:
+        return False
+    return None
 
 
 def _parse_datetime(value: str | None) -> datetime | None:

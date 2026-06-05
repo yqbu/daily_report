@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from daily_report.sources.ai_prompt_source import AIPromptSourceAdapter
 from daily_report.sources.aliases import normalize_source_type
 from daily_report.sources.app_source import AppSourceAdapter
 from daily_report.sources.base import SourceAdapter
 from daily_report.sources.browser_source import BrowserSourceAdapter
-from daily_report.sources.browser_event_source import BrowserEventSourceAdapter
 from daily_report.sources.clipboard_source import ClipboardSourceAdapter
 
 
@@ -44,6 +42,4 @@ def create_default_source_registry(db_path: str | Path | None = None) -> SourceR
     registry.register(AppSourceAdapter(db_path))
     registry.register(BrowserSourceAdapter(db_path))
     registry.register(ClipboardSourceAdapter(db_path))
-    registry.register(AIPromptSourceAdapter(db_path))
-    registry.register(BrowserEventSourceAdapter(db_path))
     return registry

@@ -20,6 +20,32 @@ class DeletedUpdateRequest(BaseModel):
     deleted: bool
 
 
+class EntryKeySelectionUpdateRequest(BaseModel):
+    entry_key: str
+    selected: bool
+
+
+class EntryKeyDeletedUpdateRequest(BaseModel):
+    entry_key: str
+    deleted: bool
+
+
+class EntryKeyAnnotationUpdateRequest(BaseModel):
+    entry_key: str
+    category: str | None = None
+    note: str | None = None
+    importance: int | None = None
+    is_selected_override: bool | None = None
+    is_sensitive_override: bool | None = None
+    sensitivity_reason_override: str | None = None
+
+
+class EntryKeySensitiveUpdateRequest(BaseModel):
+    entry_key: str
+    sensitive: bool | None = None
+    reason: str | None = None
+
+
 class BuildPromptRequest(BaseModel):
     date: str | None = None
     template_name: str = 'daily_standard'

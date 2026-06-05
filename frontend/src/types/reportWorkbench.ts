@@ -57,6 +57,8 @@ export interface MaterialCandidate {
   source_type: SourceType
   source_id: number
   source_ids?: number[]
+  entry_key?: string | null
+  record_type?: string | null
   title: string
   summary: string
   evidence?: string
@@ -84,6 +86,7 @@ export interface ReportMaterialsResult {
 export interface MaterialIdentity {
   sourceType: SourceType
   id: number
+  entryKey?: string | null
 }
 
 export interface BuildPromptPayload {
@@ -173,11 +176,13 @@ export type ReportDetail = ReportHistoryRow
 export interface DetailSavePayload {
   sourceType: SourceType
   id: number
+  entryKey?: string | null
   category: string | null
   note: string | null
   importance: number
   sensitive: boolean
   sensitivityReason: string | null
+  selected: boolean
 }
 
 export type MaterialDetailRecord = AnyRecord | null

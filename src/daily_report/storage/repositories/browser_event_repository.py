@@ -24,16 +24,17 @@ class BrowserEventRepository:
             cursor = self.conn.execute(
                 """
                 INSERT INTO browser_events (
-                    date, timestamp, event_type, url, title, domain, tab_id, window_id,
+                    date, timestamp, record_type, event_type, url, title, domain, tab_id, window_id,
                     duration_sec, content_preview, search_engine, search_query, referrer,
-                    payload_json, client_event_id, source, is_sensitive, sensitivity_reason,
+                    payload_json, client_event_id, source, importance, is_sensitive, sensitivity_reason,
                     is_selected, is_deleted, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
                 """,
                 (
                     values['date'],
                     values['timestamp'],
+                    values['record_type'],
                     values['event_type'],
                     values['url'],
                     values['title'],
@@ -48,6 +49,7 @@ class BrowserEventRepository:
                     values['payload_json'],
                     values['client_event_id'],
                     values['source'],
+                    int(values['importance']),
                     int(values['is_sensitive']),
                     values['sensitivity_reason'],
                     int(values['is_selected']),
@@ -141,14 +143,14 @@ class BrowserEventRepository:
         with self._lock:
             rows = self.conn.execute(
                 """
-                SELECT event_type, COUNT(*) AS n
+                SELECT record_type, COUNT(*) AS n
                 FROM browser_events
                 WHERE date = ? AND is_deleted = 0
-                GROUP BY event_type
+                GROUP BY record_type
                 """,
                 (date,),
             ).fetchall()
-        return {str(row['event_type']): int(row['n'] or 0) for row in rows}
+        return {str(row['record_type']): int(row['n'] or 0) for row in rows}
 
     def count_by_domain(self, date: str, limit: int = 10) -> list[dict[str, Any]]:
         with self._lock:
@@ -180,9 +182,9 @@ class BrowserEventRepository:
         if 'sensitive' in filters and filters['sensitive'] is not None:
             clauses.append('is_sensitive = ?')
             params.append(int(bool(filters['sensitive'])))
-        if event_type := str(filters.get('event_type') or '').strip():
-            clauses.append('event_type = ?')
-            params.append(event_type)
+        if record_type := str(filters.get('record_type') or filters.get('event_type') or '').strip():
+            clauses.append('record_type = ?')
+            params.append(_record_type(record_type, record_type))
         if domain := str(filters.get('domain') or '').strip():
             clauses.append('domain = ?')
             params.append(domain)
@@ -206,7 +208,8 @@ def _event_values(event: dict[str, Any]) -> dict[str, Any]:
     return {
         'date': str(event.get('date') or timestamp[:10]),
         'timestamp': timestamp,
-        'event_type': _trim(event.get('event_type'), 64) or 'page_view',
+        'record_type': _record_type(event.get('record_type'), event.get('event_type')),
+        'event_type': _trim(event.get('event_type') or event.get('record_type'), 64) or 'page_view',
         'url': url,
         'title': _trim(event.get('title'), 300),
         'domain': domain,
@@ -220,6 +223,7 @@ def _event_values(event: dict[str, Any]) -> dict[str, Any]:
         'payload_json': payload,
         'client_event_id': _trim(event.get('client_event_id'), 160),
         'source': _trim(event.get('source'), 64) or 'edge_extension',
+        'importance': _clamp_int(event.get('importance'), 0, 100, 0),
         'is_sensitive': bool(event.get('is_sensitive') or False),
         'sensitivity_reason': _trim(event.get('sensitivity_reason'), 255),
         'is_selected': bool(event.get('is_selected') or False),
@@ -263,6 +267,24 @@ def _extract_domain(url: str | None) -> str | None:
 def _trim(value: Any, max_len: int) -> str | None:
     text = str(value or '').replace('\x00', '').strip()
     return text[:max_len] if text else None
+
+
+def _record_type(record_type: Any, event_type: Any) -> str:
+    normalized = str(record_type or '').strip()
+    if normalized:
+        return normalized[:64]
+    raw_event_type = str(event_type or '').strip()
+    if raw_event_type == 'ai_prompt_submit':
+        return 'ai_prompt'
+    return (raw_event_type or 'page_view')[:64]
+
+
+def _clamp_int(value: Any, minimum: int, maximum: int, fallback: int) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        number = fallback
+    return max(minimum, min(maximum, number))
 
 
 def _now() -> str:

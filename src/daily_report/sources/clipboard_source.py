@@ -18,6 +18,7 @@ class ClipboardSourceAdapter(SourceAdapter):
         selected: bool | None = None,
         sensitive: bool | None = None,
         keyword: str | None = None,
+        record_type: str | None = None,
         include_deleted: bool = False,
         limit: int | None = 500,
         offset: int = 0,
@@ -78,6 +79,10 @@ class ClipboardSourceAdapter(SourceAdapter):
             event_id=f"clipboard:{raw_event.source_id}",
             source_type='clipboard',
             source_id=raw_event.source_id,
+            entry_key=f"clipboard:entry:{raw_event.source_id}",
+            importance=int(annotation.get('importance') or 0),
+            origin_source_type='clipboard_entry',
+            origin_source_id=raw_event.source_id,
             start_time=str(row.get('first_seen_at') or row.get('last_seen_at') or ''),
             end_time=str(row.get('last_seen_at')) if row.get('last_seen_at') else None,
             title='剪切板文本',
@@ -104,6 +109,7 @@ class ClipboardSourceAdapter(SourceAdapter):
             evidence=make_preview(preview, 220),
             importance=int(annotation.get('importance') or 0),
             is_sensitive=event.is_sensitive,
+            entry_key=event.entry_key,
         )
 
     def update_selected(self, source_id: int, selected: bool) -> None:

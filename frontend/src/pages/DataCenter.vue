@@ -2,7 +2,6 @@
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, reactive, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  ChatDotRound,
   Collection,
   CopyDocument,
   DataAnalysis,
@@ -20,7 +19,7 @@ import DataCenterFilterBar from '../components/data-center/DataCenterFilterBar.v
 import RecordDetailDrawer from '../components/data-center/RecordDetailDrawer.vue'
 import TimelineInfiniteList from '../components/data-center/TimelineInfiniteList.vue'
 import type { DataCenterFilters, DataCenterView, DetailSavePayload } from '../components/data-center/types'
-import { SOURCE_OPTIONS, dateRangeToPayload, recordId, recordSource, toDateKey } from '../components/data-center/types'
+import { BROWSER_RECORD_TYPE_OPTIONS, SOURCE_OPTIONS, dateRangeToPayload, recordId, recordSource, toDateKey } from '../components/data-center/types'
 
 const today = new Date()
 const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0)
@@ -32,7 +31,8 @@ let filters = reactive<DataCenterFilters>({
   sensitive: 'all',
   categories: [],
   keyword: '',
-  sortOrder: 'desc'
+  sortOrder: 'desc',
+  browserRecordType: ''
 })
 
 const activeView = shallowRef<DataCenterView>('timeline')
@@ -63,9 +63,7 @@ const summaryItems = computed(() => [
   { key: 'total', label: '共', suffix: '条记录', value: summary.value.total, icon: Collection, tone: 'slate' },
   { key: 'app', label: '应用', suffix: '', value: summary.value.app, icon: Monitor, tone: 'blue' },
   { key: 'browser', label: '浏览器', suffix: '', value: summary.value.browser, icon: Link, tone: 'green' },
-  { key: 'browser_event', label: '浏览事件', suffix: '', value: summary.value.browser_event, icon: Link, tone: 'blue' },
-  { key: 'clipboard', label: '剪贴板', suffix: '', value: summary.value.clipboard, icon: CopyDocument, tone: 'orange' },
-  { key: 'ai', label: 'AI 提问', suffix: '', value: summary.value.ai_prompt, icon: ChatDotRound, tone: 'purple' }
+  { key: 'clipboard', label: '剪贴板', suffix: '', value: summary.value.clipboard, icon: CopyDocument, tone: 'orange' }
 ])
 
 const bridgeFilters = computed(() => ({
@@ -73,7 +71,8 @@ const bridgeFilters = computed(() => ({
   sensitive: filters.sensitive === 'all' ? undefined : filters.sensitive === 'sensitive',
   categories: filters.categories,
   keyword: filters.keyword.trim() || undefined,
-  sortOrder: filters.sortOrder
+  sortOrder: filters.sortOrder,
+  recordType: filters.sourceTypes.length === 1 && filters.sourceTypes.includes('browser') ? filters.browserRecordType || undefined : undefined
 }))
 const filterSignature = computed(() => {
   const range = dateRangeToPayload(filters)
@@ -83,9 +82,11 @@ const filterSignature = computed(() => {
     sensitive: filters.sensitive,
     categories: [...filters.categories],
     keyword: filters.keyword.trim(),
-    sortOrder: filters.sortOrder
+    sortOrder: filters.sortOrder,
+    browserRecordType: filters.browserRecordType
   })
 })
+const browserRecordFiltersVisible = computed(() => filters.sourceTypes.includes('browser'))
 
 async function refreshAll(): Promise<void> {
   refreshKey.value += 1
@@ -164,7 +165,7 @@ async function selectTimelineDay(day: string): Promise<void> {
   await loadMoreTimeline(requestId)
 }
 
-async function openDetail(sourceType: SourceType, id: number, ids?: number[]): Promise<void> {
+async function openDetail(sourceType: SourceType, id: number, ids?: number[], entryKey?: string | null): Promise<void> {
   const requestId = detailRequestId + 1
   detailRequestId = requestId
   selectedRecord.value = null
@@ -173,7 +174,7 @@ async function openDetail(sourceType: SourceType, id: number, ids?: number[]): P
   await nextTick()
   await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
   try {
-    const detail = await callTypedBridge('getEntryDetail', { sourceType, id, ids })
+    const detail = await callTypedBridge('getEntryDetail', { sourceType, id, ids, entryKey })
     if (requestId === detailRequestId) {
       selectedRecord.value = detail
     }
@@ -185,14 +186,15 @@ async function openDetail(sourceType: SourceType, id: number, ids?: number[]): P
 }
 
 function openTimelineDetail(item: TimelineEvent): void {
-  void openDetail(item.source_type, item.source_id, item.source_ids)
+  void openDetail(item.source_type, item.source_id, item.source_ids, item.entry_key)
 }
 
-async function toggleSensitive(sourceType: SourceType, id: number, nextValue: boolean, ids?: number[]): Promise<void> {
+async function toggleSensitive(sourceType: SourceType, id: number, nextValue: boolean, ids?: number[], entryKey?: string | null): Promise<void> {
   await callTypedBridge('updateEntrySensitive', {
     sourceType,
     id,
     ids,
+    entryKey,
     sensitive: nextValue,
     reason: nextValue ? '用户标记' : null
   })
@@ -203,17 +205,17 @@ async function toggleSensitive(sourceType: SourceType, id: number, nextValue: bo
 }
 
 function toggleTimelineSensitive(item: TimelineEvent): void {
-  void toggleSensitive(item.source_type, item.source_id, !item.is_sensitive, item.source_ids)
+  void toggleSensitive(item.source_type, item.source_id, !item.is_sensitive, item.source_ids, item.entry_key)
 }
 
-async function deleteRecord(sourceType: SourceType, id: number): Promise<void> {
+async function deleteRecord(sourceType: SourceType, id: number, entryKey?: string | null): Promise<void> {
   await ElMessageBox.confirm('删除后记录会被软删除，不会从数据库物理移除。', '确认删除记录', {
     type: 'warning',
     confirmButtonText: '删除',
     cancelButtonText: '取消',
     confirmButtonClass: 'el-button--danger'
   })
-  await callTypedBridge('markEntryDeleted', { sourceType, id })
+  await callTypedBridge('markEntryDeleted', { sourceType, id, entryKey })
   timelineItems.value = timelineItems.value.filter((item) => !(item.source_type === sourceType && item.source_id === id))
   if (selectedRecord.value && recordSource(selectedRecord.value) === sourceType && recordId(selectedRecord.value) === id) {
     drawerOpen.value = false
@@ -230,21 +232,25 @@ async function saveDetail(payload: DetailSavePayload): Promise<void> {
     await callTypedBridge('updateEntryAnnotation', {
       sourceType: payload.sourceType,
       id: payload.id,
+      entryKey: payload.entryKey,
       payload: {
         category: payload.category,
         note: payload.note,
-        importance: payload.importance
+        importance: payload.importance,
+        is_selected_override: payload.selected
       }
     })
     await callTypedBridge('updateEntrySensitive', {
       sourceType: payload.sourceType,
       id: payload.id,
+      entryKey: payload.entryKey,
       sensitive: payload.sensitive,
       reason: payload.sensitivityReason
     })
     selectedRecord.value = await callTypedBridge('getEntryDetail', {
       sourceType: payload.sourceType,
-      id: payload.id
+      id: payload.id,
+      entryKey: payload.entryKey
     })
     ElMessage.success('修改已保存')
     await loadSummary()
@@ -262,6 +268,7 @@ function resetFilters(): void {
   filters.categories = []
   filters.keyword = ''
   filters.sortOrder = 'desc'
+  filters.browserRecordType = ''
 }
 
 async function exportData(): Promise<void> {
@@ -303,6 +310,7 @@ function emptySummary(): DataCenterSummaryPayload {
     browser_event: 0,
     clipboard: 0,
     ai_prompt: 0,
+    browser_record_type_counts: {},
     sensitive: 0,
     deleted: 0,
     categories: [],
@@ -377,6 +385,19 @@ onBeforeUnmount(() => {
 
     <DataCenterFilterBar v-model="filters" @reset="resetFilters" />
 
+    <section v-if="browserRecordFiltersVisible" class="browser-record-filter" aria-label="浏览器记录类型筛选">
+      <button
+        v-for="item in BROWSER_RECORD_TYPE_OPTIONS"
+        :key="item.value || 'all'"
+        class="record-type-chip"
+        :class="{ 'record-type-chip--active': filters.browserRecordType === item.value }"
+        type="button"
+        @click="filters.browserRecordType = item.value; filters.sourceTypes = ['browser']"
+      >
+        {{ item.label }}
+      </button>
+    </section>
+
     <section v-loading="summaryLoading" class="view-tabs-card">
       <el-segmented v-model="activeView" :options="viewTabs">
         <template #default="{ item }">
@@ -409,7 +430,7 @@ onBeforeUnmount(() => {
         @select-day="selectTimelineDay"
         @detail="openTimelineDetail"
         @toggle-sensitive="toggleTimelineSensitive"
-        @delete="deleteRecord($event.source_type, $event.source_id)"
+        @delete="deleteRecord($event.source_type, $event.source_id, $event.entry_key)"
       />
 
       <DataAnalysisView
@@ -452,11 +473,41 @@ onBeforeUnmount(() => {
 }
 
 .datacenter-topbar,
-.view-tabs-card {
+.view-tabs-card,
+.browser-record-filter {
   border: 1px solid var(--datacenter-border);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+}
+
+.browser-record-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 8px 10px;
+}
+
+.record-type-chip {
+  height: 30px;
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border: 1px solid #d6e0ee;
+  border-radius: 999px;
+  color: #526179;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.record-type-chip:hover,
+.record-type-chip--active {
+  color: #1d4ed8;
+  border-color: #93c5fd;
+  background: #eff6ff;
 }
 
 .datacenter-topbar {

@@ -29,6 +29,7 @@ class AppSourceAdapter(SourceAdapter):
         selected: bool | None = None,
         sensitive: bool | None = None,
         keyword: str | None = None,
+        record_type: str | None = None,
         include_deleted: bool = False,
         limit: int | None = 500,
         offset: int = 0,
@@ -98,6 +99,10 @@ class AppSourceAdapter(SourceAdapter):
             event_id=f"app:{raw_event.source_id}",
             source_type='app',
             source_id=raw_event.source_id,
+            entry_key=f"app:session:{raw_event.source_id}",
+            importance=int(annotation.get('importance') or 0),
+            origin_source_type='app_session',
+            origin_source_id=raw_event.source_id,
             start_time=str(row.get('start_time') or ''),
             end_time=str(row.get('end_time')) if row.get('end_time') else None,
             title=title,
@@ -136,6 +141,7 @@ class AppSourceAdapter(SourceAdapter):
             evidence=evidence,
             importance=int(annotation.get('importance') or 0),
             is_sensitive=False,
+            entry_key=event.entry_key,
         )
 
     def update_selected(self, source_id: int, selected: bool) -> None:

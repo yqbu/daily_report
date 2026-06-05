@@ -347,6 +347,8 @@ function getChangedPayloads(): SaveAppProfilePayload[] {
 }
 
 function profileHasChanges(profile: AppProfileConfig): boolean {
+  if (profile.requires_save && !profile.is_configured) return true
+
   const draft = drafts[profile.app_key]
   if (!draft) return false
 

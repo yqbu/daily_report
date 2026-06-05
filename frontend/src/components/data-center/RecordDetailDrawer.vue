@@ -8,7 +8,7 @@ import CategoryTag from './CategoryTag.vue'
 import SensitiveTag from './SensitiveTag.vue'
 import SourceBadge from './SourceBadge.vue'
 import type { DetailSavePayload } from './types'
-import { CATEGORY_OPTIONS, formatDateTime, formatDuration, recordId, recordPreview, recordSource, recordTitle } from './types'
+import { CATEGORY_OPTIONS, browserRecordTypeLabel, formatDateTime, formatDuration, recordId, recordPreview, recordSource, recordTitle } from './types'
 
 const props = defineProps<{
   modelValue: boolean
@@ -27,6 +27,7 @@ const draft = reactive({
   category: '',
   note: '',
   importance: 0,
+  selected: false,
   sensitive: false,
   sensitivityReason: ''
 })
@@ -59,12 +60,16 @@ const baseFields = computed(() => {
   }
   if (sourceType.value === 'browser') {
     return [
+      ['记录类型', browserRecordTypeLabel(row.record_type)],
+      ['原始来源', row.origin_source_type],
       ['浏览器', row.browser],
       ['配置', row.profile_name],
-      ['访问时间', formatDateTime(row.visit_time)],
+      ['发生时间', formatDateTime(row.visit_time || row.timestamp || row.start_time)],
       ['标题', row.title],
       ['域名', row.domain],
+      ['搜索引擎', row.search_engine],
       ['搜索词', row.search_query],
+      ['停留时长', formatDuration(row.duration_sec)],
       ['URL', row.url]
     ]
   }
@@ -125,11 +130,13 @@ function save(): void {
   emit('save', {
     sourceType: sourceType.value,
     id: sourceId.value,
+    entryKey: typeof props.record.entry_key === 'string' ? props.record.entry_key : null,
     category: draft.category || null,
     note: draft.note || null,
     importance: draft.importance,
     sensitive: draft.sensitive,
-    sensitivityReason: draft.sensitivityReason || null
+    sensitivityReason: draft.sensitivityReason || null,
+    selected: draft.selected
   })
 }
 
@@ -149,6 +156,7 @@ watch(
     draft.category = String(row?.category || annotation?.category || '其他')
     draft.note = String(row?.note || annotation?.note || '')
     draft.importance = Number(row?.importance || annotation?.importance || 0)
+    draft.selected = Boolean(row?.is_selected ?? annotation?.is_selected_override ?? false)
     draft.sensitive = Boolean(row?.is_sensitive)
     draft.sensitivityReason = String(row?.sensitivity_reason || annotation?.sensitivity_reason_override || '')
   },
@@ -243,7 +251,11 @@ watch(
             </label>
             <label class="drawer-field">
               <span>重要性</span>
-              <el-input-number v-model="draft.importance" :min="0" :max="5" />
+              <el-input-number v-model="draft.importance" :min="0" :max="100" />
+            </label>
+            <label class="drawer-field drawer-field--switch">
+              <span>纳入日报</span>
+              <el-switch v-model="draft.selected" active-text="纳入" inactive-text="排除" />
             </label>
             <label class="drawer-field drawer-field--switch">
               <span>敏感状态</span>
@@ -265,6 +277,14 @@ watch(
           <dl class="field-list">
             <dt>来源类型</dt>
             <dd>{{ sourceType }}</dd>
+            <dt>记录类型</dt>
+            <dd>{{ browserRecordTypeLabel(record.record_type) }}</dd>
+            <dt>entry_key</dt>
+            <dd>{{ record.entry_key || '-' }}</dd>
+            <dt>原始来源</dt>
+            <dd>{{ record.origin_source_type || '-' }}</dd>
+            <dt>原始 ID</dt>
+            <dd>{{ record.origin_source_id || '-' }}</dd>
             <dt>记录 ID</dt>
             <dd>{{ sourceId }}</dd>
             <dt>创建时间</dt>

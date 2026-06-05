@@ -190,7 +190,7 @@ export const useReportWorkbenchStore = defineStore('reportWorkbench', () => {
   }
 
   async function toggleMaterial(item: MaterialCandidate, selected: boolean): Promise<void> {
-    await updateEntrySelection({ sourceType: item.source_type, id: item.source_id, ids: item.source_ids, selected })
+    await updateEntrySelection({ sourceType: item.source_type, id: item.source_id, entryKey: item.entry_key, ids: item.source_ids, selected })
     materialItems.value = materialItems.value.map((row) =>
       row.source_type === item.source_type && row.source_id === item.source_id ? { ...row, is_selected: selected } : row
     )
@@ -199,7 +199,7 @@ export const useReportWorkbenchStore = defineStore('reportWorkbench', () => {
   }
 
   async function batchSelect(items: MaterialCandidate[], selected: boolean): Promise<void> {
-    const identities = items.map((item) => ({ sourceType: item.source_type, id: item.source_id }))
+    const identities = items.map((item) => ({ sourceType: item.source_type, id: item.source_id, entryKey: item.entry_key }))
     await batchUpdateEntrySelection({ items: identities, selected })
     const keys = new Set(identities.map((item) => materialKey(item.sourceType, item.id)))
     materialItems.value = materialItems.value.map((item) =>
@@ -216,7 +216,8 @@ export const useReportWorkbenchStore = defineStore('reportWorkbench', () => {
     try {
       selectedMaterialDetail.value = await getEntryDetail({
         sourceType: item.source_type,
-        id: item.source_id
+        id: item.source_id,
+        entryKey: item.entry_key
       })
     } finally {
       materialDetailLoading.value = false
@@ -229,21 +230,25 @@ export const useReportWorkbenchStore = defineStore('reportWorkbench', () => {
       await updateEntryAnnotation({
         sourceType: payload.sourceType,
         id: payload.id,
+        entryKey: payload.entryKey,
         payload: {
           category: payload.category,
           note: payload.note,
-          importance: payload.importance
+          importance: payload.importance,
+          is_selected_override: payload.selected
         }
       })
       await updateEntrySensitive({
         sourceType: payload.sourceType,
         id: payload.id,
+        entryKey: payload.entryKey,
         sensitive: payload.sensitive,
         reason: payload.sensitivityReason
       })
       selectedMaterialDetail.value = await getEntryDetail({
         sourceType: payload.sourceType,
-        id: payload.id
+        id: payload.id,
+        entryKey: payload.entryKey
       })
       await loadMaterials(true)
       markPromptDirty()

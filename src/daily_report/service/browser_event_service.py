@@ -27,7 +27,18 @@ ACCEPTED_BROWSER_EVENT_TYPES = [
     'ai_prompt_submit',
 ]
 
-DEFAULT_SELECTED_EVENT_TYPES = {'search'}
+ACCEPTED_BROWSER_RECORD_TYPES = {
+    'page_view',
+    'search',
+    'dwell_time',
+    'copy',
+    'ai_prompt',
+    'tab_active',
+    'tab_inactive',
+    'page_leave',
+}
+
+DEFAULT_SELECTED_RECORD_TYPES = {'ai_prompt', 'search'}
 
 
 class BrowserEventService:
@@ -52,15 +63,17 @@ class BrowserEventService:
         }
 
     def _normalize_event(self, payload: dict[str, Any]) -> dict[str, Any]:
-        event_type = self.normalize_event_type(payload.get('event_type'))
+        event_type = self.normalize_event_type(payload.get('event_type') or payload.get('record_type'))
+        record_type = self.normalize_record_type(payload.get('record_type'), event_type)
         timestamp = parse_client_timestamp(payload.get('timestamp'))
         url = self.normalize_url(payload.get('url'))
         title = make_preview(str(payload.get('title') or ''), 300) or None
         search_engine, search_query = self.detect_search_from_payload(payload)
-        content_preview = make_preview(str(payload.get('content_preview') or ''), 300) or None
+        content_preview = make_preview(str(payload.get('content_preview') or payload.get('prompt_preview') or ''), 300) or None
         sensitive, reason = self.detect_sensitive_event(
             {
                 'event_type': event_type,
+                'record_type': record_type,
                 'url': url,
                 'title': title,
                 'search_query': search_query,
@@ -68,10 +81,12 @@ class BrowserEventService:
                 'payload': payload.get('payload'),
             }
         )
-        selected = self.decide_default_selected(event_type, sensitive)
+        importance = self.decide_default_importance(record_type, _safe_float(payload.get('duration_sec')))
+        selected = self.decide_default_selected(record_type, sensitive)
         return {
             'date': timestamp.date().isoformat(),
             'timestamp': timestamp.isoformat(timespec='seconds'),
+            'record_type': record_type,
             'event_type': event_type,
             'url': url,
             'title': title,
@@ -86,6 +101,7 @@ class BrowserEventService:
             'payload': self.build_payload_json(payload.get('payload')),
             'client_event_id': _trim(payload.get('client_event_id'), 160),
             'source': _trim(payload.get('source'), 64) or 'edge_extension',
+            'importance': importance,
             'is_sensitive': sensitive,
             'sensitivity_reason': reason,
             'is_selected': selected,
@@ -94,8 +110,21 @@ class BrowserEventService:
     @staticmethod
     def normalize_event_type(event_type: Any) -> str:
         normalized = str(event_type or '').strip()
+        if normalized == 'ai_prompt':
+            return 'ai_prompt_submit'
         if normalized not in ACCEPTED_BROWSER_EVENT_TYPES:
             raise ValueError(f'Unsupported browser event_type: {event_type}')
+        return normalized
+
+    @staticmethod
+    def normalize_record_type(record_type: Any, event_type: str | None = None) -> str:
+        normalized = str(record_type or '').strip()
+        if normalized == 'ai_prompt_submit':
+            normalized = 'ai_prompt'
+        if not normalized:
+            normalized = 'ai_prompt' if event_type == 'ai_prompt_submit' else str(event_type or '').strip()
+        if normalized not in ACCEPTED_BROWSER_RECORD_TYPES:
+            raise ValueError(f'Unsupported browser record_type: {record_type or event_type}')
         return normalized
 
     @staticmethod
@@ -164,10 +193,28 @@ class BrowserEventService:
         return detect_sensitive_text(text)
 
     @staticmethod
-    def decide_default_selected(event_type: str, sensitive: bool) -> bool:
+    def decide_default_importance(record_type: str, duration_sec: float = 0) -> int:
+        if record_type == 'ai_prompt':
+            return 90
+        if record_type == 'search':
+            return 70
+        if record_type == 'copy':
+            return 50
+        if record_type == 'dwell_time':
+            if duration_sec > 300:
+                return 50
+            if duration_sec >= 60:
+                return 30
+            return 10
+        if record_type == 'page_view':
+            return 10
+        return 0
+
+    @staticmethod
+    def decide_default_selected(record_type: str, sensitive: bool) -> bool:
         if sensitive:
             return False
-        return event_type in DEFAULT_SELECTED_EVENT_TYPES
+        return record_type in DEFAULT_SELECTED_RECORD_TYPES
 
     @staticmethod
     def build_payload_json(payload: Any) -> dict[str, Any] | None:

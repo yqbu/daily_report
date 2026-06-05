@@ -25,8 +25,27 @@ class OverviewService:
             active_time_sec, total_time_sec, app_session_count = self._app_totals(conn, day)
             browser_count = self._count(
                 conn,
-                "SELECT COUNT(*) AS n FROM browser_history_entries WHERE date = ? AND is_deleted = 0",
-                (day,),
+                """
+                SELECT
+                    (
+                        SELECT COUNT(*)
+                        FROM browser_history_entries
+                        WHERE date = ? AND is_deleted = 0
+                    )
+                    +
+                    (
+                        SELECT COUNT(*)
+                        FROM ai_prompt_entries
+                        WHERE date = ? AND is_deleted = 0
+                    )
+                    +
+                    (
+                        SELECT COUNT(*)
+                        FROM browser_events
+                        WHERE date = ? AND is_deleted = 0
+                    ) AS n
+                """,
+                (day, day, day),
             )
             clipboard_count = self._count(
                 conn,
@@ -43,6 +62,7 @@ class OverviewService:
                 "SELECT COUNT(*) AS n FROM browser_events WHERE date = ? AND is_deleted = 0",
                 (day,),
             )
+            browser_record_type_counts = self._browser_record_type_counts(conn, day)
             selected_material_count = self._selected_count(conn, day)
             sensitive_count = self._sensitive_count(conn, day)
             top_apps = self._top_apps(conn, day)
@@ -57,8 +77,6 @@ class OverviewService:
             {'source_type': 'app', 'count': app_session_count},
             {'source_type': 'browser', 'count': browser_count},
             {'source_type': 'clipboard', 'count': clipboard_count},
-            {'source_type': 'ai_prompt', 'count': ai_prompt_count},
-            {'source_type': 'browser_event', 'count': browser_event_count},
         ]
 
         return {
@@ -76,6 +94,7 @@ class OverviewService:
             'clipboard_count': clipboard_count,
             'ai_prompt_count': ai_prompt_count,
             'browser_event_count': browser_event_count,
+            'browser_record_type_counts': browser_record_type_counts,
             'selected_material_count': selected_material_count,
             'sensitive_count': sensitive_count,
             'report_status': report_status,
@@ -217,6 +236,42 @@ class OverviewService:
             "SELECT COUNT(*) AS n FROM browser_events WHERE date = ? AND is_selected = 1 AND is_deleted = 0",
         )
         return sum(OverviewService._count(conn, sql, (day,)) for sql in queries)
+
+    @staticmethod
+    def _browser_record_type_counts(conn: sqlite3.Connection, day: str) -> dict[str, int]:
+        counts = {
+            'history_visit': OverviewService._count(
+                conn,
+                "SELECT COUNT(*) AS n FROM browser_history_entries WHERE date = ? AND is_deleted = 0 AND is_search = 0",
+                (day,),
+            ),
+            'search': OverviewService._count(
+                conn,
+                "SELECT COUNT(*) AS n FROM browser_history_entries WHERE date = ? AND is_deleted = 0 AND is_search = 1",
+                (day,),
+            ),
+            'ai_prompt': OverviewService._count(
+                conn,
+                "SELECT COUNT(*) AS n FROM ai_prompt_entries WHERE date = ? AND is_deleted = 0",
+                (day,),
+            ),
+        }
+        try:
+            rows = conn.execute(
+                """
+                SELECT record_type, COUNT(*) AS n
+                FROM browser_events
+                WHERE date = ? AND is_deleted = 0
+                GROUP BY record_type
+                """,
+                (day,),
+            ).fetchall()
+        except sqlite3.Error:
+            rows = []
+        for row in rows:
+            record_type = str(row['record_type'] or 'page_view')
+            counts[record_type] = counts.get(record_type, 0) + int(row['n'] or 0)
+        return {key: value for key, value in counts.items() if value}
 
     @staticmethod
     def _sensitive_count(conn: sqlite3.Connection, day: str) -> int:

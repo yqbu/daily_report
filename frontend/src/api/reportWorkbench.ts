@@ -45,6 +45,7 @@ export async function getEntryDetail(payload: MaterialIdentity): Promise<AnyReco
 export async function updateEntryAnnotation(payload: {
   sourceType: string
   id: number
+  entryKey?: string | null
   payload: Record<string, unknown>
 }): Promise<void> {
   await callBridge('updateEntryAnnotation', payload)
@@ -53,6 +54,7 @@ export async function updateEntryAnnotation(payload: {
 export async function updateEntrySensitive(payload: {
   sourceType: string
   id: number
+  entryKey?: string | null
   sensitive: boolean
   reason?: string | null
 }): Promise<void> {

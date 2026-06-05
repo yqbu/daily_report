@@ -18,6 +18,7 @@ class BrowserEventSourceAdapter(SourceAdapter):
         selected: bool | None = None,
         sensitive: bool | None = None,
         keyword: str | None = None,
+        record_type: str | None = None,
         include_deleted: bool = False,
         limit: int | None = 500,
         offset: int = 0,
@@ -26,6 +27,7 @@ class BrowserEventSourceAdapter(SourceAdapter):
             'selected': selected,
             'sensitive': sensitive,
             'keyword': keyword,
+            'record_type': record_type,
         }
         if not include_deleted:
             filters['deleted'] = False

@@ -10,6 +10,7 @@ export interface DataCenterFilters {
   categories: string[]
   keyword: string
   sortOrder: 'asc' | 'desc'
+  browserRecordType: string
 }
 
 export interface RecordActionPayload {
@@ -20,21 +21,30 @@ export interface RecordActionPayload {
 export interface DetailSavePayload {
   sourceType: SourceType
   id: number
+  entryKey?: string | null
   category: string | null
   note: string | null
   importance: number
   sensitive: boolean
   sensitivityReason: string | null
+  selected: boolean
 }
 
 export type DataCenterRecord = TimelineEvent | AnyRecord
 
 export const SOURCE_OPTIONS: Array<{ label: string; value: SourceType }> = [
   { label: '前台应用', value: 'app' },
-  { label: '浏览器历史', value: 'browser' },
-  { label: '剪切板', value: 'clipboard' },
-  { label: 'AI 提问', value: 'ai_prompt' },
-  { label: '浏览器事件', value: 'browser_event' }
+  { label: '浏览器', value: 'browser' },
+  { label: '剪切板', value: 'clipboard' }
+]
+
+export const BROWSER_RECORD_TYPE_OPTIONS: Array<{ label: string; value: string }> = [
+  { label: '全部', value: '' },
+  { label: '访问', value: 'history_visit' },
+  { label: '搜索', value: 'search' },
+  { label: '停留', value: 'dwell_time' },
+  { label: '复制', value: 'copy' },
+  { label: 'AI 提问', value: 'ai_prompt' }
 ]
 
 export const CATEGORY_OPTIONS = [
@@ -48,7 +58,24 @@ export const CATEGORY_OPTIONS = [
 ]
 
 export function sourceLabel(sourceType: string): string {
+  if (sourceType === 'ai_prompt' || sourceType === 'browser_event' || sourceType === 'browser_history') {
+    return '浏览器'
+  }
   return SOURCE_OPTIONS.find((item) => item.value === sourceType)?.label ?? sourceType
+}
+
+export function browserRecordTypeLabel(recordType: unknown): string {
+  return {
+    history_visit: '访问',
+    page_view: '访问',
+    search: '搜索',
+    dwell_time: '停留',
+    copy: '复制',
+    ai_prompt: 'AI 提问',
+    tab_active: '激活',
+    tab_inactive: '失焦',
+    page_leave: '离开'
+  }[String(recordType || '')] ?? String(recordType || '-')
 }
 
 export function recordId(record: DataCenterRecord): number {
@@ -63,9 +90,12 @@ export function recordId(record: DataCenterRecord): number {
 export function recordSource(record: DataCenterRecord): SourceType {
   const sourceType = String(record.source_type || 'app')
   if (sourceType === 'browser_events') {
-    return 'browser_event'
+    return 'browser'
   }
-  return (sourceType === 'ai' ? 'ai_prompt' : sourceType) as SourceType
+  if (sourceType === 'ai' || sourceType === 'ai_prompt' || sourceType === 'browser_event') {
+    return 'browser'
+  }
+  return sourceType as SourceType
 }
 
 export function recordTitle(record: DataCenterRecord): string {

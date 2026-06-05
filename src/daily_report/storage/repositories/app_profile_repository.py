@@ -197,25 +197,54 @@ class AppProfileRepository:
         page: int = 1,
         page_size: int = 100,
         include_unobserved: bool = True,
+        mode: str = 'observed',
+        extract_if_empty: bool = False,
+        observed_scope: str = 'week',
     ) -> dict[str, Any]:
         self.ensure_default_categories()
         filters = filters or {}
         categories = self.list_categories()
         category_colors = {str(category['name']): str(category['color']) for category in categories}
-        observed = self._observed_app_rows()
+        normalized_mode = str(mode or 'observed').strip().lower()
+        observed = self._observed_app_rows(scope=observed_scope)
         profiles = {str(row['app_key']): dict(row) for row in self._profile_rows()}
+        observed_by_key = {str(row['app_key']): dict(row) for row in observed}
 
-        items = [
-            self._merge_profile(
-                observed_row=dict(row),
-                profile=profiles.pop(str(row['app_key']), None),
-                category_colors=category_colors,
-            )
-            for row in observed
-        ]
-        if include_unobserved:
-            for profile in profiles.values():
-                items.append(self._merge_profile(observed_row=None, profile=profile, category_colors=category_colors))
+        if normalized_mode in {'saved', 'configured', 'persisted'}:
+            items = [
+                self._merge_profile(
+                    observed_row=observed_by_key.get(str(profile.get('app_key') or '')),
+                    profile=profile,
+                    category_colors=category_colors,
+                )
+                for profile in profiles.values()
+            ]
+            if not items and extract_if_empty:
+                items = [
+                    self._merge_profile(
+                        observed_row=dict(row),
+                        profile=None,
+                        category_colors=category_colors,
+                        requires_save=True,
+                    )
+                    for row in observed
+                ]
+        else:
+            items = []
+            for row in observed:
+                app_key = str(row['app_key'])
+                profile = profiles.pop(app_key, None)
+                items.append(
+                    self._merge_profile(
+                        observed_row=dict(row),
+                        profile=profile,
+                        category_colors=category_colors,
+                        requires_save=normalized_mode in {'extract', 'extracted'} and profile is None,
+                    )
+                )
+            if include_unobserved:
+                for profile in profiles.values():
+                    items.append(self._merge_profile(observed_row=None, profile=profile, category_colors=category_colors))
 
         count_filters = {**filters, 'classification': 'all'}
         counts = _profile_counts(self._filter_profiles(items, count_filters))
@@ -395,11 +424,16 @@ class AppProfileRepository:
             ).fetchall()
         )
 
-    def _observed_app_rows(self) -> list[sqlite3.Row]:
+    def _observed_app_rows(self, *, scope: str = 'week') -> list[sqlite3.Row]:
         week_start, week_end = _current_week_bounds()
+        date_clause = ''
+        params: tuple[Any, ...] = ()
+        if str(scope or 'week').strip().lower() != 'all':
+            date_clause = 'AND date BETWEEN ? AND ?'
+            params = (week_start, week_end)
         return list(
             self.conn.execute(
-                """
+                f"""
                 SELECT
                     LOWER(TRIM(process_name)) AS app_key,
                     MAX(process_name) AS process_name,
@@ -414,10 +448,10 @@ class AppProfileRepository:
                 WHERE process_name IS NOT NULL
                   AND TRIM(process_name) <> ''
                   AND is_deleted = 0
-                  AND date BETWEEN ? AND ?
+                  {date_clause}
                 GROUP BY LOWER(TRIM(process_name))
                 """,
-                (week_start, week_end),
+                params,
             ).fetchall()
         )
 
@@ -454,6 +488,7 @@ class AppProfileRepository:
         observed_row: dict[str, Any] | None,
         profile: dict[str, Any] | None,
         category_colors: dict[str, str] | None = None,
+        requires_save: bool = False,
     ) -> dict[str, Any]:
         observed_row = observed_row or {}
         profile = profile or {}
@@ -492,6 +527,7 @@ class AppProfileRepository:
             'last_seen_at': observed_row.get('last_seen_at'),
             'sample_window_title': sample_window_title,
             'is_configured': bool(profile),
+            'requires_save': bool(requires_save and not profile),
             'is_classified': category != DEFAULT_CATEGORY_NAME,
             'created_at': profile.get('created_at'),
             'updated_at': profile.get('updated_at'),

@@ -19,6 +19,7 @@ def call_gui_method(method: str, payload: dict[str, Any] | None = None) -> dict:
         'getDataCenterSummary': service.get_data_center_summary,
         'getDataCenterAnalytics': service.get_data_center_analytics,
         'listAppProfiles': service.list_app_profiles,
+        'extractAppProfiles': service.extract_app_profiles,
         'saveAppProfile': service.save_app_profile,
         'resetAppProfile': service.reset_app_profile,
         'deleteAppRecords': service.delete_app_records,

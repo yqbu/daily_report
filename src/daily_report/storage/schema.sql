@@ -172,7 +172,8 @@ CREATE TABLE IF NOT EXISTS browser_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     date TEXT NOT NULL,
     timestamp TEXT NOT NULL,
-    event_type TEXT NOT NULL,
+    record_type TEXT NOT NULL,
+    event_type TEXT,
     url TEXT,
     title TEXT,
     domain TEXT,
@@ -186,6 +187,7 @@ CREATE TABLE IF NOT EXISTS browser_events (
     payload_json TEXT,
     client_event_id TEXT,
     source TEXT NOT NULL DEFAULT 'edge_extension',
+    importance INTEGER NOT NULL DEFAULT 0,
     is_sensitive INTEGER NOT NULL DEFAULT 0,
     sensitivity_reason TEXT,
     is_selected INTEGER NOT NULL DEFAULT 0,
@@ -204,8 +206,8 @@ ON browser_events(date);
 CREATE INDEX IF NOT EXISTS idx_browser_events_timestamp
 ON browser_events(timestamp);
 
-CREATE INDEX IF NOT EXISTS idx_browser_events_type
-ON browser_events(date, event_type);
+CREATE INDEX IF NOT EXISTS idx_browser_events_record_type
+ON browser_events(date, record_type);
 
 CREATE INDEX IF NOT EXISTS idx_browser_events_domain
 ON browser_events(date, domain);
@@ -215,6 +217,33 @@ ON browser_events(date, is_selected, is_deleted);
 
 CREATE INDEX IF NOT EXISTS idx_browser_events_search
 ON browser_events(date, search_engine, is_deleted);
+
+CREATE TABLE IF NOT EXISTS entry_annotations_v2 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_key TEXT NOT NULL UNIQUE,
+    source_type TEXT NOT NULL,
+    record_type TEXT,
+    category TEXT,
+    note TEXT,
+    importance INTEGER NOT NULL DEFAULT 0,
+    is_selected_override INTEGER,
+    is_sensitive_override INTEGER,
+    sensitivity_reason_override TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_entry_annotations_v2_entry_key
+ON entry_annotations_v2(entry_key);
+
+CREATE INDEX IF NOT EXISTS idx_entry_annotations_v2_source
+ON entry_annotations_v2(source_type, record_type);
+
+CREATE INDEX IF NOT EXISTS idx_entry_annotations_v2_importance
+ON entry_annotations_v2(source_type, importance);
+
+CREATE INDEX IF NOT EXISTS idx_entry_annotations_v2_sensitive
+ON entry_annotations_v2(source_type, is_sensitive_override);
 
 CREATE TABLE IF NOT EXISTS ai_prompt_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

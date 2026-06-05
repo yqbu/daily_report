@@ -27,10 +27,8 @@ const emit = defineEmits<{
 const sourceOptions = [
   { label: '全部', value: '' },
   { label: '前台应用', value: 'app' },
-  { label: '浏览器历史', value: 'browser' },
-  { label: '浏览器事件', value: 'browser_event' },
-  { label: '剪切板', value: 'clipboard' },
-  { label: 'AI 提问', value: 'ai_prompt' }
+  { label: '浏览器', value: 'browser' },
+  { label: '剪切板', value: 'clipboard' }
 ] as const
 
 const sensitiveOptions = [
@@ -65,7 +63,7 @@ function updateFilters(patch: Partial<MaterialFilters>): void {
     <header v-if="showHeader !== false" class="card-header">
       <div>
         <h2 class="card-title">素材选择</h2>
-        <p class="card-subtitle">从四类本地记录中筛选本次日报素材</p>
+        <p class="card-subtitle">从本地记录中筛选本次日报素材</p>
       </div>
       <el-tag disable-transitions type="success" effect="light">{{ summary.selected_count }} 已选</el-tag>
     </header>

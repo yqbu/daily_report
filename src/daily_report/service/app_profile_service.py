@@ -19,6 +19,7 @@ class AppProfileService:
     def list_profiles(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
         filters = params.get('filters') if isinstance(params.get('filters'), dict) else {}
+        mode = str(params.get('mode') or params.get('source') or 'observed')
         with self._connect() as conn:
             return self._repository(conn).list_profiles(
                 filters=filters,
@@ -27,11 +28,24 @@ class AppProfileService:
                 include_unobserved=bool(
                     params.get('include_unobserved', params.get('includeUnobserved', True))
                 ),
+                mode=mode,
+                extract_if_empty=bool(params.get('extract_if_empty') or params.get('extractIfEmpty')),
+                observed_scope=str(params.get('observed_scope') or params.get('observedScope') or 'week'),
             )
 
     def save_profile(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         with self._connect() as conn:
             return self._repository(conn).save_profile(payload or {})
+
+    def extract_profiles(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        payload = {
+            **params,
+            'mode': 'extract',
+            'observed_scope': params.get('observed_scope') or params.get('observedScope') or 'all',
+            'include_unobserved': bool(params.get('include_unobserved', params.get('includeUnobserved', True))),
+        }
+        return self.list_profiles(payload)
 
     def reset_profile(self, payload: dict[str, Any] | str | None = None) -> dict[str, Any]:
         app_key = _app_key_arg(payload)

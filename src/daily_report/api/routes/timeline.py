@@ -17,6 +17,7 @@ def get_timeline(
     selected: bool | None = Query(default=None),
     sensitive: bool | None = Query(default=None),
     keyword: str | None = Query(default=None),
+    record_type: str | None = Query(default=None),
     limit: int = Query(default=500, ge=1, le=5000),
     offset: int = Query(default=0, ge=0),
     order: str = Query(default='asc'),
@@ -32,6 +33,7 @@ def get_timeline(
             selected=selected,
             sensitive=sensitive,
             keyword=str(keyword or '').strip() or None,
+            record_type=_record_type_for_query(source_type, record_type),
             limit=fetch_limit,
             offset=0,
             sort_order=sort_order,
@@ -58,3 +60,11 @@ def _sort_order(order: str) -> str:
         raise ValueError(f'Unsupported order: {order}')
     return normalized
 
+
+def _record_type_for_query(source_type: str, record_type: str | None) -> str | None:
+    explicit = str(record_type or '').strip()
+    if explicit:
+        return explicit
+    if str(source_type or '').strip() in {'ai', 'ai_prompt'}:
+        return 'ai_prompt'
+    return None

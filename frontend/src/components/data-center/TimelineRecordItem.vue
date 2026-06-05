@@ -4,7 +4,7 @@ import CategoryTag from './CategoryTag.vue'
 import RecordActionButtons from './RecordActionButtons.vue'
 import SensitiveTag from './SensitiveTag.vue'
 import SourceBadge from './SourceBadge.vue'
-import { formatDateTime } from './types'
+import { browserRecordTypeLabel, formatDateTime } from './types'
 
 const props = defineProps<{
   item: TimelineEvent
@@ -63,6 +63,7 @@ function secondaryText(): string {
       </div>
 
       <div class="timeline-tags">
+        <span v-if="item.record_type" class="record-type-tag">{{ browserRecordTypeLabel(item.record_type) }}</span>
         <CategoryTag :category="item.category" />
         <SensitiveTag :sensitive="item.is_sensitive" />
       </div>
@@ -170,6 +171,20 @@ function secondaryText(): string {
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
+}
+
+.record-type-tag {
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  font-size: 12px;
+  font-weight: 720;
+  white-space: nowrap;
 }
 
 .timeline-actions {

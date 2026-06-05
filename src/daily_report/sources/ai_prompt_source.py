@@ -18,6 +18,7 @@ class AIPromptSourceAdapter(SourceAdapter):
         selected: bool | None = None,
         sensitive: bool | None = None,
         keyword: str | None = None,
+        record_type: str | None = None,
         include_deleted: bool = False,
         limit: int | None = 500,
         offset: int = 0,

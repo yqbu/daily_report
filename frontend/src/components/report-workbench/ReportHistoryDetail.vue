@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef } from 'vue'
 import {
-  ChatDotRound,
   Collection,
   CopyDocument,
   Delete,
@@ -34,12 +33,11 @@ const activeTab = shallowRef<DetailTab>('preview')
 
 const sourceCards = computed(() => {
   const counts = props.report?.source_counts ?? {}
+  const browserCount = Number(counts.browser || 0) + Number(counts.ai_prompt || 0) + Number(counts.browser_event || 0)
   const items = [
     { key: 'app', label: '前台应用', value: Number(counts.app || 0), icon: Monitor, tone: 'blue' },
-    { key: 'browser', label: '浏览器历史', value: Number(counts.browser || 0), icon: Link, tone: 'green' },
-    { key: 'browser_event', label: '浏览器事件', value: Number(counts.browser_event || 0), icon: Link, tone: 'blue' },
-    { key: 'clipboard', label: '剪切板', value: Number(counts.clipboard || 0), icon: Tickets, tone: 'orange' },
-    { key: 'ai_prompt', label: 'AI 提问', value: Number(counts.ai_prompt || 0), icon: ChatDotRound, tone: 'purple' }
+    { key: 'browser', label: '浏览器', value: browserCount, icon: Link, tone: 'green' },
+    { key: 'clipboard', label: '剪切板', value: Number(counts.clipboard || 0), icon: Tickets, tone: 'orange' }
   ]
   const total = items.reduce((sum, item) => sum + item.value, 0)
   return [...items, { key: 'all', label: '全部素材', value: total, icon: Collection, tone: 'slate' }]

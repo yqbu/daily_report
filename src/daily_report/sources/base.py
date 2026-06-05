@@ -34,6 +34,11 @@ class TimelineEvent:
     source_ids: list[int] | None = None
     item_count: int = 1
     aggregate_kind: str | None = None
+    record_type: str | None = None
+    entry_key: str | None = None
+    importance: int = 0
+    origin_source_type: str | None = None
+    origin_source_id: int | None = None
     raw: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -55,6 +60,7 @@ class SourceAdapter(ABC):
         selected: bool | None = None,
         sensitive: bool | None = None,
         keyword: str | None = None,
+        record_type: str | None = None,
         include_deleted: bool = False,
         limit: int = 500,
         offset: int = 0,

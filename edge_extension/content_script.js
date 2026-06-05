@@ -3,7 +3,8 @@
 
   const CONFIG = {
     browserEventEndpoint: "http://127.0.0.1:8765/api/events/browser",
-    aiPromptEndpoint: "http://127.0.0.1:8765/api/ai-prompt",
+    legacyAiPromptEndpoint: "http://127.0.0.1:8765/api/ai-prompt",
+    fallbackToLegacyAiPromptEndpoint: true,
     authToken: "",
     collectCopy: false,
     minPromptLength: 2,
@@ -11,6 +12,7 @@
     minDwellSeconds: 8,
     dedupeWindowMs: 5000,
     maxPreviewLength: 300,
+    maxPromptPreviewLength: 500,
     debug: false,
   };
 
@@ -121,6 +123,7 @@
 
   function basePayload(eventType, extra = {}) {
     return {
+      record_type: extra.record_type || recordTypeFromEventType(eventType),
       event_type: eventType,
       timestamp: nowIso(),
       url: normalizeUrl(location.href),
@@ -139,6 +142,11 @@
     };
   }
 
+  function recordTypeFromEventType(eventType) {
+    if (eventType === "ai_prompt_submit") return "ai_prompt";
+    return eventType;
+  }
+
   function headers() {
     const result = { "Content-Type": "application/json" };
     if (CONFIG.authToken) {
@@ -148,11 +156,11 @@
   }
 
   async function sendBrowserEvent(eventType, extra = {}, options = {}) {
-    if (shouldIgnorePage()) return;
+    if (shouldIgnorePage()) return false;
     const payload = basePayload(eventType, extra);
     const dedupeKey = `${eventType}:${payload.url}:${payload.search_query || ""}:${payload.content_preview || ""}`;
     const lastAt = state.sentEventKeys.get(dedupeKey) || 0;
-    if (Date.now() - lastAt < CONFIG.dedupeWindowMs) return;
+    if (Date.now() - lastAt < CONFIG.dedupeWindowMs) return false;
     state.sentEventKeys.set(dedupeKey, Date.now());
     if (state.sentEventKeys.size > 100) {
       state.sentEventKeys.clear();
@@ -166,8 +174,10 @@
         keepalive: Boolean(options.keepalive),
       });
       log("browser event posted", eventType, response.status);
+      return response.ok;
     } catch (error) {
       log("browser event post failed", eventType, error);
+      return false;
     }
   }
 
@@ -387,22 +397,25 @@
       source: "edge_extension",
       trigger,
     };
+    const posted = await sendBrowserEvent("ai_prompt_submit", {
+      record_type: "ai_prompt",
+      title: payload.page_title,
+      content_preview: trimText(normalized, CONFIG.maxPromptPreviewLength),
+      client_event_id: `${clientEventId}-event`,
+      payload: { trigger, platform: getPlatform() },
+    });
+    if (posted || !CONFIG.fallbackToLegacyAiPromptEndpoint) return;
+
     try {
-      const response = await fetch(CONFIG.aiPromptEndpoint, {
+      const response = await fetch(CONFIG.legacyAiPromptEndpoint, {
         method: "POST",
         headers: headers(),
         body: JSON.stringify(payload),
       });
-      log("AI prompt posted", response.status, trigger);
+      log("legacy AI prompt posted", response.status, trigger);
     } catch (error) {
-      log("AI prompt post failed", error);
+      log("legacy AI prompt post failed", error);
     }
-
-    void sendBrowserEvent("ai_prompt_submit", {
-      content_preview: trimText(normalized, 160),
-      client_event_id: `${clientEventId}-event`,
-      payload: { trigger, platform: getPlatform() },
-    });
   }
 
   function capturePromptSoon(trigger) {

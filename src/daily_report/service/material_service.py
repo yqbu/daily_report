@@ -58,7 +58,7 @@ class MaterialService:
             material = adapter.to_material(event)
             if material is not None:
                 materials.append(material)
-        materials.sort(key=lambda item: (item.category, item.time_range, item.source_type))
+        materials.sort(key=lambda item: (item.category, -int(item.importance or 0), item.time_range, item.source_type))
         return materials
 
     def build_snapshot(
@@ -98,11 +98,28 @@ class MaterialService:
                 'browser': _count(
                     conn,
                     """
-                    SELECT COUNT(*) AS n
-                    FROM browser_history_entries
-                    WHERE date = ? AND is_selected = 1 AND is_deleted = 0 AND is_noise = 0
+                    SELECT
+                        (
+                            SELECT COUNT(*)
+                            FROM browser_history_entries
+                            WHERE date = ? AND is_selected = 1 AND is_deleted = 0 AND is_noise = 0
+                        )
+                        +
+                        (
+                            SELECT COUNT(*)
+                            FROM ai_prompt_entries
+                            WHERE date = ? AND is_selected = 1 AND is_deleted = 0
+                              AND (? = 1 OR is_sensitive = 0)
+                        )
+                        +
+                        (
+                            SELECT COUNT(*)
+                            FROM browser_events
+                            WHERE date = ? AND is_selected = 1 AND is_deleted = 0
+                              AND (? = 1 OR is_sensitive = 0)
+                        ) AS n
                     """,
-                    (day,),
+                    (day, day, int(include_sensitive), day, int(include_sensitive)),
                 ),
                 'clipboard': _count(
                     conn,

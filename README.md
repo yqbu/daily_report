@@ -124,8 +124,13 @@ Available endpoints:
 - `GET /api/health/collectors`
 - `GET /api/extension/health`
 - `GET /api/overview?date=YYYY-MM-DD`
-- `GET /api/timeline?date=YYYY-MM-DD&source_type=all&limit=500&offset=0&order=asc`
-- `GET /api/entries/{source_type}`
+- `GET /api/timeline?date=YYYY-MM-DD&source_type=all&record_type=search&limit=500&offset=0&order=asc`
+- `GET /api/entries/{source_type}?record_type=search`
+- `GET /api/entries/by-key/{entry_key}`
+- `PATCH /api/entries/by-key/selection`
+- `PATCH /api/entries/by-key/deleted`
+- `PATCH /api/entries/by-key/annotation`
+- `PATCH /api/entries/by-key/sensitive`
 - `GET /api/entries/{source_type}/{id}`
 - `PATCH /api/entries/{source_type}/{id}/selection`
 - `PATCH /api/entries/{source_type}/{id}/deleted`
@@ -179,29 +184,53 @@ change the REST API contract or Vue data shapes. It moves source-specific
 normalization and material conversion out of `TimelineService` and
 `MaterialService`.
 
-Enabled sources:
+Enabled product sources:
 
 - `app`: foreground application sessions from `app_sessions`
-- `browser`: Edge browser history from `browser_history_entries`
+- `browser`: unified browser data from `browser_history_entries`,
+  `ai_prompt_entries`, and `browser_events`
 - `clipboard`: clipboard text previews from `clipboard_entries`
-- `ai_prompt`: ChatGPT / DeepSeek prompt records from `ai_prompt_entries`
-- `browser_event`: lightweight browser events from `browser_events`
+
+Browser records expose a stable product-level `source_type=browser` and an
+internal `record_type`:
+
+- `history_visit`
+- `search`
+- `page_view`
+- `dwell_time`
+- `copy`
+- `ai_prompt`
+- `tab_active`
+- `tab_inactive`
+- `page_leave`
 
 Compatibility aliases:
 
 - `browser_history` and `edge_history` map to `browser`
-- `ai` maps to `ai_prompt`
-- `browser_events` maps to `browser_event`
+- `ai` and `ai_prompt` map to `browser` with `record_type=ai_prompt`
+- `browser_event` and `browser_events` map to `browser`
+
+Entry governance should prefer `entry_key` endpoints. `entry_annotations_v2`
+stores cross-source review state such as importance, category, notes,
+sensitivity, selection override, and soft deletion without depending on raw row
+IDs.
 
 Reserved adapters exist for later phases:
 
 - `bilibili`: Phase 3 placeholder only
 
-Browser event collection is intentionally lightweight. Supported event types are
-`page_view`, `tab_active`, `tab_inactive`, `page_leave`, `dwell_time`, `search`,
-`copy`, and `ai_prompt_submit`. Search events are selected by default when they
-are not sensitive; other browser events are available for review but are not
-automatically treated as daily report material.
+Browser event collection is intentionally lightweight. The Edge extension sends
+records to `POST /api/events/browser` with a browser `record_type`; AI prompt
+submissions are stored as browser `record_type=ai_prompt`. Search and AI prompt
+records are selected by default when they are not sensitive; low-signal lifecycle
+records are available for review but are not automatically treated as daily
+report material.
+
+Additional notes:
+
+- [Browser data source design](docs/browser_data_source.md)
+- [Data governance model](docs/data_governance.md)
+- [Phase 2/3 unified browser implementation report](docs/phase2_phase3_unified_browser_report.md)
 
 This phase intentionally does not add Bilibili/video collection, screenshots or
 OCR, Git/mail/calendar collection, WebSocket push, cookie sync, page-body or form

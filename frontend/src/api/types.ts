@@ -33,6 +33,8 @@ export interface PageResult<T> {
 }
 
 export type SourceType = 'app' | 'browser' | 'clipboard' | 'ai_prompt' | 'browser_event'
+export type ProductSourceType = 'app' | 'browser' | 'clipboard'
+export type LegacySourceType = 'ai_prompt' | 'ai' | 'browser_history' | 'browser_event'
 export type TemplateName = 'daily_standard' | 'daily_technical' | 'daily_brief'
 
 /**
@@ -55,6 +57,7 @@ export interface OverviewPayload {
   clipboard_count: number
   ai_prompt_count: number
   browser_event_count: number
+  browser_record_type_counts?: Record<string, number>
   selected_material_count: number
   sensitive_count: number
   report_status: string
@@ -88,11 +91,17 @@ export interface TimelineEvent {
   is_selected: boolean
   is_sensitive: boolean
   is_deleted: boolean
+  record_type?: string | null
+  entry_key?: string | null
+  importance?: number
+  origin_source_type?: string | null
+  origin_source_id?: number | null
 }
 
 export interface TimelineQuery {
   date?: string
-  source_type?: SourceType | 'all'
+  source_type?: SourceType | LegacySourceType | 'all'
+  record_type?: string | null
   selected?: boolean | null
   sensitive?: boolean | null
   keyword?: string
@@ -159,6 +168,7 @@ export interface DataCenterSummaryPayload {
   clipboard: number
   ai_prompt: number
   browser_event: number
+  browser_record_type_counts?: Record<string, number>
   sensitive: number
   deleted: number
   categories: Array<{ category: string; count: number }>
@@ -181,6 +191,8 @@ export interface MaterialCard {
   importance: number
   is_sensitive: boolean
   is_selected?: boolean
+  record_type?: string | null
+  entry_key?: string | null
 }
 
 export interface GeneratedReport {
@@ -241,8 +253,8 @@ export interface LocalSettingsPayload {
 }
 
 export interface TimelineFilters {
-  source_types?: SourceType[]
-  sourceTypes?: SourceType[]
+  source_types?: Array<SourceType | LegacySourceType>
+  sourceTypes?: Array<SourceType | LegacySourceType>
   selected?: boolean
   sensitive?: boolean
   category?: string | null
@@ -269,6 +281,7 @@ export interface EntryAnnotationPayload {
   importance?: number | null
   is_sensitive_override?: boolean | null
   sensitivity_reason_override?: string | null
+  is_selected_override?: boolean | null
 }
 
 export type AppProfileClassificationFilter = 'all' | 'classified' | 'unclassified' | 'configured'
@@ -318,6 +331,7 @@ export interface AppProfileConfig {
   last_seen_at?: string | null
   sample_window_title?: string | null
   is_configured: boolean
+  requires_save?: boolean
   is_classified: boolean
   created_at?: string | null
   updated_at?: string | null
@@ -413,11 +427,11 @@ export interface BridgeMethodPayloadMap {
     page: number
     pageSize: number
   }
-  getEntryDetail: { sourceType: SourceType; id: number; ids?: number[] }
-  updateEntrySelection: { sourceType: SourceType; id: number; selected: boolean }
-  markEntryDeleted: { sourceType: SourceType; id: number }
-  updateEntryAnnotation: { sourceType: SourceType; id: number; payload: EntryAnnotationPayload }
-  updateEntrySensitive: { sourceType: SourceType; id: number; ids?: number[]; sensitive: boolean; reason?: string | null }
+  getEntryDetail: { sourceType: SourceType; id: number; ids?: number[]; entryKey?: string | null }
+  updateEntrySelection: { sourceType: SourceType; id: number; selected: boolean; entryKey?: string | null }
+  markEntryDeleted: { sourceType: SourceType; id: number; entryKey?: string | null }
+  updateEntryAnnotation: { sourceType: SourceType; id: number; payload: EntryAnnotationPayload; entryKey?: string | null }
+  updateEntrySensitive: { sourceType: SourceType; id: number; ids?: number[]; sensitive: boolean; reason?: string | null; entryKey?: string | null }
   getDataCenterSummary: {
     date?: string | null
     startDate?: string | null
@@ -435,6 +449,16 @@ export interface BridgeMethodPayloadMap {
     page?: number
     pageSize?: number
     include_unobserved?: boolean
+    mode?: 'observed' | 'saved' | 'extract'
+    extract_if_empty?: boolean
+    observed_scope?: 'week' | 'all'
+  }
+  extractAppProfiles: {
+    filters?: AppProfileListFilters
+    page?: number
+    pageSize?: number
+    include_unobserved?: boolean
+    observed_scope?: 'week' | 'all'
   }
   saveAppProfile: SaveAppProfilePayload
   resetAppProfile: { app_key: string }
@@ -464,6 +488,7 @@ export interface BridgeMethodResultMap {
   getDataCenterSummary: DataCenterSummaryPayload
   getDataCenterAnalytics: DataCenterAnalyticsPayload
   listAppProfiles: AppProfileListPayload
+  extractAppProfiles: AppProfileListPayload
   saveAppProfile: AppProfileConfig
   resetAppProfile: AppProfileConfig
   deleteAppRecords: { app_key: string; deleted_count: number }

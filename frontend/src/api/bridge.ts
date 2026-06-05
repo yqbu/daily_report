@@ -128,10 +128,22 @@ async function callHttpFallback<T>(method: string, payload: unknown): Promise<T>
     case 'getEntryDetail':
       return getEntryDetailHttp<T>(payload)
     case 'updateEntrySelection':
+      if (getPayloadEntryKey(payload)) {
+        return apiPatch<T>('/api/entries/by-key/selection', {
+          entry_key: getPayloadEntryKey(payload),
+          selected: Boolean(getPayloadValue(payload, 'selected'))
+        })
+      }
       return apiPatch<T>(`/api/entries/${getPayloadSourceType(payload)}/${getPayloadNumber(payload, 'id', 0)}/selection`, {
         selected: Boolean(getPayloadValue(payload, 'selected'))
       })
     case 'markEntryDeleted':
+      if (getPayloadEntryKey(payload)) {
+        return apiPatch<T>('/api/entries/by-key/deleted', {
+          entry_key: getPayloadEntryKey(payload),
+          deleted: true
+        })
+      }
       return apiPatch<T>(`/api/entries/${getPayloadSourceType(payload)}/${getPayloadNumber(payload, 'id', 0)}/deleted`, {
         deleted: true
       })
@@ -156,8 +168,24 @@ async function callHttpFallback<T>(method: string, payload: unknown): Promise<T>
       return callGuiCompat<T>(method, payload)
     case 'batchUpdateEntrySelection':
     case 'updateEntryAnnotation':
+      if (getPayloadEntryKey(payload)) {
+        return apiPatch<T>('/api/entries/by-key/annotation', {
+          entry_key: getPayloadEntryKey(payload),
+          ...(isObjectRecord(getPayloadValue(payload, 'payload')) ? getPayloadValue(payload, 'payload') as AnyRecord : {})
+        })
+      }
+      return callGuiCompat<T>(method, payload)
     case 'updateEntrySensitive':
+      if (getPayloadEntryKey(payload)) {
+        return apiPatch<T>('/api/entries/by-key/sensitive', {
+          entry_key: getPayloadEntryKey(payload),
+          sensitive: Boolean(getPayloadValue(payload, 'sensitive')),
+          reason: getPayloadValue(payload, 'reason') || null
+        })
+      }
+      return callGuiCompat<T>(method, payload)
     case 'listAppProfiles':
+    case 'extractAppProfiles':
     case 'listAppCategories':
     case 'saveAppProfile':
     case 'resetAppProfile':
@@ -221,6 +249,7 @@ function timelineParams(payload: unknown): Record<string, unknown> {
     selected: getPayloadValue(filters, 'selected'),
     sensitive: getPayloadValue(filters, 'sensitive'),
     keyword: getPayloadValue(filters, 'keyword'),
+    record_type: getPayloadValue(filters, 'recordType') || getPayloadValue(filters, 'record_type'),
     limit: getPayloadNumber(payload, 'pageSize', getPayloadNumber(payload, 'limit', 500)),
     offset: getPayloadNumber(payload, 'offset', getPayloadNumber(payload, 'cursor', 0)),
     order: getPayloadValue(filters, 'sortOrder') || getPayloadValue(filters, 'sort_order') || 'asc'
@@ -237,12 +266,18 @@ async function listEntriesHttp<T>(payload: unknown): Promise<T> {
     selected: getPayloadValue(filters, 'selected'),
     sensitive: getPayloadValue(filters, 'sensitive'),
     keyword: getPayloadValue(filters, 'keyword'),
+    record_type: getPayloadValue(filters, 'recordType') || getPayloadValue(filters, 'record_type'),
     limit: pageSize,
     offset: (page - 1) * pageSize
   })
 }
 
 async function getEntryDetailHttp<T>(payload: unknown): Promise<T> {
+  const entryKey = getPayloadEntryKey(payload)
+  if (entryKey) {
+    const response = await apiGet<{ detail: unknown }>(`/api/entries/by-key/${encodeURIComponent(entryKey)}`)
+    return response.detail as T
+  }
   const sourceType = getPayloadSourceType(payload)
   const response = await apiGet<{ detail: unknown }>(`/api/entries/${sourceType}/${getPayloadNumber(payload, 'id', 0)}`)
   return response.detail as T
@@ -321,12 +356,14 @@ async function buildReportMaterialsHttp<T>(payload: unknown): Promise<T> {
     items: timeline.items.map((item) => ({
       source_type: item.source_type,
       source_id: item.source_id,
+      entry_key: item.entry_key,
+      record_type: item.record_type,
       title: item.title,
       summary: item.content_preview || item.subtitle || '',
       evidence: item.content_preview || '',
       category: item.category || '其他',
       time_range: item.start_time,
-      importance: 0,
+      importance: item.importance ?? 0,
       is_sensitive: item.is_sensitive,
       is_selected: item.is_selected
     })),
@@ -338,6 +375,11 @@ function getPayloadSourceType(payload: unknown): SourceType {
   const raw = String(getPayloadValue(payload, 'sourceType') || getPayloadValue(payload, 'source_type') || 'app')
   if (raw === 'browser_events') return 'browser_event'
   return (raw === 'ai' ? 'ai_prompt' : raw) as SourceType
+}
+
+function getPayloadEntryKey(payload: unknown): string | null {
+  const value = getPayloadValue(payload, 'entryKey') || getPayloadValue(payload, 'entry_key')
+  return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
 function dateRangeDays(payload: unknown): string[] {
@@ -588,6 +630,7 @@ function getBrowserFallback<T>(method: string, payload: unknown): T {
     case 'getDataCenterAnalytics':
       return { summary: emptyDataCenterSummary(), charts: {} } as T
     case 'listAppProfiles':
+    case 'extractAppProfiles':
       return {
         items: [],
         total: 0,

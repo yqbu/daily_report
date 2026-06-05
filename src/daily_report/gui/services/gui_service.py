@@ -83,6 +83,7 @@ class GuiService:
         if isinstance(source_types, str):
             source_types = [source_types] if source_types else None
         sort_order = str(filters.get("sort_order") or filters.get("sortOrder") or "desc")
+        record_type = str(filters.get("record_type") or filters.get("recordType") or "").strip() or None
         categories = _normalize_category_filter(filters)
         events = []
         page_limit = max(1, int(limit or 100000))
@@ -97,6 +98,7 @@ class GuiService:
                     sensitive=_optional_bool(filters.get("sensitive")),
                     category=categories,
                     keyword=str(filters.get("keyword") or "").strip() or None,
+                    record_type=record_type,
                     limit=per_day_limit,
                     offset=0,
                     sort_order=sort_order,
@@ -235,7 +237,10 @@ class GuiService:
         source_type: str,
         entry_id: int,
         source_ids: list[int] | None = None,
+        entry_key: str | None = None,
     ) -> dict[str, Any] | None:
+        if entry_key:
+            return self.timeline_service.get_entry_detail_by_key(entry_key)
         return self.timeline_service.get_entry_detail(source_type, entry_id, source_ids=source_ids)
 
     def update_entry_selection(
@@ -244,13 +249,20 @@ class GuiService:
         entry_id: int,
         selected: bool,
         source_ids: list[int] | None = None,
+        entry_key: str | None = None,
     ) -> dict[str, Any]:
+        if entry_key:
+            self.timeline_service.update_entry_selection_by_key(entry_key, selected)
+            return {"entry_key": entry_key, "selected": selected}
         ids = [int(item) for item in (source_ids or [entry_id]) if int(item) > 0]
         for source_id in ids:
             self.timeline_service.update_entry_selection(source_type, source_id, selected)
         return {"source_type": source_type, "id": entry_id, "ids": ids, "selected": selected}
 
-    def mark_entry_deleted(self, source_type: str, entry_id: int) -> dict[str, Any]:
+    def mark_entry_deleted(self, source_type: str, entry_id: int, entry_key: str | None = None) -> dict[str, Any]:
+        if entry_key:
+            self.timeline_service.update_entry_deleted_by_key(entry_key, True)
+            return {"entry_key": entry_key, "deleted": True}
         self.timeline_service.mark_entry_deleted(source_type, entry_id)
         return {"source_type": source_type, "id": entry_id, "deleted": True}
 
@@ -259,8 +271,11 @@ class GuiService:
         source_type: str,
         entry_id: int,
         payload: dict[str, Any] | None = None,
+        entry_key: str | None = None,
     ) -> dict[str, Any]:
         payload = payload or {}
+        if entry_key:
+            return self.timeline_service.update_entry_annotation_by_key(entry_key, payload)
         normalized = self._normalize_source_type(source_type)
         if normalized == "browser_event":
             return {
@@ -292,7 +307,23 @@ class GuiService:
         sensitive: bool,
         reason: str | None = None,
         source_ids: list[int] | None = None,
+        entry_key: str | None = None,
     ) -> dict[str, Any]:
+        if entry_key:
+            annotation = self.timeline_service.update_entry_annotation_by_key(
+                entry_key,
+                {
+                    "is_sensitive_override": bool(sensitive),
+                    "sensitivity_reason_override": str(reason or "").strip() or None,
+                    "is_selected_override": False if sensitive else None,
+                },
+            )
+            return {
+                "entry_key": entry_key,
+                "is_sensitive": bool(sensitive),
+                "sensitivity_reason": str(reason or "").strip() or None,
+                "annotation": annotation,
+            }
         normalized = self._normalize_source_type(source_type)
         conn = create_connection(self.provider.db_path)
         try:
@@ -358,6 +389,11 @@ class GuiService:
         sensitive_count = sum(1 for item in items if isinstance(item, dict) and bool(item.get("is_sensitive")))
         deleted_count = sum(1 for item in items if isinstance(item, dict) and bool(item.get("is_deleted")))
         category_counts = Counter(str(item.get("category") or "其他") for item in items if isinstance(item, dict))
+        browser_record_type_counts = Counter(
+            str(item.get("record_type") or "")
+            for item in items
+            if isinstance(item, dict) and str(item.get("source_type") or "") == "browser" and str(item.get("record_type") or "")
+        )
         day_counts = Counter(
             str(item.get("start_time") or "")[:10]
             for item in items
@@ -370,6 +406,7 @@ class GuiService:
             "clipboard": by_source.get("clipboard", 0),
             "ai_prompt": by_source.get("ai_prompt", 0),
             "browser_event": by_source.get("browser_event", 0),
+            "browser_record_type_counts": dict(browser_record_type_counts),
             "sensitive": sensitive_count,
             "deleted": deleted_count,
             "categories": [{"category": key, "count": value} for key, value in category_counts.most_common()],
@@ -387,6 +424,7 @@ class GuiService:
             "clipboard": 0,
             "ai_prompt": 0,
             "browser_event": 0,
+            "browser_record_type_counts": {},
             "sensitive": 0,
             "deleted": 0,
             "categories": [],
@@ -410,6 +448,7 @@ class GuiService:
                 for day, value in by_day.items():
                     day_counts[day] = day_counts.get(day, 0) + value
                 category_counts.update(by_category)
+            summary["browser_record_type_counts"] = self._summary_browser_record_type_counts(conn, days)
         finally:
             conn.close()
 
@@ -477,8 +516,25 @@ class GuiService:
             )
             return count, sensitive_count, 0, by_day, Counter(by_category)
 
+        if source_type == "browser":
+            history_count = _count_where(conn, "browser_history_entries", f"date IN ({placeholders}) AND is_deleted = 0", list(days))
+            ai_count = _count_where(conn, "ai_prompt_entries", f"date IN ({placeholders}) AND is_deleted = 0", list(days))
+            event_count = _count_where(conn, "browser_events", f"date IN ({placeholders}) AND is_deleted = 0", list(days))
+            sensitive_count = _count_where(conn, "ai_prompt_entries", f"date IN ({placeholders}) AND is_deleted = 0 AND is_sensitive = 1", list(days))
+            sensitive_count += _count_where(conn, "browser_events", f"date IN ({placeholders}) AND is_deleted = 0 AND is_sensitive = 1", list(days))
+            deleted_count = _count_where(conn, "browser_history_entries", f"date IN ({placeholders}) AND is_deleted = 1", list(days))
+            deleted_count += _count_where(conn, "ai_prompt_entries", f"date IN ({placeholders}) AND is_deleted = 1", list(days))
+            deleted_count += _count_where(conn, "browser_events", f"date IN ({placeholders}) AND is_deleted = 1", list(days))
+            by_day: dict[str, int] = {}
+            for day in days:
+                by_day[day] = (
+                    _count_where(conn, "browser_history_entries", "date = ? AND is_deleted = 0", [day])
+                    + _count_where(conn, "ai_prompt_entries", "date = ? AND is_deleted = 0", [day])
+                    + _count_where(conn, "browser_events", "date = ? AND is_deleted = 0", [day])
+                )
+            return history_count + ai_count + event_count, sensitive_count, deleted_count, by_day, Counter()
+
         table = {
-            "browser": "browser_history_entries",
             "clipboard": "clipboard_entries",
             "ai_prompt": "ai_prompt_entries",
             "browser_event": "browser_events",
@@ -522,6 +578,42 @@ class GuiService:
         by_day = _group_count(conn, table, "date", where, params)
         return count, sensitive_count, deleted_count, by_day, Counter()
 
+    @staticmethod
+    def _summary_browser_record_type_counts(conn, days: list[str]) -> dict[str, int]:
+        counts: Counter[str] = Counter()
+        for day in days:
+            counts["history_visit"] += _count_where(
+                conn,
+                "browser_history_entries",
+                "date = ? AND is_deleted = 0 AND is_search = 0",
+                [day],
+            )
+            counts["search"] += _count_where(
+                conn,
+                "browser_history_entries",
+                "date = ? AND is_deleted = 0 AND is_search = 1",
+                [day],
+            )
+            counts["ai_prompt"] += _count_where(
+                conn,
+                "ai_prompt_entries",
+                "date = ? AND is_deleted = 0",
+                [day],
+            )
+        if _service_table_exists(conn, "browser_events") and days:
+            rows = conn.execute(
+                f"""
+                SELECT record_type, COUNT(*) AS n
+                FROM browser_events
+                WHERE date IN ({','.join('?' for _ in days)}) AND is_deleted = 0
+                GROUP BY record_type
+                """,
+                tuple(days),
+            ).fetchall()
+            for row in rows:
+                counts[str(row["record_type"] or "page_view")] += int(row["n"] or 0)
+        return {key: value for key, value in counts.items() if value}
+
     def get_data_center_analytics(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
         filters = params.get("filters") if isinstance(params.get("filters"), dict) else params
@@ -556,6 +648,9 @@ class GuiService:
 
     def list_app_profiles(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         return self.app_profile_service.list_profiles(params)
+
+    def extract_app_profiles(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self.app_profile_service.extract_profiles(params)
 
     def save_app_profile(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         return self.app_profile_service.save_profile(params)
@@ -650,7 +745,11 @@ class GuiService:
                 continue
             source_type = str(item.get("sourceType") or item.get("source_type") or "")
             source_id = int(item.get("id") or item.get("source_id") or 0)
-            if source_type and source_id:
+            entry_key = str(item.get("entryKey") or item.get("entry_key") or "").strip() or None
+            if entry_key:
+                self.timeline_service.update_entry_selection_by_key(entry_key, selected)
+                updated += 1
+            elif source_type and source_id:
                 self.timeline_service.update_entry_selection(source_type, source_id, selected)
                 updated += 1
         return {"ok": True, "updated": updated, "selected": selected}
@@ -895,6 +994,8 @@ class GuiService:
             "source_type": getattr(item, "source_type", ""),
             "source_id": int(getattr(item, "source_id", 0) or 0),
             "source_ids": getattr(item, "source_ids", None),
+            "entry_key": getattr(item, "entry_key", None),
+            "record_type": getattr(item, "record_type", None),
             "title": str(getattr(item, "title", "") or ""),
             "summary": str(getattr(item, "content_preview", "") or getattr(item, "subtitle", "") or ""),
             "time_range": time_range,
@@ -902,7 +1003,7 @@ class GuiService:
             "is_sensitive": bool(getattr(item, "is_sensitive", False)),
             "sensitivity_reason": None,
             "is_selected": bool(getattr(item, "is_selected", False)),
-            "importance": 0,
+            "importance": int(getattr(item, "importance", 0) or 0),
             "meta": meta,
         }
 
@@ -1673,14 +1774,14 @@ def _summary_source_types(filters: dict[str, Any]) -> set[str]:
     if isinstance(raw, str):
         raw = [raw] if raw else None
     if not isinstance(raw, list) or not raw:
-        return {"app", "browser", "clipboard", "ai_prompt", "browser_event"}
+        return {"app", "browser", "clipboard"}
     normalized: set[str] = set()
     for item in raw:
         try:
             normalized.add(normalize_source_type(str(item)))
         except ValueError:
             continue
-    return normalized & {"app", "browser", "clipboard", "ai_prompt", "browser_event"}
+    return normalized & {"app", "browser", "clipboard"}
 
 
 def _browser_event_category(event_type: str) -> str:
