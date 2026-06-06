@@ -317,7 +317,6 @@ watch(
   border: 1px solid #dce3ee;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
   overflow: auto;
   scrollbar-gutter: stable;
 }

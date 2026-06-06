@@ -157,6 +157,13 @@ export interface ReportHistoryRow {
   updated_at?: string
 }
 
+export interface ReportSourceTotals {
+  app: number
+  browser: number
+  clipboard: number
+  total: number
+}
+
 export interface ListReportsPayload {
   startDate?: string | null
   endDate?: string | null

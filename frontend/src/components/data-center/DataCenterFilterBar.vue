@@ -2,7 +2,7 @@
 import { Search } from '@element-plus/icons-vue'
 
 import type { DataCenterFilters, SensitiveFilter } from './types'
-import { CATEGORY_OPTIONS, SOURCE_OPTIONS } from './types'
+import { BROWSER_RECORD_TYPE_OPTIONS, CATEGORY_OPTIONS, SOURCE_OPTIONS } from './types'
 
 const filters = defineModel<DataCenterFilters>({ required: true })
 
@@ -15,6 +15,20 @@ const sensitiveOptions: Array<{ label: string; value: SensitiveFilter }> = [
   { label: '敏感', value: 'sensitive' },
   { label: '非敏感', value: 'normal' }
 ]
+
+function updateSourceTypes(value: DataCenterFilters['sourceTypes']): void {
+  filters.value.sourceTypes = value
+  if (!value.includes('browser')) {
+    filters.value.browserRecordType = ''
+  }
+}
+
+function updateBrowserRecordType(value: string): void {
+  filters.value.browserRecordType = value
+  if (value) {
+    filters.value.sourceTypes = ['browser']
+  }
+}
 </script>
 
 <template>
@@ -22,12 +36,35 @@ const sensitiveOptions: Array<{ label: string; value: SensitiveFilter }> = [
     <div class="filter-grid">
       <label class="filter-field filter-field--source">
         <span class="filter-label">数据来源</span>
-        <el-select v-model="filters.sourceTypes" multiple collapse-tags collapse-tags-tooltip>
+        <el-select
+          :model-value="filters.sourceTypes"
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
+          @update:model-value="updateSourceTypes($event as DataCenterFilters['sourceTypes'])"
+        >
           <el-option
             v-for="source in SOURCE_OPTIONS"
             :key="source.value"
             :label="source.label"
             :value="source.value"
+          />
+        </el-select>
+      </label>
+
+      <label class="filter-field filter-field--record-type">
+        <span class="filter-label">浏览器类型</span>
+        <el-select
+          :model-value="filters.browserRecordType"
+          :disabled="!filters.sourceTypes.includes('browser')"
+          placeholder="全部类型"
+          @update:model-value="updateBrowserRecordType(String($event || ''))"
+        >
+          <el-option
+            v-for="item in BROWSER_RECORD_TYPE_OPTIONS"
+            :key="item.value || 'all'"
+            :label="item.label"
+            :value="item.value"
           />
         </el-select>
       </label>
@@ -72,16 +109,21 @@ const sensitiveOptions: Array<{ label: string; value: SensitiveFilter }> = [
 <style scoped>
 .filter-card {
   container-type: inline-size;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid #dce3ee;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
 }
 
 .filter-grid {
   display: grid;
-  grid-template-columns: minmax(118px, 1fr) minmax(104px, 0.72fr) minmax(112px, 0.78fr) minmax(180px, 1.25fr) auto;
+  grid-template-columns:
+    minmax(124px, 0.92fr)
+    minmax(116px, 0.74fr)
+    minmax(104px, 0.62fr)
+    minmax(116px, 0.72fr)
+    minmax(180px, 1.18fr)
+    auto;
   gap: 10px;
   align-items: end;
 }
@@ -108,9 +150,15 @@ const sensitiveOptions: Array<{ label: string; value: SensitiveFilter }> = [
   justify-content: flex-end;
 }
 
-@media (max-width: 900px) {
+.filter-actions :deep(.el-button) {
+  min-height: 34px;
+  margin-left: 0;
+  border-radius: 8px;
+}
+
+@media (max-width: 1100px) {
   .filter-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -124,9 +172,9 @@ const sensitiveOptions: Array<{ label: string; value: SensitiveFilter }> = [
   }
 }
 
-@container (max-width: 900px) {
+@container (max-width: 1100px) {
   .filter-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 

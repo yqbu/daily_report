@@ -15,7 +15,8 @@ import {
   updateEntrySelection,
   updateEntrySensitive
 } from '../api/reportWorkbench'
-import type { AnyRecord, SourceType } from '../api/types'
+import { callTypedBridge } from '../api/bridge'
+import type { AnyRecord, DataCenterSummaryPayload, SourceType } from '../api/types'
 import type {
   BuildPromptPayload,
   DetailSavePayload,
@@ -28,6 +29,7 @@ import type {
   ReportDetail,
   ReportHistoryFilters,
   ReportHistoryRow,
+  ReportSourceTotals,
   ReportTemplate,
   ReportWorkbenchTab
 } from '../types/reportWorkbench'
@@ -116,7 +118,7 @@ export const useReportWorkbenchStore = defineStore('reportWorkbench', () => {
   const currentReportId = shallowRef<number | null>(null)
 
   const historyFilters = reactive<ReportHistoryFilters>({
-    dateRange: null,
+    dateRange: [addDays(startOfToday(), -29), startOfToday()],
     templateName: '',
     status: 'all',
     keyword: '',
@@ -126,6 +128,9 @@ export const useReportWorkbenchStore = defineStore('reportWorkbench', () => {
   const reportList = shallowRef<ReportHistoryRow[]>([])
   const reportListTotal = shallowRef(0)
   const reportDetail = shallowRef<ReportDetail | null>(null)
+  const reportVersions = shallowRef<ReportHistoryRow[]>([])
+  const reportSourceTotals = shallowRef<ReportSourceTotals>(emptyReportSourceTotals())
+  const reportSourceTotalsDate = shallowRef<string | null>(null)
   const historyLoading = shallowRef(false)
   const detailLoading = shallowRef(false)
 
@@ -320,8 +325,15 @@ export const useReportWorkbenchStore = defineStore('reportWorkbench', () => {
       const result = await listReports(historyPayload())
       reportList.value = result.items
       reportListTotal.value = result.total
-      if (!reportDetail.value && result.items.length) {
-        reportDetail.value = result.items[0]
+      const activeStillVisible = result.items.some((item) => item.id === reportDetail.value?.id)
+      if (result.items.length && (!reportDetail.value || !activeStillVisible)) {
+        await selectReport(result.items[0].id)
+      } else if (reportDetail.value) {
+        await loadReportVersions(reportDetail.value.date)
+      } else {
+        reportVersions.value = []
+        reportSourceTotals.value = emptyReportSourceTotals()
+        reportSourceTotalsDate.value = null
       }
     } finally {
       historyLoading.value = false
@@ -331,16 +343,56 @@ export const useReportWorkbenchStore = defineStore('reportWorkbench', () => {
   async function selectReport(id: number): Promise<void> {
     detailLoading.value = true
     try {
-      reportDetail.value = await getReportDetail(id)
+      const detail = await getReportDetail(id)
+      reportDetail.value = detail
+      if (detail?.date) {
+        await Promise.all([loadReportVersions(detail.date), loadReportSourceTotals(detail.date)])
+      } else {
+        reportVersions.value = []
+        reportSourceTotals.value = emptyReportSourceTotals()
+        reportSourceTotalsDate.value = null
+      }
     } finally {
       detailLoading.value = false
     }
+  }
+
+  async function loadReportVersions(date: string): Promise<void> {
+    const result = await listReports({
+      startDate: date,
+      endDate: date,
+      page: 1,
+      pageSize: 100
+    })
+    reportVersions.value = result.items
+  }
+
+  async function loadReportSourceTotals(date: string): Promise<void> {
+    if (reportSourceTotalsDate.value === date) {
+      return
+    }
+    const summary = await callTypedBridge('getDataCenterSummary', {
+      startDate: date,
+      endDate: date,
+      filters: {
+        sourceTypes: ['app', 'browser', 'clipboard'],
+        sensitive: undefined,
+        categories: [],
+        keyword: '',
+        sortOrder: 'desc'
+      }
+    })
+    reportSourceTotals.value = sourceTotalsFromSummary(summary)
+    reportSourceTotalsDate.value = date
   }
 
   async function removeReport(id: number): Promise<void> {
     await deleteReport(id)
     if (reportDetail.value?.id === id) {
       reportDetail.value = null
+      reportVersions.value = []
+      reportSourceTotals.value = emptyReportSourceTotals()
+      reportSourceTotalsDate.value = null
     }
     await loadHistory()
   }
@@ -454,6 +506,8 @@ export const useReportWorkbenchStore = defineStore('reportWorkbench', () => {
     reportList,
     reportListTotal,
     reportDetail,
+    reportVersions,
+    reportSourceTotals,
     historyLoading,
     detailLoading,
     templateDrawerVisible,
@@ -478,6 +532,8 @@ export const useReportWorkbenchStore = defineStore('reportWorkbench', () => {
     saveCurrentReport,
     loadHistory,
     selectReport,
+    loadReportVersions,
+    loadReportSourceTotals,
     removeReport,
     regenerateFromHistory,
     saveTemplate,
@@ -497,6 +553,17 @@ export function toDateKey(value: Date | string): string {
   return `${year}-${month}-${day}`
 }
 
+function startOfToday(): Date {
+  const date = new Date()
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+function addDays(date: Date, offset: number): Date {
+  const next = new Date(date)
+  next.setDate(next.getDate() + offset)
+  return next
+}
+
 function emptyMaterialSummary(): MaterialSummary {
   return {
     total_count: 0,
@@ -504,6 +571,27 @@ function emptyMaterialSummary(): MaterialSummary {
     sensitive_excluded_count: 0,
     pending_count: 0,
     estimated_prompt_chars: 0
+  }
+}
+
+function emptyReportSourceTotals(): ReportSourceTotals {
+  return {
+    app: 0,
+    browser: 0,
+    clipboard: 0,
+    total: 0
+  }
+}
+
+function sourceTotalsFromSummary(summary: DataCenterSummaryPayload): ReportSourceTotals {
+  const app = Number(summary.app || 0)
+  const browser = Number(summary.browser || 0)
+  const clipboard = Number(summary.clipboard || 0)
+  return {
+    app,
+    browser,
+    clipboard,
+    total: app + browser + clipboard
   }
 }
 

@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import { ElMessage, ElMessageBox } from 'element-plus'
-
 import ReportHistoryDetail from './ReportHistoryDetail.vue'
 import ReportHistoryList from './ReportHistoryList.vue'
 import { useReportWorkbenchStore } from '../../stores/reportWorkbench'
-import type { ReportHistoryFilters, ReportHistoryRow } from '../../types/reportWorkbench'
+import type { ReportHistoryFilters } from '../../types/reportWorkbench'
 
 const store = useReportWorkbenchStore()
 
@@ -18,39 +16,6 @@ function updateFilters(filters: ReportHistoryFilters): void {
   void store.loadHistory()
 }
 
-async function copyText(text: string): Promise<void> {
-  if (!text) {
-    return
-  }
-  await navigator.clipboard?.writeText(text)
-  ElMessage.success('内容已复制')
-}
-
-function exportReport(report: ReportHistoryRow): void {
-  const blob = new Blob([report.report_markdown || ''], { type: 'text/markdown;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `daily-report-${report.date}-${report.id}.md`
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
-async function deleteReport(id: number): Promise<void> {
-  await ElMessageBox.confirm('删除后该日报将从历史记录中移除，确认继续吗？', '确认删除日报', {
-    type: 'warning',
-    confirmButtonText: '删除',
-    cancelButtonText: '取消',
-    confirmButtonClass: 'el-button--danger'
-  })
-  await store.removeReport(id)
-  ElMessage.success('日报已删除')
-}
-
-function viewPrompt(prompt: string): void {
-  store.promptText = prompt
-  store.promptPreviewVisible = true
-}
 </script>
 
 <template>
@@ -61,7 +26,7 @@ function viewPrompt(prompt: string): void {
       :total="store.reportListTotal"
       :templates="store.templates"
       :loading="store.historyLoading"
-      :active-id="store.reportDetail?.id ?? null"
+      :active-date="store.reportDetail?.date ?? null"
       @update:filters="updateFilters"
       @refresh="store.loadHistory"
       @select="store.selectReport"
@@ -69,12 +34,10 @@ function viewPrompt(prompt: string): void {
 
     <ReportHistoryDetail
       :report="store.reportDetail"
+      :report-versions="store.reportVersions"
+      :source-totals="store.reportSourceTotals"
       :loading="store.detailLoading"
-      @copy="copyText"
-      @export="exportReport"
-      @view-prompt="viewPrompt"
-      @regenerate="store.regenerateFromHistory"
-      @delete="deleteReport"
+      @select-version="store.selectReport"
     />
   </div>
 </template>
@@ -85,7 +48,7 @@ function viewPrompt(prompt: string): void {
   min-height: 0;
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(400px, clamp(420px, 36vw, 520px)) minmax(0, 1fr);
+  grid-template-columns: minmax(320px, clamp(336px, 29vw, 416px)) minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
   overflow: hidden;

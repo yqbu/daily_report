@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Calendar, Filter, Search } from '@element-plus/icons-vue'
+import { Calendar, Refresh, Search } from '@element-plus/icons-vue'
 
+import DateRangePicker from '../DateRangePicker.vue'
 import type { ReportHistoryFilters, ReportHistoryRow, ReportTemplate } from '../../types/reportWorkbench'
+
+type DateRange = [Date, Date]
 
 const props = defineProps<{
   filters: ReportHistoryFilters
@@ -10,7 +13,7 @@ const props = defineProps<{
   total: number
   templates: ReportTemplate[]
   loading: boolean
-  activeId?: number | null
+  activeDate?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -20,10 +23,41 @@ const emit = defineEmits<{
 }>()
 
 const templateOptions = computed(() => props.templates.map((item) => ({ label: item.name, value: item.id })))
-const statusOptions = [
-  { label: '全部状态', value: 'all' },
-  { label: '已保存', value: 'saved' }
-] as const
+const pickerDateRange = computed<DateRange>({
+  get: () => {
+    const range = props.filters.dateRange
+    if (range) {
+      return [toDate(range[0]), toDate(range[1])] as DateRange
+    }
+    const today = startOfToday()
+    return [addDays(today, -29), today] as DateRange
+  },
+  set: (dateRange: DateRange) => updateFilters({ dateRange, page: 1 })
+})
+
+const dateGroups = computed(() => {
+  const groups = new Map<string, ReportHistoryRow[]>()
+  for (const report of props.reports) {
+    const rows = groups.get(report.date) ?? []
+    rows.push(report)
+    groups.set(report.date, rows)
+  }
+
+  return Array.from(groups.entries())
+    .map(([date, rows]) => {
+      const sortedRows = [...rows].sort(compareReportDesc)
+      const latest = sortedRows[0]
+      return {
+        date,
+        latest,
+        versionCount: sortedRows.length,
+        materialCount: sortedRows.reduce((sum, row) => sum + materialCount(row), 0),
+        templateCount: new Set(sortedRows.map((row) => row.template_name || 'daily_standard')).size,
+        latestTime: createdTime(latest)
+      }
+    })
+    .sort((left, right) => right.date.localeCompare(left.date))
+})
 
 function updateFilters(patch: Partial<ReportHistoryFilters>): void {
   emit('update:filters', { ...props.filters, ...patch })
@@ -40,8 +74,9 @@ function createdTime(row: ReportHistoryRow): string {
   return row.created_at?.slice(11, 16) || '--:--'
 }
 
-function wordCount(row: ReportHistoryRow): number {
-  return (row.report_markdown || '').length
+function compareReportDesc(left: ReportHistoryRow, right: ReportHistoryRow): number {
+  const timeDiff = new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
+  return timeDiff || right.id - left.id
 }
 
 function weekday(date: string): string {
@@ -49,40 +84,39 @@ function weekday(date: string): string {
   if (Number.isNaN(parsed.getTime())) return ''
   return new Intl.DateTimeFormat('zh-CN', { weekday: 'short' }).format(parsed)
 }
+
+function toDate(value: Date | string): Date {
+  if (value instanceof Date) return value
+  const parsed = new Date(`${value.slice(0, 10)}T00:00:00`)
+  return Number.isNaN(parsed.getTime()) ? startOfToday() : parsed
+}
+
+function startOfToday(): Date {
+  const date = new Date()
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+function addDays(date: Date, offset: number): Date {
+  const next = new Date(date)
+  next.setDate(next.getDate() + offset)
+  return next
+}
 </script>
 
 <template>
   <section class="history-list-card">
-    <header class="history-card-header">
-      <div>
-        <h2 class="history-title">历史日报</h2>
-        <p class="history-subtitle">查看、管理和重新生成已保存的日报</p>
-      </div>
-    </header>
-
-    <el-input
-      :model-value="filters.keyword"
-      class="history-search"
-      clearable
-      placeholder="搜索模板名称、日期或内容..."
-      @update:model-value="updateFilters({ keyword: String($event), page: 1 })"
-    >
-      <template #prefix>
-        <el-icon><Search /></el-icon>
-      </template>
-    </el-input>
-
-    <div class="history-filter-row">
-      <el-date-picker
-        :model-value="filters.dateRange"
-        type="daterange"
-        class="date-range-filter"
-        start-placeholder="开始日期"
-        end-placeholder="结束日期"
-        value-format="YYYY-MM-DD"
-        @update:model-value="updateFilters({ dateRange: $event as ReportHistoryFilters['dateRange'], page: 1 })"
-      />
-
+    <div class="history-search-row">
+      <el-input
+        :model-value="filters.keyword"
+        class="history-search"
+        clearable
+        placeholder="搜索日期、模板或内容..."
+        @update:model-value="updateFilters({ keyword: String($event), page: 1 })"
+      >
+        <template #prefix>
+          <el-icon><Search /></el-icon>
+        </template>
+      </el-input>
       <el-select
         :model-value="filters.templateName"
         clearable
@@ -92,18 +126,13 @@ function weekday(date: string): string {
         <el-option label="全部模板" value="" />
         <el-option v-for="item in templateOptions" :key="item.value" :label="item.label" :value="item.value" />
       </el-select>
+    </div>
 
-      <el-select
-        :model-value="filters.status"
-        placeholder="生成状态"
-        @update:model-value="updateFilters({ status: $event as ReportHistoryFilters['status'], page: 1 })"
-      >
-        <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
-      </el-select>
-
+    <div class="history-filter-row">
+      <DateRangePicker v-model="pickerDateRange" class="date-range-filter" />
       <el-button
         class="history-filter-button"
-        :icon="Filter"
+        :icon="Refresh"
         :loading="loading"
         aria-label="刷新筛选结果"
         title="刷新筛选结果"
@@ -112,29 +141,27 @@ function weekday(date: string): string {
     </div>
 
     <div class="history-list-toolbar">
-      <span>共 {{ total }} 篇日报</span>
+      <span>共 {{ dateGroups.length }} 天 · {{ total }} 个版本</span>
       <el-button plain size="small" :loading="loading" @click="emit('refresh')">按日期降序</el-button>
     </div>
 
     <div v-loading="loading" class="history-list">
       <button
-        v-for="item in reports"
-        :key="item.id"
+        v-for="item in dateGroups"
+        :key="item.date"
         class="history-item"
-        :class="{ 'history-item--active': item.id === activeId }"
+        :class="{ 'history-item--active': item.date === activeDate }"
         type="button"
-        @click="emit('select', item.id)"
+        @click="emit('select', item.latest.id)"
       >
         <span class="history-item-icon"><Calendar /></span>
         <span class="history-item-main">
           <strong>{{ item.date }} <em>{{ weekday(item.date) }}</em></strong>
-          <span>{{ item.template_name || 'daily_standard' }} · {{ item.model_name || '模型未记录' }}</span>
-          <small>{{ createdTime(item) }} · {{ wordCount(item).toLocaleString() }} 字 · {{ materialCount(item) }} 条素材</small>
+          <span>{{ item.versionCount }} 个版本 · 最新 {{ item.latestTime }}</span>
         </span>
-        <el-tag class="history-status" size="small" type="success" effect="light">已保存</el-tag>
       </button>
 
-      <el-empty v-if="!reports.length && !loading" description="暂无历史日报" />
+      <el-empty v-if="!dateGroups.length && !loading" description="暂无历史日报" />
     </div>
 
     <el-pagination
@@ -156,13 +183,12 @@ function weekday(date: string): string {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   gap: 12px;
   padding: 16px;
   border: 1px solid #dce3ee;
   border-radius: 8px;
   background: #fff;
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.05);
   overflow: hidden;
 }
 
@@ -203,6 +229,7 @@ function weekday(date: string): string {
 .history-list-card :deep(.el-select__wrapper),
 .history-list-card :deep(.el-date-editor.el-input__wrapper) {
   min-height: 38px;
+  height: 38px;
   border-radius: 8px;
   box-shadow: 0 0 0 1px #dce3ee inset;
 }
@@ -217,16 +244,24 @@ function weekday(date: string): string {
   padding: 0 4px;
 }
 
+.history-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(116px, 0.75fr);
+  gap: 8px;
+  min-width: 0;
+}
+
 .history-filter-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(108px, 0.72fr) minmax(108px, 0.72fr) 40px;
+  grid-template-columns: minmax(0, 1fr) 38px;
   gap: 8px;
   min-width: 0;
 }
 
 .history-filter-button {
-  width: 40px;
-  min-width: 40px;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
   margin-left: 0;
   border-radius: 8px;
 }
@@ -254,7 +289,7 @@ function weekday(date: string): string {
 .history-item {
   min-width: 0;
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
+  grid-template-columns: 36px minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   padding: 12px;
@@ -327,16 +362,13 @@ function weekday(date: string): string {
   font-size: 12px;
 }
 
-.history-status {
-  align-self: end;
-}
-
 .history-pagination {
   min-width: 0;
   overflow: hidden;
 }
 
 @media (max-width: 760px) {
+  .history-search-row,
   .history-filter-row {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -345,9 +377,5 @@ function weekday(date: string): string {
     grid-template-columns: 36px minmax(0, 1fr);
   }
 
-  .history-status {
-    grid-column: 2;
-    justify-self: start;
-  }
 }
 </style>

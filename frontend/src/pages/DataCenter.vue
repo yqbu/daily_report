@@ -19,7 +19,7 @@ import DataCenterFilterBar from '../components/data-center/DataCenterFilterBar.v
 import RecordDetailDrawer from '../components/data-center/RecordDetailDrawer.vue'
 import TimelineInfiniteList from '../components/data-center/TimelineInfiniteList.vue'
 import type { DataCenterFilters, DataCenterView, DetailSavePayload } from '../components/data-center/types'
-import { BROWSER_RECORD_TYPE_OPTIONS, SOURCE_OPTIONS, dateRangeToPayload, recordId, recordSource, toDateKey } from '../components/data-center/types'
+import { SOURCE_OPTIONS, dateRangeToPayload, recordId, recordSource, toDateKey } from '../components/data-center/types'
 
 const today = new Date()
 const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0)
@@ -86,8 +86,6 @@ const filterSignature = computed(() => {
     browserRecordType: filters.browserRecordType
   })
 })
-const browserRecordFiltersVisible = computed(() => filters.sourceTypes.includes('browser'))
-
 async function refreshAll(): Promise<void> {
   refreshKey.value += 1
   await loadSummary()
@@ -385,19 +383,6 @@ onBeforeUnmount(() => {
 
     <DataCenterFilterBar v-model="filters" @reset="resetFilters" />
 
-    <section v-if="browserRecordFiltersVisible" class="browser-record-filter" aria-label="浏览器记录类型筛选">
-      <button
-        v-for="item in BROWSER_RECORD_TYPE_OPTIONS"
-        :key="item.value || 'all'"
-        class="record-type-chip"
-        :class="{ 'record-type-chip--active': filters.browserRecordType === item.value }"
-        type="button"
-        @click="filters.browserRecordType = item.value; filters.sourceTypes = ['browser']"
-      >
-        {{ item.label }}
-      </button>
-    </section>
-
     <section v-loading="summaryLoading" class="view-tabs-card">
       <el-segmented v-model="activeView" :options="viewTabs">
         <template #default="{ item }">
@@ -473,41 +458,10 @@ onBeforeUnmount(() => {
 }
 
 .datacenter-topbar,
-.view-tabs-card,
-.browser-record-filter {
+.view-tabs-card {
   border: 1px solid var(--datacenter-border);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
-}
-
-.browser-record-filter {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  overflow-x: auto;
-  padding: 8px 10px;
-}
-
-.record-type-chip {
-  height: 30px;
-  flex: 0 0 auto;
-  padding: 0 12px;
-  border: 1px solid #d6e0ee;
-  border-radius: 999px;
-  color: #526179;
-  background: #fff;
-  font-size: 12px;
-  font-weight: 720;
-  cursor: pointer;
-}
-
-.record-type-chip:hover,
-.record-type-chip--active {
-  color: #1d4ed8;
-  border-color: #93c5fd;
-  background: #eff6ff;
 }
 
 .datacenter-topbar {

@@ -202,7 +202,6 @@ function updateOutputFocus(value: string[]): void {
   border: 1px solid #dfe8f5;
   border-radius: 14px;
   background: #fff;
-  box-shadow: 0 8px 24px rgba(15, 31, 61, 0.04);
 }
 
 @media (max-width: 860px) {

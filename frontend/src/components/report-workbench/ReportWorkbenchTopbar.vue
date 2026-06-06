@@ -64,7 +64,6 @@ const emit = defineEmits<{
   border: 1px solid #dce3ee;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
 }
 
 .topbar-title {
@@ -100,15 +99,16 @@ const emit = defineEmits<{
 
 .action-group {
   position: relative;
-  flex: 0 1 720px;
-  width: min(720px, 54vw);
+  flex: 1 1 auto;
+  max-width: 100%;
   min-height: 38px;
   min-width: 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .top-button {

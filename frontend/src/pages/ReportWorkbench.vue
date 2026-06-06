@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Check,
   CopyDocument,
@@ -24,7 +24,7 @@ import TemplateManagerDrawer from '../components/report-workbench/TemplateManage
 import { useReportWorkbenchStore } from '../stores/reportWorkbench'
 import { useSettingsStore } from '../stores/settings'
 import type { LocalSettingsPayload } from '../api/types'
-import type { DetailSavePayload, GenerateStep, ReportTopbarAction } from '../types/reportWorkbench'
+import type { DetailSavePayload, GenerateStep, ReportHistoryRow, ReportTopbarAction } from '../types/reportWorkbench'
 
 const store = useReportWorkbenchStore()
 const settingsStore = useSettingsStore()
@@ -45,6 +45,7 @@ const completedGenerateSteps = computed(() => {
 })
 const disabledGenerateSteps = computed(() => (store.generatedMarkdown ? [] : [3]))
 const selectedMaterialItems = computed(() => store.materialItems.filter((item) => item.is_selected))
+const activeHistoryReport = computed(() => store.reportDetail)
 const modelLabel = computed(() => {
   const settings = settingsStore.settings as LocalSettingsPayload | null
   const modelName = settings?.model?.model_name?.trim()
@@ -55,7 +56,40 @@ const modelLabel = computed(() => {
 
 const topbarActions = computed<ReportTopbarAction[]>(() => {
   if (store.activeTab !== 'generate') {
-    return []
+    const report = activeHistoryReport.value
+    return [
+      {
+        id: 'history-refresh',
+        label: '刷新',
+        icon: Refresh,
+        loading: store.historyLoading
+      },
+      {
+        id: 'history-copy-markdown',
+        label: '复制 Markdown',
+        icon: CopyDocument,
+        disabled: !report?.report_markdown
+      },
+      {
+        id: 'history-export-markdown',
+        label: '导出 .md',
+        icon: Download,
+        disabled: !report?.report_markdown
+      },
+      {
+        id: 'history-regenerate',
+        label: '重新生成',
+        icon: MagicStick,
+        disabled: !report
+      },
+      {
+        id: 'history-delete',
+        label: '删除日报',
+        icon: Delete,
+        tone: 'danger',
+        disabled: !report
+      }
+    ]
   }
 
   if (activeGenerateStep.value === 0) {
@@ -250,13 +284,50 @@ function exportMarkdown(): void {
   URL.revokeObjectURL(url)
 }
 
+function exportHistoryReport(report: ReportHistoryRow): void {
+  const blob = new Blob([report.report_markdown || ''], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `daily-report-${report.date}-${report.id}.md`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+async function deleteHistoryReport(report: ReportHistoryRow): Promise<void> {
+  await ElMessageBox.confirm('删除后当前选中的日报版本将从历史记录中移除，确认继续吗？', '确认删除当前版本', {
+    type: 'warning',
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+    confirmButtonClass: 'el-button--danger'
+  })
+  await store.removeReport(report.id)
+  ElMessage.success('日报已删除')
+}
+
 async function saveCurrentReport(): Promise<void> {
   await store.saveCurrentReport()
   ElMessage.success('日报已保存')
 }
 
 async function handleTopbarAction(id: string): Promise<void> {
+  const historyReport = activeHistoryReport.value
   switch (id) {
+    case 'history-refresh':
+      await store.loadHistory()
+      break
+    case 'history-copy-markdown':
+      if (historyReport) await copyText(historyReport.report_markdown || '')
+      break
+    case 'history-export-markdown':
+      if (historyReport) exportHistoryReport(historyReport)
+      break
+    case 'history-regenerate':
+      if (historyReport) await store.regenerateFromHistory(historyReport)
+      break
+    case 'history-delete':
+      if (historyReport) await deleteHistoryReport(historyReport)
+      break
     case 'clear-materials':
       await clearMaterialSelection()
       break

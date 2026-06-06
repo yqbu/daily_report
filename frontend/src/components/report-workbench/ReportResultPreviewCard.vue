@@ -183,7 +183,9 @@ function exportMarkdown(): void {
   overflow: auto;
   padding: 18px;
   border: 1px solid #e3ebf6;
-  border-radius: 12px;
+  border-top: none;
+  border-bottom-radius: 12px;
+  /* border-radius: 12px; */
   background: #fbfdff;
 }
 

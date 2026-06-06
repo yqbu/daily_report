@@ -694,7 +694,6 @@ onMounted(() => {
   border: 1px solid var(--overview-border);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
 }
 
 .metric-card,
@@ -1152,7 +1151,6 @@ onMounted(() => {
   gap: 5px;
   border-radius: 999px;
   background: #fff;
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
 }
 
 .donut-inner strong {

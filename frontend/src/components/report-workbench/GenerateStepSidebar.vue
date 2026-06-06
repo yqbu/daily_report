@@ -46,7 +46,6 @@ function selectStep(index: number): void {
 <template>
   <aside class="generate-step-sidebar">
     <div class="step-date-panel">
-      <span>日报日期</span>
       <el-date-picker
         :model-value="selectedDate"
         type="date"
@@ -103,7 +102,6 @@ function selectStep(index: number): void {
   border: 1px solid #dfe8f5;
   border-radius: 14px;
   background: #fff;
-  box-shadow: 0 8px 24px rgba(15, 31, 61, 0.04);
   overflow: hidden;
 }
 
