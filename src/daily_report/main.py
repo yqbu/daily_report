@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 from pathlib import Path
@@ -24,6 +25,17 @@ def run_service(args: argparse.Namespace) -> None:
     setup_logging(configured_log_level(args.log_level))
     # 延迟导入, 避免只执行 report/status 命令时被采集服务依赖阻断
     from daily_report.service.app import DailyReportService
+    from daily_report.service.runtime_process_service import RuntimeProcessService
+
+    runtime = RuntimeProcessService()
+    collector_status = runtime.get_collector_runtime_status()
+    if collector_status.get('status') == 'running':
+        print('Collector already running')
+        print(f"PID: {collector_status.get('pid')}")
+        print(f"lock_path: {collector_status.get('lock_path')}")
+        print('Use `daily-report runtime status` to view details.')
+        return
+
     service = DailyReportService()
     service.run()
 
@@ -152,10 +164,91 @@ def run_api_cmd(args: argparse.Namespace) -> None:
     from daily_report.api.server import run_api_server
 
     try:
+        from daily_report.service.runtime_process_service import RuntimeProcessService
+
+        RuntimeProcessService().register_current_process('api', port=args.port)
         run_api_server(host=args.host, port=args.port, token=args.token)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         raise SystemExit(1) from exc
+
+
+def run_runtime_status(args: argparse.Namespace) -> None:
+    from daily_report.service.runtime_process_service import RuntimeProcessService, summary_to_dict
+
+    summary = RuntimeProcessService().get_summary()
+    payload = summary_to_dict(summary)
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+
+    print('Runtime Status')
+    print(f"* API: {summary.api_status}, pid={summary.api_pid}, port={summary.api_port}")
+    print(f"* Collector: {summary.collector_status}, pid={summary.collector_pid}")
+    print(f"* Database: {summary.database_status}")
+    print(f"* YASB: {summary.yasb_status}")
+    print(f"* Orphans: {summary.orphan_process_count}")
+    print(f"* Duplicates: {summary.duplicate_process_count}")
+    print(f"* Diagnostics: warnings={summary.warning_count}, errors={summary.error_count}")
+
+
+def run_runtime_processes(args: argparse.Namespace) -> None:
+    from daily_report.service.runtime_process_service import RuntimeProcessService
+
+    processes = RuntimeProcessService().list_processes()
+    if not processes:
+        print('No Daily Report related processes detected.')
+        return
+    for process in processes:
+        print(
+            f"{process.role} pid={process.pid} ppid={process.parent_pid} "
+            f"status={process.status} cpu={process.cpu_percent} mem={process.memory_mb}MB "
+            f"port={process.port} risk={process.risk_level}"
+        )
+        print(f"  started_at: {process.started_at}")
+        print(f"  cwd: {process.cwd}")
+        print(f"  cmdline: {process.cmdline_preview}")
+        if process.reason:
+            print(f"  reason: {process.reason}")
+
+
+def run_runtime_doctor(args: argparse.Namespace) -> None:
+    from daily_report.service.runtime_process_service import RuntimeProcessService
+
+    diagnostics = RuntimeProcessService().run_doctor()
+    for item in diagnostics:
+        marker = item.level.upper()
+        fixable = 'fixable' if item.fixable else 'manual'
+        print(f"[{marker}] {item.title} ({fixable})")
+        print(f"  {item.message}")
+        if item.action:
+            print(f"  action: {item.action}")
+
+
+def run_runtime_cleanup_orphans(args: argparse.Namespace) -> None:
+    from daily_report.service.runtime_process_service import RuntimeProcessService
+
+    dry_run = not bool(args.execute)
+    result = RuntimeProcessService().cleanup_orphans(dry_run=dry_run, force=bool(args.force))
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def run_runtime_repair(args: argparse.Namespace) -> None:
+    from daily_report.service.runtime_process_service import RuntimeProcessService
+
+    print(json.dumps(RuntimeProcessService().repair_runtime_state(), ensure_ascii=False, indent=2))
+
+
+def run_runtime_stop_collector(args: argparse.Namespace) -> None:
+    from daily_report.service.runtime_process_service import RuntimeProcessService
+
+    print(json.dumps(RuntimeProcessService().stop_collector_gracefully(), ensure_ascii=False, indent=2))
+
+
+def run_runtime_restart_collector(args: argparse.Namespace) -> None:
+    from daily_report.service.runtime_process_service import RuntimeProcessService
+
+    print(json.dumps(RuntimeProcessService().restart_collector(), ensure_ascii=False, indent=2))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -265,6 +358,34 @@ def build_parser() -> argparse.ArgumentParser:
     api_parser.add_argument('--port', type=int, default=8765, help='Bind port, default: 8765; 0 uses a free port')
     api_parser.add_argument('--token', default=None, help='Optional bearer token required by protected APIs')
     api_parser.set_defaults(func=run_api_cmd)
+
+    runtime_parser = subparsers.add_parser('runtime', help='Inspect and manage Daily Report runtime processes')
+    runtime_subparsers = runtime_parser.add_subparsers(dest='runtime_command')
+
+    runtime_status_parser = runtime_subparsers.add_parser('status', help='Show runtime status')
+    runtime_status_parser.add_argument('--json', action='store_true', help='Output runtime status as JSON')
+    runtime_status_parser.set_defaults(func=run_runtime_status)
+
+    runtime_processes_parser = runtime_subparsers.add_parser('processes', help='List Daily Report related processes')
+    runtime_processes_parser.set_defaults(func=run_runtime_processes)
+
+    runtime_doctor_parser = runtime_subparsers.add_parser('doctor', help='Run runtime diagnostics')
+    runtime_doctor_parser.set_defaults(func=run_runtime_doctor)
+
+    runtime_repair_parser = runtime_subparsers.add_parser('repair', help='Repair stale runtime state')
+    runtime_repair_parser.set_defaults(func=run_runtime_repair)
+
+    runtime_cleanup_parser = runtime_subparsers.add_parser('cleanup-orphans', help='Clean orphan child processes')
+    runtime_cleanup_parser.add_argument('--dry-run', action='store_true', default=True, help='Show what would be cleaned')
+    runtime_cleanup_parser.add_argument('--execute', action='store_true', help='Actually terminate safe orphan processes')
+    runtime_cleanup_parser.add_argument('--force', action='store_true', help='Use kill instead of terminate')
+    runtime_cleanup_parser.set_defaults(func=run_runtime_cleanup_orphans)
+
+    runtime_stop_parser = runtime_subparsers.add_parser('stop-collector', help='Gracefully stop collector')
+    runtime_stop_parser.set_defaults(func=run_runtime_stop_collector)
+
+    runtime_restart_parser = runtime_subparsers.add_parser('restart-collector', help='Restart collector')
+    runtime_restart_parser.set_defaults(func=run_runtime_restart_collector)
 
     return parser
 

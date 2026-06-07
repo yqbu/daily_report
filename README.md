@@ -139,6 +139,17 @@ Available endpoints:
 - `POST /api/reports/build-prompt`
 - `POST /api/reports/generate`
 - `GET /api/reports/latest?date=YYYY-MM-DD`
+- `GET /api/runtime/summary`
+- `GET /api/runtime/processes`
+- `GET /api/runtime/health`
+- `POST /api/runtime/doctor`
+- `POST /api/runtime/repair`
+- `POST /api/runtime/cleanup-orphans`
+- `POST /api/runtime/processes/{pid}/terminate`
+- `POST /api/runtime/processes/{pid}/kill`
+- `POST /api/runtime/collector/start`
+- `POST /api/runtime/collector/stop`
+- `POST /api/runtime/collector/restart`
 - `GET /api/settings`
 - `PUT /api/settings`
 
@@ -150,6 +161,47 @@ All endpoints return JSON in one of these shapes:
 
 ```json
 {"ok": false, "error": "message", "code": "ERROR_CODE"}
+```
+
+## Runtime Center
+
+The Settings page includes a Runtime Center tab for inspecting local background
+services, collector health, SQLite health, YASB status, duplicate processes, and
+safe orphan cleanup previews. It uses the Python backend; the frontend never
+executes system commands directly.
+
+CLI entry points:
+
+```powershell
+daily-report runtime status
+daily-report runtime status --json
+daily-report runtime processes
+daily-report runtime doctor
+daily-report runtime cleanup-orphans --dry-run
+daily-report runtime cleanup-orphans --execute
+daily-report runtime repair
+daily-report runtime stop-collector
+daily-report runtime restart-collector
+```
+
+Safety notes:
+
+- `daily-report status --json` remains the lightweight YASB-oriented command.
+- Runtime commands only terminate processes that are clearly identified as
+  manageable Daily Report roles.
+- `cleanup-orphans` defaults to dry-run and does not force kill by default.
+- Unknown processes with the project as cwd are observable, but automatic
+  terminate/kill is rejected.
+- `repair` handles stale runtime registry rows and stale collector lock files; it
+  does not kill processes.
+
+Useful troubleshooting flow:
+
+```powershell
+daily-report runtime status
+daily-report runtime doctor
+daily-report runtime repair
+daily-report runtime cleanup-orphans --dry-run
 ```
 
 ## Vue API Mode

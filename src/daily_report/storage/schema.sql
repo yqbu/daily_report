@@ -356,3 +356,34 @@ ON browser_history_entries(date, visit_time);
 
 CREATE INDEX IF NOT EXISTS idx_ai_prompt_entries_date_timestamp
 ON ai_prompt_entries(date, timestamp);
+
+CREATE TABLE IF NOT EXISTS runtime_processes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    role TEXT NOT NULL,
+    pid INTEGER NOT NULL,
+    parent_pid INTEGER,
+    process_name TEXT,
+    exe_path TEXT,
+    cmdline TEXT,
+    cwd TEXT,
+    port INTEGER,
+    db_path TEXT,
+    lock_path TEXT,
+    started_by TEXT,
+    status TEXT NOT NULL DEFAULT 'unknown',
+    heartbeat_at TEXT,
+    started_at TEXT,
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(role, pid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_runtime_processes_role
+ON runtime_processes(role);
+
+CREATE INDEX IF NOT EXISTS idx_runtime_processes_pid
+ON runtime_processes(pid);
+
+CREATE INDEX IF NOT EXISTS idx_runtime_processes_status
+ON runtime_processes(status);

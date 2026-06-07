@@ -8,6 +8,7 @@ from daily_report.api.response import ApiError
 from daily_report.service.browser_event_service import BrowserEventService
 from daily_report.service.overview_service import OverviewService
 from daily_report.service.report_service import ReportService
+from daily_report.service.runtime_process_service import RuntimeProcessService
 from daily_report.service.settings_service import SettingsService
 from daily_report.service.timeline_service import TimelineService
 
@@ -30,6 +31,10 @@ def get_settings_service() -> SettingsService:
 
 def get_browser_event_service() -> BrowserEventService:
     return BrowserEventService()
+
+
+def get_runtime_process_service() -> RuntimeProcessService:
+    return RuntimeProcessService()
 
 
 async def verify_token(

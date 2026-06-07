@@ -4,6 +4,7 @@ import AppProfiles from '../pages/AppProfiles.vue'
 
 const DataCenter = () => import('../pages/DataCenter.vue')
 const ReportWorkbench = () => import('../pages/ReportWorkbench.vue')
+const RuntimeCenterPage = () => import('../pages/RuntimeCenter.vue')
 const Settings = () => import('../pages/Settings.vue')
 const TodayOverview = () => import('../pages/TodayOverview.vue')
 
@@ -40,6 +41,14 @@ const router = createRouter({
       component: ReportWorkbench,
       meta: {
         title: '日报工作台'
+      }
+    },
+    {
+      path: '/runtime',
+      name: 'runtime-center',
+      component: RuntimeCenterPage,
+      meta: {
+        title: '运行中心'
       }
     },
     {

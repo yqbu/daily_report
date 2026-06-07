@@ -1,27 +1,21 @@
 <script setup lang="ts">
-import {computed, onBeforeUnmount, onMounted, shallowRef} from 'vue'
-import {RouterLink, useRoute, useRouter} from 'vue-router'
+import { computed, shallowRef } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import {
-  ArrowLeft,
   ArrowRight,
   Calendar,
   Connection,
   Cpu,
   DataAnalysis,
   Document,
-  MagicStick,
-  Link,
   Lock,
+  MagicStick,
   Monitor,
   Search,
   Setting
 } from '@element-plus/icons-vue'
 
-import {callBridge} from '../api/bridge'
 import appIcon from '../assets/icon-64-tb.png'
-
-type CollectorStatus = 'checking' | 'running' | 'stopped'
-type CollectorStatusPayload = Record<string, unknown>
 
 const props = defineProps<{
   expanded: boolean
@@ -34,13 +28,7 @@ const emit = defineEmits<{
 const route = useRoute()
 const router = useRouter()
 const searchKeyword = shallowRef('')
-const collectorStatus = shallowRef<CollectorStatus>('checking')
-const collectorBusy = shallowRef(false)
 const dismissedCollapsedPopoverName = shallowRef('')
-let statusTimer: number | undefined
-let statusRefreshInFlight = false
-
-const STATUS_REFRESH_INTERVAL_MS = 60000
 
 const navItems = [
   {
@@ -72,6 +60,12 @@ const navItems = [
     icon: MagicStick
   },
   {
+    to: '/runtime',
+    name: 'runtime-center',
+    label: '运行中心',
+    icon: Connection
+  },
+  {
     to: '/settings',
     name: 'settings',
     label: '设置',
@@ -87,15 +81,6 @@ const navItems = [
 
 const activeRouteName = computed(() => String(route.name || 'today'))
 const activeSecondaryKey = computed(() => String(route.query.tab || ''))
-const collectorRunning = computed(() => collectorStatus.value === 'running')
-const collectorStatusLabel = computed(() => {
-  if (collectorBusy.value || collectorStatus.value === 'checking') return '状态检查中'
-  return collectorRunning.value ? '采集器运行中' : '采集器未启动'
-})
-const collectorActionTitle = computed(() => {
-  if (collectorBusy.value) return '正在切换采集器状态'
-  return collectorRunning.value ? '停止采集器服务' : '启动采集器服务'
-})
 const normalizedSearch = computed(() => searchKeyword.value.trim().toLowerCase())
 const searchMatches = computed(() => {
   const keyword = normalizedSearch.value
@@ -116,12 +101,12 @@ function openFirstSearchMatch(): void {
   const [firstMatch] = searchMatches.value
   if (!firstMatch) return
 
-  router.push(firstMatch.to)
+  void router.push(firstMatch.to)
   searchKeyword.value = ''
 }
 
 function openSearchMatch(to: string): void {
-  router.push(to)
+  void router.push(to)
   searchKeyword.value = ''
 }
 
@@ -137,157 +122,57 @@ function resetDismissedCollapsedPopover(name: string): void {
     dismissedCollapsedPopoverName.value = ''
   }
 }
-
-async function refreshCollectorStatus(options: { force?: boolean } = {}): Promise<void> {
-  if (statusRefreshInFlight) return
-  if (!options.force && typeof document !== 'undefined' && document.visibilityState === 'hidden') return
-
-  statusRefreshInFlight = true
-  try {
-    const payload = await callBridge<CollectorStatusPayload>('get_collector_status', {})
-    collectorStatus.value = isCollectorRunning(payload) ? 'running' : 'stopped'
-  } catch {
-    collectorStatus.value = 'stopped'
-  } finally {
-    statusRefreshInFlight = false
-  }
-}
-
-async function toggleCollectorService(): Promise<void> {
-  if (collectorBusy.value) return
-
-  collectorBusy.value = true
-  try {
-    const targetRunning = !collectorRunning.value
-    const method = targetRunning ? 'start_collector_service' : 'stop_collector_service'
-    await callBridge(method, {})
-    collectorStatus.value = targetRunning ? 'running' : 'stopped'
-    scheduleStatusRefresh(2500)
-  } finally {
-    collectorBusy.value = false
-  }
-}
-
-function isCollectorRunning(payload: CollectorStatusPayload): boolean {
-  const directStatus = readStatusText(payload)
-  if (directStatus) return isRunningStatusText(directStatus)
-
-  const directFlag = readRunningFlag(payload)
-  if (directFlag !== null) return directFlag
-
-  return isRunningStatusText(JSON.stringify(payload))
-}
-
-function readStatusText(payload: CollectorStatusPayload): string {
-  const keys = ['collector_status', 'status', 'state', 'service_state']
-  for (const key of keys) {
-    const value = payload[key]
-    if (typeof value === 'string' && value.trim()) return value
-  }
-  return ''
-}
-
-function readRunningFlag(payload: CollectorStatusPayload): boolean | null {
-  const keys = ['running', 'is_running', 'active', 'is_active', 'collector_running']
-  for (const key of keys) {
-    const value = payload[key]
-    if (typeof value === 'boolean') return value
-  }
-  return null
-}
-
-function isRunningStatusText(value: string): boolean {
-  const text = value.toLowerCase()
-  if (/(stopped|stop|offline|inactive|not_running|not running|disabled|dead|failed)/.test(text)) {
-    return false
-  }
-  return /(running|started|online|active|healthy|enabled|ok)/.test(text)
-}
-
-function scheduleStatusRefresh(delay = STATUS_REFRESH_INTERVAL_MS): void {
-  if (statusTimer !== undefined) {
-    window.clearTimeout(statusTimer)
-  }
-
-  statusTimer = window.setTimeout(() => {
-    void refreshCollectorStatus().finally(() => scheduleStatusRefresh())
-  }, delay)
-}
-
-function handleVisibilityChange(): void {
-  if (document.visibilityState === 'visible') {
-    void refreshCollectorStatus({force: true})
-  }
-}
-
-onMounted(() => {
-  void refreshCollectorStatus({force: true})
-  scheduleStatusRefresh()
-  document.addEventListener('visibilitychange', handleVisibilityChange)
-})
-
-onBeforeUnmount(() => {
-  if (statusTimer !== undefined) {
-    window.clearTimeout(statusTimer)
-  }
-  document.removeEventListener('visibilitychange', handleVisibilityChange)
-})
 </script>
 
 <template>
   <aside class="sidebar" :class="{ 'sidebar--expanded': props.expanded }">
     <button
-        class="brand"
-        type="button"
-        :title="props.expanded ? '折叠菜单' : '展开菜单'"
-        :aria-label="props.expanded ? '折叠菜单' : '展开菜单'"
-        @click="emit('toggle')"
+      class="brand"
+      type="button"
+      :title="props.expanded ? '收起菜单' : '展开菜单'"
+      :aria-label="props.expanded ? '收起菜单' : '展开菜单'"
+      @click="emit('toggle')"
     >
       <span class="brand-logo-wrap">
-        <img class="brand-logo" :src="appIcon" alt=""/>
+        <img class="brand-logo" :src="appIcon" alt="" />
       </span>
 
       <span class="brand-copy">
         <span class="brand-title">Daily Report</span>
         <span class="brand-subtitle">本地工作日报</span>
       </span>
-
-      <!--      <span class="brand-toggle">-->
-      <!--        <ArrowLeft v-if="props.expanded" class="toggle-icon" />-->
-      <!--        <ArrowRight v-else class="toggle-icon" />-->
-      <!--      </span>-->
     </button>
 
     <div class="search-block">
       <form
-          class="quick-search"
-          role="search"
-          :title="props.expanded ? '搜索功能界面' : '展开搜索'"
-          @submit.prevent="openFirstSearchMatch"
-          @click="handleSearchShellClick"
+        class="quick-search"
+        role="search"
+        :title="props.expanded ? '搜索功能界面' : '展开搜索'"
+        @submit.prevent="openFirstSearchMatch"
+        @click="handleSearchShellClick"
       >
-        <Search class="search-icon"/>
+        <Search class="search-icon" />
         <input
-            v-model="searchKeyword"
-            class="search-input"
-            type="search"
-            placeholder="搜索功能"
-            autocomplete="off"
-            :aria-hidden="!props.expanded"
-            :tabindex="props.expanded ? 0 : -1"
+          v-model="searchKeyword"
+          class="search-input"
+          type="search"
+          placeholder="搜索功能"
+          autocomplete="off"
+          :aria-hidden="!props.expanded"
+          :tabindex="props.expanded ? 0 : -1"
         />
         <span class="search-shortcut">Ctrl K</span>
       </form>
 
       <div v-if="props.expanded && normalizedSearch" class="search-results">
         <button
-            v-for="item in searchMatches"
-            :key="item.name"
-            class="search-result"
-            type="button"
-            @click="openSearchMatch(item.to)"
+          v-for="item in searchMatches"
+          :key="item.name"
+          class="search-result"
+          type="button"
+          @click="openSearchMatch(item.to)"
         >
-          <component :is="item.icon" class="search-result-icon"/>
+          <component :is="item.icon" class="search-result-icon" />
           <span>{{ item.label }}</span>
         </button>
 
@@ -304,12 +189,12 @@ onBeforeUnmount(() => {
         @mouseleave="resetDismissedCollapsedPopover(item.name)"
       >
         <RouterLink
-            class="nav-item"
-            :class="{ 'nav-item--active': activeRouteName === item.name }"
-            :to="item.to"
-            :title="item.label"
+          class="nav-item"
+          :class="{ 'nav-item--active': activeRouteName === item.name }"
+          :to="item.to"
+          :title="item.label"
         >
-          <component :is="item.icon" class="nav-icon"/>
+          <component :is="item.icon" class="nav-icon" />
           <span class="nav-label">{{ item.label }}</span>
           <ArrowRight
             v-if="props.expanded && 'children' in item && item.children"
@@ -328,7 +213,11 @@ onBeforeUnmount(() => {
             v-for="child in item.children"
             :key="child.key"
             class="collapsed-sub-nav-item"
-            :class="{ 'collapsed-sub-nav-item--active': activeRouteName === item.name && (activeSecondaryKey === child.key || (!activeSecondaryKey && child.key === item.children[0].key)) }"
+            :class="{
+              'collapsed-sub-nav-item--active':
+                activeRouteName === item.name &&
+                (activeSecondaryKey === child.key || (!activeSecondaryKey && child.key === item.children[0].key))
+            }"
             :to="child.to"
             @click="dismissCollapsedPopover(item.name)"
           >
@@ -346,7 +235,10 @@ onBeforeUnmount(() => {
             v-for="child in item.children"
             :key="child.key"
             class="sub-nav-item"
-            :class="{ 'sub-nav-item--active': activeSecondaryKey === child.key || (!activeSecondaryKey && child.key === item.children[0].key) }"
+            :class="{
+              'sub-nav-item--active':
+                activeSecondaryKey === child.key || (!activeSecondaryKey && child.key === item.children[0].key)
+            }"
             :to="child.to"
           >
             <component :is="child.icon" class="sub-nav-icon" />
@@ -356,23 +248,6 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </nav>
-
-    <button
-        class="bridge-status"
-        :class="{
-        'bridge-status--online': collectorRunning,
-        'bridge-status--offline': !collectorRunning,
-        'bridge-status--busy': collectorBusy || collectorStatus === 'checking'
-      }"
-        type="button"
-        :title="collectorActionTitle"
-        :aria-label="collectorActionTitle"
-        :disabled="collectorBusy"
-        @click="toggleCollectorService"
-    >
-      <Connection class="bridge-icon"/>
-      <span class="bridge-label">{{ collectorStatusLabel }}</span>
-    </button>
   </aside>
 </template>
 
@@ -380,7 +255,7 @@ onBeforeUnmount(() => {
 .sidebar {
   min-height: 100vh;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 14px;
   padding: 14px;
   border-right: 1px solid #dce3ee;
@@ -390,8 +265,7 @@ onBeforeUnmount(() => {
 
 .brand,
 .quick-search,
-.nav-item,
-.bridge-status {
+.nav-item {
   width: 56px;
   min-width: 0;
   border-radius: 8px;
@@ -400,7 +274,7 @@ onBeforeUnmount(() => {
 .brand {
   height: 56px;
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) 32px;
+  grid-template-columns: 56px minmax(0, 1fr);
   align-items: center;
   gap: 0;
   padding: 0;
@@ -409,11 +283,12 @@ onBeforeUnmount(() => {
   background: transparent;
   cursor: pointer;
   overflow: hidden;
-  transition: width 240ms cubic-bezier(0.22, 1, 0.36, 1),
-  gap 240ms cubic-bezier(0.22, 1, 0.36, 1),
-  background-color 180ms ease,
-  border-color 180ms ease,
-  box-shadow 180ms ease;
+  transition:
+    width 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    gap 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .brand-logo-wrap {
@@ -440,8 +315,9 @@ onBeforeUnmount(() => {
   text-align: left;
   opacity: 0;
   transform: translateX(-6px);
-  transition: opacity 120ms ease,
-  transform 160ms ease;
+  transition:
+    opacity 120ms ease,
+    transform 160ms ease;
 }
 
 .brand-title {
@@ -459,34 +335,8 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.brand-toggle {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border: 1px solid #dce3ee;
-  border-radius: 8px;
-  color: #526179;
-  background: #ffffff;
-  opacity: 0;
-  transform: translateX(-6px);
-  transition: opacity 120ms ease,
-  transform 160ms ease,
-  color 160ms ease,
-  border-color 160ms ease,
-  background-color 160ms ease;
-}
-
-.brand:hover .brand-toggle {
-  color: #2563eb;
-  border-color: #c9dcff;
-  background: #eff6ff;
-}
-
-.toggle-icon,
 .search-icon,
-.nav-icon,
-.bridge-icon {
+.nav-icon {
   width: 20px;
   height: 20px;
   flex: 0 0 auto;
@@ -510,11 +360,12 @@ onBeforeUnmount(() => {
   background: #f8fafc;
   cursor: text;
   overflow: hidden;
-  transition: width 240ms cubic-bezier(0.22, 1, 0.36, 1),
-  gap 240ms cubic-bezier(0.22, 1, 0.36, 1),
-  padding 240ms cubic-bezier(0.22, 1, 0.36, 1),
-  background-color 160ms ease,
-  border-color 160ms ease;
+  transition:
+    width 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    gap 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 160ms ease,
+    border-color 160ms ease;
 }
 
 .quick-search:hover {
@@ -554,8 +405,9 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   opacity: 0;
   transform: translateX(-6px);
-  transition: opacity 120ms ease,
-  transform 160ms ease;
+  transition:
+    opacity 120ms ease,
+    transform 160ms ease;
 }
 
 .search-results {
@@ -619,8 +471,8 @@ onBeforeUnmount(() => {
   gap: 6px;
 }
 
-.nav-item,
-.bridge-status {
+.nav-item {
+  position: relative;
   height: 48px;
   display: grid;
   grid-template-columns: 56px minmax(0, 1fr);
@@ -630,20 +482,16 @@ onBeforeUnmount(() => {
   color: #667085;
   text-decoration: none;
   background: transparent;
-  transition: width 240ms cubic-bezier(0.22, 1, 0.36, 1),
-  background-color 160ms ease,
-  border-color 160ms ease,
-  color 160ms ease,
-  box-shadow 160ms ease;
-}
-
-.nav-item {
-  position: relative;
   overflow: visible;
+  transition:
+    width 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
 }
 
-.nav-icon,
-.bridge-icon {
+.nav-icon {
   justify-self: center;
 }
 
@@ -696,57 +544,9 @@ onBeforeUnmount(() => {
   opacity: 0;
 }
 
-.bridge-status {
-  padding: 0;
-  overflow: hidden;
-  cursor: pointer;
-}
-
-.bridge-label {
-  display: none;
-  min-width: 0;
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 650;
-  white-space: nowrap;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-
-.bridge-status--online {
-  color: #10b981;
-  background: #ecfdf5;
-  border-color: #bbf7d0;
-}
-
-.bridge-status--online .bridge-label {
-  color: #047857;
-}
-
-.bridge-status--offline {
-  color: #98a2b3;
-  background: #f8fafc;
-  border-color: #e4e7ec;
-}
-
-.bridge-status--offline .bridge-label {
-  color: #667085;
-}
-
-.bridge-status--busy {
-  color: #667085;
-  background: #f9fafb;
-  border-color: #e4e7ec;
-}
-
-.bridge-status:disabled {
-  cursor: wait;
-}
-
 .sidebar--expanded .brand,
 .sidebar--expanded .quick-search,
-.sidebar--expanded .nav-item,
-.sidebar--expanded .bridge-status {
+.sidebar--expanded .nav-item {
   width: 100%;
 }
 
@@ -759,10 +559,8 @@ onBeforeUnmount(() => {
 }
 
 .sidebar--expanded .brand-copy,
-.sidebar--expanded .brand-toggle,
 .sidebar--expanded .search-input,
-.sidebar--expanded .search-shortcut,
-.sidebar--expanded .bridge-label {
+.sidebar--expanded .search-shortcut {
   opacity: 1;
   transform: translateX(0);
   pointer-events: auto;
@@ -783,8 +581,7 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 
-.sidebar--expanded .nav-item,
-.sidebar--expanded .bridge-status {
+.sidebar--expanded .nav-item {
   grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;
   justify-items: start;
@@ -1042,14 +839,10 @@ onBeforeUnmount(() => {
   color: #2563eb;
 }
 
-.sidebar--expanded .bridge-label {
-  display: block;
-}
-
 @media (max-width: 820px) {
   .sidebar {
     min-height: auto;
-    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    grid-template-columns: auto auto minmax(0, 1fr);
     grid-template-rows: auto;
     align-items: center;
     padding: 10px 12px;
@@ -1060,8 +853,7 @@ onBeforeUnmount(() => {
 
   .brand,
   .quick-search,
-  .nav-item,
-  .bridge-status {
+  .nav-item {
     width: 46px;
     height: 46px;
   }
@@ -1098,9 +890,7 @@ onBeforeUnmount(() => {
   }
 
   .nav-label,
-  .brand-copy,
-  .brand-toggle,
-  .bridge-label {
+  .brand-copy {
     display: none;
   }
 }

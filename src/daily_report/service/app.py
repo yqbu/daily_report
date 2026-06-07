@@ -12,6 +12,7 @@ from daily_report.storage.database import create_connection, default_db_path, in
 
 from daily_report.service.single_instance import SingleInstanceError, SingleInstanceLock
 from daily_report.service.cleanup_service import cleanup_database, cleanup_logs
+from daily_report.service.runtime_process_service import RuntimeProcessService
 
 from daily_report.collector.app_session_collector import ForegroundCollector
 from daily_report.storage.storage_adapter.app_session_store import RepositoryForegroundSessionStore
@@ -56,6 +57,7 @@ class DailyReportService:
         self.connection_factory = SqliteConnectionFactory(self.db_path)
         self.manager = CollectorManager(self.connection_factory)
         self.settings_provider = RuntimeSettingsProvider()
+        self.runtime_service = RuntimeProcessService(self.db_path)
         # self._connections = []
 
         self.lock_path = self.db_path.parent / 'daily_report_collector.lock'
@@ -169,6 +171,14 @@ class DailyReportService:
         )
         thread.start()
 
+    def start_runtime_heartbeat_worker(self) -> None:
+        thread = threading.Thread(
+            target=self._runtime_heartbeat_loop,
+            name='RuntimeHeartbeatWorker',
+            daemon=True,
+        )
+        thread.start()
+
     def _cleanup_loop(self) -> None:
         while True:
             try:
@@ -178,6 +188,14 @@ class DailyReportService:
 
             # 每 12 小时清理一次
             time.sleep(24 * 60 * 60)
+
+    def _runtime_heartbeat_loop(self) -> None:
+        while True:
+            try:
+                self.runtime_service.update_current_process_heartbeat('collector')
+            except Exception:
+                logger.debug('Failed to update collector runtime heartbeat.', exc_info=True)
+            time.sleep(5)
 
     def _status_json_loop(self) -> None:
         while True:
@@ -213,16 +231,24 @@ class DailyReportService:
                 app_name='daily-report collector',
             ):
                 self.setup_database()
+                self.runtime_service.register_current_process('collector', lock_path=str(self.lock_path))
+                self.start_runtime_heartbeat_worker()
                 self.cleanup_runtime_data()
                 self.start_cleanup_worker()
                 self.start_status_json_worker()
                 self.setup_collectors()
                 self.manager.start_all()
                 self.manager.wait_forever()
+                self.runtime_service.mark_current_process_exited()
 
         except SingleInstanceError as exc:
             logger.warning('%s', exc)
             return
+        except Exception as exc:
+            try:
+                self.runtime_service.update_current_process_heartbeat('collector', last_error=str(exc))
+            finally:
+                raise
 
     # def close(self) -> None:
     #     for conn in self._connections:
