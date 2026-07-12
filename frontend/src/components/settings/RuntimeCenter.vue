@@ -15,6 +15,7 @@ import {
 
 import {
   cleanupOrphans,
+  getRuntimeProcesses,
   killProcess,
   repairRuntime,
   restartCollector,
@@ -32,20 +33,25 @@ import {
 const emit = defineEmits<{
   refreshed: [summary: RuntimeSummary]
   busy: [name: string | null]
+  loading: [active: boolean, text: string]
   cleanupPreviewChanged: [count: number]
 }>()
 
 const summary = shallowRef<RuntimeSummary | null>(null)
 const diagnostics = shallowRef<RuntimeDiagnosticItem[]>([])
 const cleanupPreview = shallowRef<RuntimeProcessInfo[]>([])
-const loading = shallowRef(false)
+const fullProcesses = shallowRef<RuntimeProcessInfo[] | null>(null)
 const actionBusy = shallowRef<string | null>(null)
+const showDevelopmentProcesses = shallowRef(false)
 const lastActionMessage = shallowRef('')
 const repairResultText = shallowRef('')
 const cleanupResultText = shallowRef('')
 
 const collectorRunning = computed(() => summary.value?.collector_status === 'running')
 const processes = computed(() => summary.value?.processes ?? [])
+const developmentProcesses = computed(() => (fullProcesses.value ?? []).filter((process) => process.role === 'node' || process.role === 'tauri'))
+const businessProcesses = computed(() => processes.value.filter((process) => process.role !== 'node' && process.role !== 'tauri'))
+const visibleProcesses = computed(() => showDevelopmentProcesses.value && fullProcesses.value ? fullProcesses.value : businessProcesses.value)
 const components = computed(() => summary.value?.components ?? [])
 const visibleDiagnostics = computed(() => (diagnostics.value.length > 0 ? diagnostics.value : summary.value?.diagnostics ?? []))
 const cleanupPreviewCount = computed(() => cleanupPreview.value.length)
@@ -92,8 +98,8 @@ const statusCards = computed(() => {
   ]
 })
 
-async function refreshSummary(): Promise<void> {
-  loading.value = true
+async function refreshSummary(text = '正在刷新运行状态…', manageLoading = true): Promise<void> {
+  if (manageLoading) emit('loading', true, text)
   try {
     const data = await getRuntimeSummary()
     summary.value = data
@@ -101,13 +107,35 @@ async function refreshSummary(): Promise<void> {
     lastActionMessage.value = `状态已刷新：${formatDateTime(data.updated_at)}`
     emit('refreshed', data)
   } finally {
-    loading.value = false
+    if (manageLoading) emit('loading', false, '')
   }
+}
+
+async function toggleDevelopmentProcesses(): Promise<void> {
+  if (showDevelopmentProcesses.value) {
+    showDevelopmentProcesses.value = false
+    return
+  }
+  if (!fullProcesses.value) {
+    setActionBusy('development-processes')
+    emit('loading', true, '正在扫描系统进程…')
+    try {
+      fullProcesses.value = await getRuntimeProcesses(true)
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : String(error))
+      return
+    } finally {
+      emit('loading', false, '')
+      setActionBusy(null)
+    }
+  }
+  showDevelopmentProcesses.value = true
 }
 
 async function startCollectorAction(): Promise<void> {
   await runAction('start', async () => {
     const result = await startCollector()
+    if (result.already_starting === true) return result
     const started = result.started !== false
     if (!started) {
       const tail = typeof result.log_tail === 'string' && result.log_tail.trim() ? `\n${result.log_tail.trim()}` : ''
@@ -137,7 +165,7 @@ async function handleDoctor(): Promise<void> {
   await runAction('doctor', async () => {
     diagnostics.value = await runRuntimeDoctor()
     return diagnostics.value
-  }, '诊断已完成')
+  }, '诊断已完成', { refresh: false, loadingText: '正在扫描系统进程…' })
 }
 
 async function handleRepair(): Promise<void> {
@@ -155,7 +183,10 @@ async function handleCleanupPreview(): Promise<void> {
     cleanupResultText.value = describeCleanupResult(result)
     emit('cleanupPreviewChanged', cleanupPreview.value.length)
     return result
-  }, cleanupPreview.value.length > 0 ? '已生成清理预览' : '没有发现可清理的孤儿进程')
+  }, cleanupPreview.value.length > 0 ? '已生成清理预览' : '没有发现可清理的孤儿进程', {
+    refresh: false,
+    loadingText: '正在扫描系统进程…'
+  })
 }
 
 async function handleCleanupExecute(): Promise<void> {
@@ -212,14 +243,30 @@ async function handleKill(process: RuntimeProcessInfo): Promise<void> {
   await runAction(`kill-${process.pid}`, () => killProcess(process.pid), `已强制结束 PID ${process.pid}`)
 }
 
-async function runAction<T>(name: string, action: () => Promise<T>, message: string): Promise<T | null> {
+interface RunActionOptions {
+  refresh?: boolean
+  loadingText?: string
+}
+
+async function runAction<T>(
+  name: string,
+  action: () => Promise<T>,
+  message: string,
+  options: RunActionOptions = {}
+): Promise<T | null> {
   if (actionBusy.value) return null
   setActionBusy(name)
+  emit('loading', true, options.loadingText ?? '正在执行运行操作…')
   try {
     const result = await action()
     ElMessage.success(message)
     lastActionMessage.value = message
-    await refreshSummary()
+    if (options.refresh !== false) {
+      fullProcesses.value = null
+      showDevelopmentProcesses.value = false
+      emit('loading', true, '正在同步最新状态…')
+      await refreshSummary('正在同步最新状态…', false)
+    }
     return result
   } catch (error) {
     const text = error instanceof Error ? error.message : String(error)
@@ -227,6 +274,7 @@ async function runAction<T>(name: string, action: () => Promise<T>, message: str
     lastActionMessage.value = text
     return null
   } finally {
+    emit('loading', false, '')
     setActionBusy(null)
   }
 }
@@ -240,6 +288,8 @@ function canManageProcess(process: RuntimeProcessInfo): boolean {
   return (
     process.is_current_project &&
     process.pid !== summary.value?.api_pid &&
+    process.role !== 'node' &&
+    process.role !== 'tauri' &&
     process.role !== 'unknown_daily_report' &&
     process.role !== 'runtime_cli'
   )
@@ -397,7 +447,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div v-loading="loading" class="runtime-center">
+  <div class="runtime-center">
     <ElCard shadow="never" class="runtime-card">
       <template #header>
         <div class="card-heading">
@@ -452,12 +502,24 @@ onMounted(() => {
         <div class="card-heading">
           <div>
             <h2>运行进程</h2>
-            <p>{{ processes.length }} 个相关进程</p>
+            <p>
+              {{ businessProcesses.length }} 个业务进程
+              <span v-if="fullProcesses">，另有 {{ developmentProcesses.length }} 个开发工具进程</span>
+              <span v-else>，开发进程按需加载</span>
+            </p>
           </div>
+          <ElButton
+            size="small"
+            plain
+            :loading="actionBusy === 'development-processes'"
+            @click="toggleDevelopmentProcesses"
+          >
+            {{ showDevelopmentProcesses ? '隐藏开发进程' : fullProcesses ? `显示开发进程 (${developmentProcesses.length})` : '显示开发进程' }}
+          </ElButton>
         </div>
       </template>
 
-      <ElTable v-if="processes.length > 0" :data="processes" class="runtime-table" border>
+      <ElTable v-if="visibleProcesses.length > 0" :data="visibleProcesses" class="runtime-table" border>
         <ElTableColumn label="角色" min-width="120">
           <template #default="{ row }">
             {{ roleText(row.role) }}
@@ -610,6 +672,8 @@ onMounted(() => {
 
 <style scoped>
 .runtime-center {
+  position: relative;
+  isolation: isolate;
   min-height: 100%;
   display: flex;
   flex-direction: column;

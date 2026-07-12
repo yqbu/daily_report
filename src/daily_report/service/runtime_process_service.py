@@ -21,6 +21,7 @@ from daily_report.config.paths import get_runtime_paths
 from daily_report.storage.database import create_connection, default_db_path, init_database
 from daily_report.storage.repositories.collector_state_repository import CollectorStateRepository
 from daily_report.storage.repositories.runtime_process_repository import RuntimeProcessRepository
+from daily_report.service.single_instance import SingleInstanceError, SingleInstanceLock
 
 logger = logging.getLogger(__name__)
 
@@ -113,17 +114,24 @@ class RuntimeProcessService:
         self.db_path = Path(db_path or default_db_path()).resolve()
         self.data_dir = self.db_path.parent
         self.lock_path = self.data_dir / 'daily_report_collector.lock'
+        self.start_lock_path = self.data_dir / 'daily_report_collector_start.lock'
         self.status_json_path = paths.status_json_path
         self._ensure_database()
 
     def get_summary(self) -> RuntimeSummary:
-        processes = self.list_processes()
+        processes = self.list_registered_processes()
         api = self.check_api_health(processes=processes)
         collector = self.check_collector_health(processes=processes)
         database = self.check_database_health(lightweight=True)
         yasb = self.check_yasb_status(processes=processes)
-        components = self._list_component_health()
-        diagnostics = self.run_doctor(processes=processes, include_database=False)
+        components = self._list_component_health(collector_running=collector.get('status') == 'running')
+        diagnostics = self._diagnostics_from_health(
+            processes,
+            api=api,
+            collector=collector,
+            yasb=yasb,
+            include_database=False,
+        )
         duplicate_count = sum(1 for item in processes if item.is_duplicate)
         orphan_count = sum(1 for item in processes if item.is_orphan)
         return RuntimeSummary(
@@ -154,17 +162,74 @@ class RuntimeProcessService:
         except Exception:
             logger.debug('Failed to cleanup stale runtime registry records.', exc_info=True)
 
-        duplicate_roles = {'api', 'collector', 'gui', 'tauri', 'node'}
-        role_keys: dict[str, set[str]] = {}
-        for process in processes:
-            if process.role in duplicate_roles:
-                role_keys.setdefault(process.role, set()).add(_logical_process_key(process))
-        primary_by_key = _primary_process_by_logical_key(processes)
+        return self._annotate_processes(processes)
+
+    def list_registered_processes(self) -> list[RuntimeProcessInfo]:
+        with self._connect() as conn:
+            repository = RuntimeProcessRepository(conn)
+            rows = repository.list_active()
+
+        items: list[RuntimeProcessInfo] = []
+        existing_pids: set[int] = set()
+        for row in rows:
+            pid = int(row['pid'])
+            if not self._registered_process_is_current(row):
+                continue
+            existing_pids.add(pid)
+            cmdline = _json_string_list(row.get('cmdline'))
+            items.append(
+                RuntimeProcessInfo(
+                    pid=pid,
+                    parent_pid=int(row['parent_pid']) if row.get('parent_pid') else None,
+                    role=str(row.get('role') or 'unknown_daily_report'),
+                    process_name=_string_or_none(row.get('process_name')),
+                    exe_path=_string_or_none(row.get('exe_path')),
+                    cmdline=cmdline,
+                    cmdline_preview=_preview_cmdline(cmdline),
+                    cwd=_string_or_none(row.get('cwd')),
+                    username=None,
+                    started_at=_string_or_none(row.get('started_at')),
+                    cpu_percent=None,
+                    memory_mb=None,
+                    port=int(row['port']) if row.get('port') is not None else None,
+                    status=str(row.get('status') or 'running'),
+                    is_current_project=True,
+                    is_registered=True,
+                    is_orphan=False,
+                    is_duplicate=False,
+                    risk_level='safe',
+                    reason='registered in runtime_processes',
+                )
+            )
+
+        try:
+            with self._connect() as conn:
+                RuntimeProcessRepository(conn).cleanup_stale_records(existing_pids)
+        except Exception:
+            logger.debug('Failed to cleanup stale runtime registry records.', exc_info=True)
+        return self._annotate_processes(items)
+
+    def _registered_process_is_current(self, row: dict[str, Any]) -> bool:
+        pid = int(row['pid'])
+        try:
+            return self._process_started_at_matches(psutil.Process(pid), row.get('started_at'))
+        except (psutil.Error, OSError, TypeError, ValueError):
+            return False
+
+    @staticmethod
+    def _process_started_at_matches(process: psutil.Process, started_at: Any) -> bool:
+        registered_second = int(datetime.fromisoformat(str(started_at)).timestamp())
+        live_second = int(process.create_time())
+        return live_second == registered_second
+
+    def _annotate_processes(self, processes: list[RuntimeProcessInfo]) -> list[RuntimeProcessInfo]:
+        process_keys = _logical_process_keys(processes)
+        primary_by_key = _primary_process_by_logical_key(processes, process_keys)
+        duplicate_pids = _duplicate_business_instance_pids(processes, process_keys, primary_by_key)
         parent_pids = {process.pid for process in processes}
         updated: list[RuntimeProcessInfo] = []
         for process in processes:
-            process_key = _logical_process_key(process)
-            is_duplicate = len(role_keys.get(process.role, set())) > 1 and primary_by_key.get(process_key) == process.pid
+            is_duplicate = process.pid in duplicate_pids
             is_orphan = self._is_orphan(process, parent_pids)
             risk_level = 'safe'
             reason = process.reason
@@ -191,14 +256,24 @@ class RuntimeProcessService:
         registered = self._registered_pids()
         ports_by_pid = self._ports_by_pid()
         items: list[RuntimeProcessInfo] = []
-        for proc in psutil.process_iter(['pid', 'ppid', 'name', 'exe', 'cmdline', 'cwd', 'username', 'create_time', 'status']):
+        for proc in psutil.process_iter(['pid', 'ppid', 'name', 'cmdline']):
             try:
-                info = proc.info
+                basic_info = proc.info
+                pid = int(basic_info.get('pid') or 0)
+                cmdline = [str(part) for part in (basic_info.get('cmdline') or [])]
+                process_name = _string_or_none(basic_info.get('name'))
+                if not _is_runtime_process_candidate(
+                    pid=pid,
+                    process_name=process_name,
+                    cmdline=cmdline,
+                    registered_pids=registered,
+                ):
+                    continue
+                details = proc.as_dict(attrs=['exe', 'cwd', 'username', 'create_time', 'status'])
+                info = {**basic_info, **details}
                 pid = int(info.get('pid') or 0)
-                cmdline = [str(part) for part in (info.get('cmdline') or [])]
                 cwd = _string_or_none(info.get('cwd'))
                 exe_path = _string_or_none(info.get('exe'))
-                process_name = _string_or_none(info.get('name'))
                 is_current, reason = self.is_current_project_process(
                     cmdline=cmdline,
                     cwd=cwd,
@@ -258,16 +333,22 @@ class RuntimeProcessService:
     def detect_duplicate_processes(self) -> list[RuntimeProcessInfo]:
         return [item for item in self.list_processes() if item.is_duplicate]
 
-    def check_api_health(self, processes: list[RuntimeProcessInfo] | None = None) -> dict[str, Any]:
-        api_processes = [item for item in (processes or self.list_processes()) if item.role == 'api']
+    def check_api_health(
+        self,
+        processes: list[RuntimeProcessInfo] | None = None,
+        *,
+        inspect_port_owner: bool = False,
+    ) -> dict[str, Any]:
+        source = processes if processes is not None else self.list_registered_processes()
+        api_processes = [item for item in source if item.role == 'api']
         candidates = self._api_port_candidates(api_processes)
         if not candidates:
-            candidates = [(HEALTH_PORT, self._port_owner_pid(HEALTH_PORT))]
+            candidates = [(HEALTH_PORT, None)]
 
         last_error = None
         occupied_candidate: tuple[int, int | None] | None = None
         for port, hinted_pid in candidates:
-            owner_pid = self._port_owner_pid(port) or hinted_pid
+            owner_pid = self._port_owner_pid(port) or hinted_pid if inspect_port_owner else hinted_pid
             if owner_pid:
                 occupied_candidate = (port, owner_pid)
             try:
@@ -302,7 +383,8 @@ class RuntimeProcessService:
         }
 
     def check_collector_health(self, processes: list[RuntimeProcessInfo] | None = None) -> dict[str, Any]:
-        collector_processes = [item for item in (processes or self.list_processes()) if item.role == 'collector']
+        source = processes if processes is not None else self.list_registered_processes()
+        collector_processes = [item for item in source if item.role == 'collector']
         states = self._collector_states()
         running_state = any(str(state.get('status')) == 'running' for state in states)
         stale_states = [state for state in states if str(state.get('status')) == 'running'] if running_state and not collector_processes else []
@@ -389,11 +471,28 @@ class RuntimeProcessService:
         *,
         include_database: bool = True,
     ) -> list[RuntimeDiagnosticItem]:
-        processes = processes or self.list_processes()
-        items: list[RuntimeDiagnosticItem] = []
-        api = self.check_api_health(processes=processes)
+        processes = processes if processes is not None else self.list_processes()
+        api = self.check_api_health(processes=processes, inspect_port_owner=True)
         collector = self.check_collector_health(processes=processes)
         yasb = self.check_yasb_status(processes=processes)
+        return self._diagnostics_from_health(
+            processes,
+            api=api,
+            collector=collector,
+            yasb=yasb,
+            include_database=include_database,
+        )
+
+    def _diagnostics_from_health(
+        self,
+        processes: list[RuntimeProcessInfo],
+        *,
+        api: dict[str, Any],
+        collector: dict[str, Any],
+        yasb: dict[str, Any],
+        include_database: bool,
+    ) -> list[RuntimeDiagnosticItem]:
+        items: list[RuntimeDiagnosticItem] = []
         if api['status'] != 'running':
             items.append(RuntimeDiagnosticItem('api_not_running', 'warning', 'API is not healthy', str(api.get('error') or 'API health endpoint is unavailable.'), False, None))
         if collector['status'] != 'running':
@@ -444,7 +543,7 @@ class RuntimeProcessService:
 
     def repair_runtime_state(self) -> dict[str, Any]:
         actions: list[dict[str, Any]] = []
-        processes = self.list_processes()
+        processes = self.list_registered_processes()
         existing_pids = {proc.pid for proc in processes}
         with self._connect() as conn:
             stale = RuntimeProcessRepository(conn).cleanup_stale_records(existing_pids)
@@ -463,6 +562,13 @@ class RuntimeProcessService:
         return {'ok': True, 'actions': actions}
 
     def start_collector_if_not_running(self) -> dict[str, Any]:
+        try:
+            with self._collector_start_guard():
+                return self._start_collector_with_guard()
+        except SingleInstanceError:
+            return {'started': False, 'already_starting': True, 'status': 'starting'}
+
+    def _start_collector_with_guard(self) -> dict[str, Any]:
         status = self.check_collector_health()
         if status.get('status') == 'running':
             return {'already_running': True, **status}
@@ -489,25 +595,83 @@ class RuntimeProcessService:
             )
         with log_path.open('ab') as log_file:
             process = subprocess.Popen(command, stdout=log_file, stderr=log_file, **kwargs)
-        time.sleep(1.5)
-        exit_code = process.poll()
-        if exit_code is not None:
-            return {
-                'started': False,
-                'status': 'error',
-                'pid': process.pid,
-                'exit_code': exit_code,
-                'command': command,
-                'log_path': str(log_path),
-                'log_tail': _tail_text(log_path),
-            }
-        return {'started': True, 'status': 'running', 'pid': process.pid, 'command': command, 'log_path': str(log_path)}
+        startup = self._wait_for_collector_start(process)
+        result = {**startup, 'command': command, 'log_path': str(log_path)}
+        if startup.get('started') is False:
+            result['log_tail'] = _tail_text(log_path)
+        return result
+
+    def _wait_for_collector_start(self, process, *, timeout: float = 8) -> dict[str, Any]:
+        deadline = time.monotonic() + timeout
+        while True:
+            status = self.check_collector_health()
+            if status.get('status') == 'running':
+                return {
+                    'started': True,
+                    'status': 'running',
+                    'pid': status.get('pid') or process.pid,
+                    'launcher_pid': process.pid,
+                }
+            exit_code = process.poll()
+            if exit_code is not None:
+                return {
+                    'started': False,
+                    'status': 'error',
+                    'pid': process.pid,
+                    'exit_code': exit_code,
+                }
+            if time.monotonic() >= deadline:
+                self._terminate_launcher_process(process)
+                return {
+                    'started': False,
+                    'status': 'error',
+                    'pid': process.pid,
+                    'exit_code': None,
+                    'error': 'collector startup timed out before health was confirmed',
+                }
+            time.sleep(0.2)
+
+    @staticmethod
+    def _terminate_launcher_process(process) -> None:
+        try:
+            process.terminate()
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=2)
+        except OSError:
+            return
+
+    @contextmanager
+    def _collector_start_guard(self):
+        if os.name != 'nt':
+            with self._posix_collector_start_guard():
+                yield
+            return
+        with SingleInstanceLock(self.start_lock_path, app_name='daily-report-collector-start'):
+            yield
+
+    @contextmanager
+    def _posix_collector_start_guard(self):
+        import fcntl
+
+        self.start_lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.start_lock_path.open('a+b') as lock_file:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except (BlockingIOError, OSError) as exc:
+                raise SingleInstanceError('collector start is already in progress') from exc
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
     def stop_collector_gracefully(self) -> dict[str, Any]:
-        collectors = [item for item in self.list_processes() if item.role == 'collector']
+        processes = self.list_registered_processes()
+        collectors = [item for item in processes if item.role == 'collector']
         if not collectors:
             return {'ok': True, 'message': 'collector is not running', 'stopped': []}
-        stopped = [self.terminate_process(item.pid) for item in collectors]
+        stopped = [self._stop_process(item.pid, force=False, known_processes=processes) for item in collectors]
         return {'ok': True, 'stopped': stopped}
 
     def restart_collector(self) -> dict[str, Any]:
@@ -591,9 +755,19 @@ class RuntimeProcessService:
             return 'yasb_script'
         return 'unknown_daily_report'
 
-    def _stop_process(self, pid: int, *, force: bool) -> dict[str, Any]:
-        current = {item.pid: item for item in self.list_processes()}
+    def _stop_process(
+        self,
+        pid: int,
+        *,
+        force: bool,
+        known_processes: list[RuntimeProcessInfo] | None = None,
+    ) -> dict[str, Any]:
+        processes = known_processes if known_processes is not None else self.list_registered_processes()
+        current = {item.pid: item for item in processes}
         info = current.get(int(pid))
+        if info is None and known_processes is None:
+            current = {item.pid: item for item in self.list_processes()}
+            info = current.get(int(pid))
         if info is None or not info.is_current_project:
             raise RuntimeError(f'PID {pid} is not a current Daily Report project process')
         if info.role in {'unknown_daily_report', 'runtime_cli'}:
@@ -601,6 +775,12 @@ class RuntimeProcessService:
         if int(pid) == os.getpid():
             raise RuntimeError('Refusing to stop the current API/runtime process')
         proc = psutil.Process(int(pid))
+        try:
+            identity_matches = self._process_started_at_matches(proc, info.started_at)
+        except (psutil.Error, OSError, TypeError, ValueError):
+            identity_matches = False
+        if not identity_matches:
+            raise RuntimeError(f'PID {pid} process identity changed before it could be managed')
         action = 'kill' if force else 'terminate'
         if force:
             proc.kill()
@@ -642,10 +822,6 @@ class RuntimeProcessService:
                 if port and port not in seen:
                     candidates.append((port, process.pid))
                     seen.add(port)
-        if HEALTH_PORT not in seen:
-            owner = self._port_owner_pid(HEALTH_PORT)
-            if owner:
-                candidates.append((HEALTH_PORT, owner))
         return candidates
 
     def _port_owner_pid(self, port: int) -> int | None:
@@ -665,16 +841,18 @@ class RuntimeProcessService:
             logger.debug('Failed to read collector states.', exc_info=True)
             return []
 
-    def _list_component_health(self) -> list[RuntimeComponentHealth]:
+    def _list_component_health(self, *, collector_running: bool) -> list[RuntimeComponentHealth]:
         by_name = {str(row.get('collector_name')): row for row in self._collector_states()}
         components: list[RuntimeComponentHealth] = []
         for name in COLLECTOR_COMPONENTS:
             row = by_name.get(name)
+            stored_status = str(row.get('status') if row else 'unknown')
+            effective_status = 'stopped' if stored_status == 'running' and not collector_running else stored_status
             components.append(
                 RuntimeComponentHealth(
                     name=name,
                     display_name=name.replace('_', ' ').title(),
-                    status=str(row.get('status') if row else 'unknown'),
+                    status=effective_status,
                     enabled=bool(row.get('enabled', True)) if row else False,
                     last_success_at=_string_or_none(row.get('last_success_at')) if row else None,
                     last_error_at=_string_or_none(row.get('last_error_at')) if row else None,
@@ -784,19 +962,64 @@ def _preview_cmdline(cmdline: list[str]) -> str:
     return text if len(text) <= 220 else f'{text[:217]}...'
 
 
-def _logical_process_key(process: RuntimeProcessInfo) -> str:
-    if process.role in {'api', 'collector'}:
-        cmdline_port = _cmdline_option_int(process.cmdline, '--port')
-        if cmdline_port:
-            return f'{process.role}:port:{cmdline_port}'
-        return f'{process.role}:cmd:{process.cmdline_preview}'
-    return f'{process.role}:pid:{process.pid}'
+def _json_string_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if not isinstance(value, str) or not value.strip():
+        return []
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+    return [str(item) for item in decoded] if isinstance(decoded, list) else []
 
 
-def _primary_process_by_logical_key(processes: list[RuntimeProcessInfo]) -> dict[str, int]:
+def _logical_process_keys(processes: list[RuntimeProcessInfo]) -> dict[int, str]:
+    by_pid = {process.pid: process for process in processes}
+    root_by_pid = {process.pid: _same_role_root_pid(process, by_pid) for process in processes}
+    members_by_root: dict[int, list[RuntimeProcessInfo]] = {}
+    for process in processes:
+        members_by_root.setdefault(root_by_pid[process.pid], []).append(process)
+
+    keys: dict[int, str] = {}
+    for process in processes:
+        root_pid = root_by_pid[process.pid]
+        if process.role == 'api':
+            ports = {
+                port
+                for member in members_by_root[root_pid]
+                for port in (member.port, _cmdline_option_int(member.cmdline, '--port'))
+                if port is not None
+            }
+            if len(ports) == 1:
+                keys[process.pid] = f'api:root:{root_pid}:port:{next(iter(ports))}'
+                continue
+        if process.role in {'api', 'collector'}:
+            keys[process.pid] = f'{process.role}:root:{root_pid}'
+        else:
+            keys[process.pid] = f'{process.role}:pid:{process.pid}'
+    return keys
+
+
+def _same_role_root_pid(process: RuntimeProcessInfo, by_pid: dict[int, RuntimeProcessInfo]) -> int:
+    root = process
+    visited = {process.pid}
+    while root.parent_pid in by_pid and root.parent_pid not in visited:
+        parent = by_pid[root.parent_pid]
+        if parent.role != process.role:
+            break
+        visited.add(parent.pid)
+        root = parent
+    return root.pid
+
+
+def _primary_process_by_logical_key(
+    processes: list[RuntimeProcessInfo],
+    process_keys: dict[int, str],
+) -> dict[str, int]:
     grouped: dict[str, list[RuntimeProcessInfo]] = {}
     for process in processes:
-        grouped.setdefault(_logical_process_key(process), []).append(process)
+        grouped.setdefault(process_keys[process.pid], []).append(process)
     primary: dict[str, int] = {}
     for key, items in grouped.items():
         winner = max(
@@ -812,6 +1035,26 @@ def _primary_process_by_logical_key(processes: list[RuntimeProcessInfo]) -> dict
     return primary
 
 
+def _duplicate_business_instance_pids(
+    processes: list[RuntimeProcessInfo],
+    process_keys: dict[int, str],
+    primary_by_key: dict[str, int],
+) -> set[int]:
+    representatives_by_role: dict[str, list[RuntimeProcessInfo]] = {}
+    for process in processes:
+        if process.role not in {'api', 'collector'}:
+            continue
+        process_key = process_keys[process.pid]
+        if primary_by_key.get(process_key) == process.pid:
+            representatives_by_role.setdefault(process.role, []).append(process)
+
+    duplicate_pids: set[int] = set()
+    for representatives in representatives_by_role.values():
+        ordered = sorted(representatives, key=lambda item: (item.started_at or '9999', item.pid))
+        duplicate_pids.update(item.pid for item in ordered[1:])
+    return duplicate_pids
+
+
 def _has_project_runtime_marker(*, cmdline: list[str], cwd: str) -> bool:
     joined = ' '.join(cmdline).replace('\\', '/').lower()
     tokens = {_token_name(part) for part in cmdline}
@@ -823,6 +1066,20 @@ def _has_project_runtime_marker(*, cmdline: list[str], cwd: str) -> bool:
     if 'daily_report.main' in joined or _has_token(cmdline, {'daily-report', 'daily-report.exe'}):
         return True
     return False
+
+
+def _is_runtime_process_candidate(
+    *,
+    pid: int,
+    process_name: str | None,
+    cmdline: list[str],
+    registered_pids: set[int],
+) -> bool:
+    if pid in registered_pids:
+        return True
+    joined = f'{process_name or ""} {" ".join(cmdline)}'.replace('\\', '/').lower()
+    markers = ('daily_report', 'daily-report', 'tauri', 'src-tauri', 'vite', 'npm', 'cargo', 'cross-env')
+    return any(marker in joined for marker in markers)
 
 
 def _has_token(cmdline: list[str], values: set[str]) -> bool:

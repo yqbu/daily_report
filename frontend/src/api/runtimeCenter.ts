@@ -79,8 +79,8 @@ export async function getRuntimeSummary(): Promise<RuntimeSummary> {
   return apiGet<RuntimeSummary>('/api/runtime/summary')
 }
 
-export async function getRuntimeProcesses(): Promise<RuntimeProcessInfo[]> {
-  return apiGet<RuntimeProcessInfo[]>('/api/runtime/processes')
+export async function getRuntimeProcesses(full = false): Promise<RuntimeProcessInfo[]> {
+  return apiGet<RuntimeProcessInfo[]>(`/api/runtime/processes?full=${String(full)}`)
 }
 
 export async function getRuntimeHealth(): Promise<Record<string, unknown>> {

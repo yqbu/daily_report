@@ -4,8 +4,11 @@
   "version": "0.1.0",
   "identifier": "com.yqbu.daily-report",
   "build": {
-    "beforeDevCommand": "npm run frontend:dev",
-    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": {
+      "script": "node node_modules/vite/bin/vite.js frontend --host 127.0.0.1",
+      "wait": false
+    },
+    "devUrl": "http://127.0.0.1:5173",
     "beforeBuildCommand": "npm run frontend:build",
     "frontendDist": "../frontend/dist"
   },

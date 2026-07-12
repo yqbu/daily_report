@@ -18,8 +18,6 @@ build/
 dist/
 *.egg-info/
 node_modules/
-frontend/node_modules/
-frontend/dist/
 frontend/vite-dev*.log
 src-tauri/target/
 
@@ -44,3 +42,4 @@ output/
 .env
 .codex
 .codegraph
+.planning/

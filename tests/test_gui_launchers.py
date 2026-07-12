@@ -9,7 +9,6 @@ from daily_report.main import build_parser
 
 def make_tauri_project(root: Path) -> None:
     (root / "src-tauri").mkdir()
-    (root / "frontend" / "node_modules").mkdir(parents=True)
     (root / "node_modules").mkdir()
     (root / "package.json").write_text("{}", encoding="utf-8")
 

@@ -3,16 +3,16 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "workspaces": [
+    "frontend"
+  ],
   "scripts": {
-    "frontend:dev": "cd frontend && npm run dev",
-    "frontend:build": "cd frontend && npm run build",
+    "frontend:dev": "npm --workspace daily-report-web-ui run dev",
+    "frontend:build": "npm --workspace daily-report-web-ui run build",
     "tauri:dev": "tauri dev",
     "tauri:dev:sidecar": "cross-env DAILY_REPORT_TAURI_START_API=1 tauri dev",
     "tauri:build": "tauri build",
     "gui": "npm run tauri:dev:sidecar"
-  },
-  "dependencies": {
-    "@tauri-apps/api": "^2.0.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",

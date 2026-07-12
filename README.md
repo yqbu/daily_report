@@ -14,6 +14,7 @@ chat model.
 
 Tauri v2 is the only desktop shell. Vue talks to the local Python FastAPI
 sidecar over HTTP, using the runtime URL and bearer token supplied by Tauri.
+There is no PySide6 or QWebChannel compatibility layer.
 Python is not bundled yet, so development still depends on the local source
 checkout and Python environment.
 
@@ -194,8 +195,7 @@ Browser-only development uses the same HTTP client with a manually started API:
 
 ```powershell
 daily-report api --host 127.0.0.1 --port 8765
-cd frontend
-npm run dev
+npm run frontend:dev
 ```
 
 Inside Tauri, runtime configuration takes precedence over these fallback values.
@@ -280,11 +280,18 @@ The third and fourth migration stages add a Tauri v2 desktop shell for the
 existing Vue frontend. Python is still run from the development environment and
 is not bundled into Tauri yet.
 
-Install the root JavaScript dependencies once before using the Tauri scripts:
+Install the root JavaScript dependencies once before using the Tauri scripts.
+The root package is an npm workspace and installs the `frontend` package in
+the same operation:
 
 ```powershell
 npm install
 ```
+
+The repository keeps one root `package-lock.json` and uses one root install
+command. npm may create a workspace-local `frontend/node_modules` for nested
+versions or build caches; it is still managed by the root workspace. Do not run
+a separate install inside `frontend`.
 
 Recommended script:
 

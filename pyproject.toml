@@ -62,8 +62,6 @@ daily_report = ["storage/*.sql"]
     "edge_extension/*.json",
     "edge_extension/*.md",
 ]
-"share/daily-report/frontend/dist" = ["frontend/dist/index.html"]
-"share/daily-report/frontend/dist/assets" = ["frontend/dist/assets/*"]
 "share/daily-report/scripts" = ["scripts/*.cmd", "scripts/*.ps1"]
 
 [tool.ruff]
@@ -80,8 +78,6 @@ exclude = [
     "build",
     "data",
     "dist",
-    "frontend/dist",
-    "frontend/node_modules",
     "logs",
     "output",
     "tmp_pytest",

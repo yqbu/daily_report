@@ -7,7 +7,7 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             commands::get_runtime_config,
@@ -26,8 +26,15 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("failed to run Daily Report Tauri app");
+        .build(tauri::generate_context!())
+        .expect("failed to build Daily Report Tauri app");
+
+    app.run(|app_handle, event| {
+        if matches!(event, tauri::RunEvent::Exit) {
+            let state = app_handle.state::<AppState>();
+            let _ = sidecar::stop_python_api(&state);
+        }
+    });
 }
 
 fn main() {

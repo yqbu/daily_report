@@ -1,9 +1,24 @@
 use std::env;
 use std::io::{Read, Write};
+#[cfg(windows)]
+use std::mem::{size_of, zeroed};
 use std::net::{TcpListener, TcpStream};
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
+#[cfg(windows)]
+use std::ptr::null;
 use std::time::{Duration, Instant};
+
+#[cfg(windows)]
+use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+#[cfg(windows)]
+use windows_sys::Win32::System::JobObjects::{
+    AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+    SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+};
 
 use crate::runtime::{AppState, HealthCheckResult, StopResult};
 
@@ -33,9 +48,19 @@ pub fn start_python_api(state: &AppState) -> Result<(), String> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
 
-    let child = command
+    let mut child = command
         .spawn()
         .map_err(|error| format!("failed to start Python API: {error}"))?;
+
+    #[cfg(windows)]
+    let job_handle = match create_kill_on_close_job(&child) {
+        Ok(job_handle) => job_handle,
+        Err(error) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("failed to manage Python API process tree: {error}"));
+        }
+    };
 
     {
         let mut process = state
@@ -44,6 +69,10 @@ pub fn start_python_api(state: &AppState) -> Result<(), String> {
             .map_err(|_| "python process state mutex poisoned".to_string())?;
         process.child = Some(child);
         process.started_by_tauri = true;
+        #[cfg(windows)]
+        {
+            process.job_handle = Some(job_handle);
+        }
     }
 
     state.update_runtime(|runtime| {
@@ -100,24 +129,127 @@ pub fn stop_python_api(state: &AppState) -> StopResult {
         };
     };
 
-    let result = child.kill().and_then(|_| child.wait());
-    process.started_by_tauri = false;
-    state.update_runtime(|runtime| {
-        runtime.api_ready = false;
-        runtime.api_token = None;
-        runtime.sidecar_mode = "manual".to_string();
-    });
+    #[cfg(windows)]
+    let mut job_handle = process.job_handle.take();
+    #[cfg(windows)]
+    let result = terminate_child_process(&mut child, &mut job_handle);
+    #[cfg(not(windows))]
+    let result = terminate_child_process(&mut child);
 
     match result {
-        Ok(_) => StopResult {
-            stopped: true,
-            message: "Managed Python API process stopped".to_string(),
-        },
-        Err(error) => StopResult {
-            stopped: false,
-            message: format!("Failed to stop managed Python API process: {error}"),
-        },
+        Ok(()) => {
+            process.started_by_tauri = false;
+            state.update_runtime(|runtime| {
+                runtime.api_ready = false;
+                runtime.api_token = None;
+                runtime.sidecar_mode = "manual".to_string();
+            });
+            StopResult {
+                stopped: true,
+                message: "Managed Python API process stopped".to_string(),
+            }
+        }
+        Err(error) => {
+            let error_message = format!("Failed to stop managed Python API process: {error}");
+            process.child = Some(child);
+            process.started_by_tauri = true;
+            #[cfg(windows)]
+            {
+                process.job_handle = job_handle;
+            }
+            state.update_runtime(|runtime| {
+                runtime.last_error = Some(error_message.clone());
+            });
+            StopResult {
+                stopped: false,
+                message: error_message,
+            }
+        }
     }
+}
+
+#[cfg(windows)]
+fn create_kill_on_close_job(child: &Child) -> std::io::Result<isize> {
+    let job_handle = unsafe { CreateJobObjectW(null(), null()) };
+    if job_handle.is_null() {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    let mut information: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { zeroed() };
+    information.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    let configured = unsafe {
+        SetInformationJobObject(
+            job_handle,
+            JobObjectExtendedLimitInformation,
+            &information as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION as *const _,
+            size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        )
+    };
+    if configured == 0 {
+        let error = std::io::Error::last_os_error();
+        unsafe {
+            CloseHandle(job_handle);
+        }
+        return Err(error);
+    }
+
+    let assigned = unsafe { AssignProcessToJobObject(job_handle, child.as_raw_handle() as HANDLE) };
+    if assigned == 0 {
+        let error = std::io::Error::last_os_error();
+        unsafe {
+            CloseHandle(job_handle);
+        }
+        return Err(error);
+    }
+    Ok(job_handle as isize)
+}
+
+#[cfg(windows)]
+fn close_job_handle(job_handle: isize) -> std::io::Result<()> {
+    let closed = unsafe { CloseHandle(job_handle as HANDLE) };
+    if closed == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn terminate_child_process(child: &mut Child, job_handle: &mut Option<isize>) -> std::io::Result<()> {
+    if let Some(handle) = *job_handle {
+        close_job_handle(handle)?;
+        *job_handle = None;
+        child.wait()?;
+        return Ok(());
+    }
+
+    if child.try_wait()?.is_some() {
+        return Ok(());
+    }
+
+    let pid = child.id().to_string();
+    let taskkill_status = Command::new("taskkill")
+        .args(["/PID", &pid, "/T", "/F"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()?;
+
+    if !taskkill_status.success() {
+        return Err(std::io::Error::other(
+            "taskkill failed while stopping the managed Python API process tree",
+        ));
+    }
+    child.wait()?;
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn terminate_child_process(child: &mut Child) -> std::io::Result<()> {
+    if child.try_wait()?.is_none() {
+        child.kill()?;
+    }
+    child.wait()?;
+    Ok(())
 }
 
 pub fn check_current_api_health(state: &AppState) -> HealthCheckResult {
@@ -139,6 +271,13 @@ fn has_running_child(state: &AppState) -> bool {
     };
     match child.try_wait() {
         Ok(Some(_status)) => {
+            #[cfg(windows)]
+            if let Some(job_handle) = process.job_handle.take() {
+                if let Err(_error) = close_job_handle(job_handle) {
+                    process.job_handle = Some(job_handle);
+                    return true;
+                }
+            }
             process.child = None;
             process.started_by_tauri = false;
             false

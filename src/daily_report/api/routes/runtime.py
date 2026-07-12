@@ -31,8 +31,12 @@ def get_runtime_summary(service: RuntimeProcessService = Depends(get_runtime_pro
 
 
 @router.get('/processes')
-def get_runtime_processes(service: RuntimeProcessService = Depends(get_runtime_process_service)) -> dict[str, Any]:
-    return ok([process_to_dict(item) for item in service.list_processes()])
+def get_runtime_processes(
+    full: bool = False,
+    service: RuntimeProcessService = Depends(get_runtime_process_service),
+) -> dict[str, Any]:
+    processes = service.list_processes() if full else service.list_registered_processes()
+    return ok([process_to_dict(item) for item in processes])
 
 
 @router.get('/health')

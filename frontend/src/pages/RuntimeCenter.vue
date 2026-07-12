@@ -2,6 +2,7 @@
 import { computed, ref, shallowRef } from 'vue'
 import { Delete, Refresh, SwitchButton, Tools, VideoPlay } from '@element-plus/icons-vue'
 
+import RuntimeLoadingOverlay from '../components/runtime/RuntimeLoadingOverlay.vue'
 import RuntimeCenter from '../components/settings/RuntimeCenter.vue'
 import type { RuntimeSummary } from '../api/runtimeCenter'
 
@@ -20,6 +21,8 @@ const runtimeCenter = ref<RuntimeCenterHandle | null>(null)
 const runtimeSummary = shallowRef<RuntimeSummary | null>(null)
 const activeAction = shallowRef<string | null>(null)
 const cleanupPreviewCount = shallowRef(0)
+const pageLoading = shallowRef(false)
+const loadingText = shallowRef('正在刷新运行状态…')
 
 const collectorRunning = computed(() => runtimeSummary.value?.collector_status === 'running')
 const isBusy = computed(() => Boolean(activeAction.value))
@@ -40,6 +43,11 @@ function handleRefreshed(summary: RuntimeSummary): void {
 
 function handleBusy(name: string | null): void {
   activeAction.value = name
+}
+
+function handleLoading(active: boolean, text: string): void {
+  pageLoading.value = active
+  if (text) loadingText.value = text
 }
 </script>
 
@@ -143,12 +151,16 @@ function handleBusy(name: string | null): void {
     </header>
 
     <section class="runtime-page-body">
-      <RuntimeCenter
-        ref="runtimeCenter"
-        @refreshed="handleRefreshed"
-        @busy="handleBusy"
-        @cleanup-preview-changed="cleanupPreviewCount = $event"
-      />
+      <div class="runtime-page-scroll">
+        <RuntimeCenter
+          ref="runtimeCenter"
+          @refreshed="handleRefreshed"
+          @busy="handleBusy"
+          @loading="handleLoading"
+          @cleanup-preview-changed="cleanupPreviewCount = $event"
+        />
+      </div>
+      <RuntimeLoadingOverlay :visible="pageLoading" :text="loadingText" />
     </section>
   </div>
 </template>
@@ -268,16 +280,24 @@ function handleBusy(name: string | null): void {
 }
 
 .runtime-page-body {
+  position: relative;
+  isolation: isolate;
   min-height: 0;
   min-width: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   border: 1px solid #dce3ee;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.9);
 }
 
-.runtime-page-body :deep(.runtime-center) {
+.runtime-page-scroll {
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.runtime-page-scroll :deep(.runtime-center) {
   min-height: 100%;
   height: auto;
 }

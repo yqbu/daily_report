@@ -122,7 +122,7 @@ def run_gui_cmd(args: argparse.Namespace) -> None:
         print(
             "Tauri GUI failed to start. You can try:\n"
             "1. Confirm Node.js and npm are installed.\n"
-            "2. Run npm install in the repository root.\n"
+            "2. Run npm install in the repository root to install all workspaces.\n"
             "3. Run npm run tauri:dev:sidecar manually.",
             file=sys.stderr,
         )

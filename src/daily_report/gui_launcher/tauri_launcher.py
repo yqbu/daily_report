@@ -14,7 +14,7 @@ PROJECT_ROOT_ERROR = (
 
 TAURI_FAILURE_HINT = """Tauri GUI failed to start. You can try:
 1. Confirm Node.js, npm, Rust, and the Visual Studio C++ build tools are installed.
-2. Run npm install in the repository root.
+2. Run npm install in the repository root to install all workspaces.
 3. Run npm run tauri:dev:sidecar manually."""
 
 
@@ -66,11 +66,6 @@ def validate_tauri_project(project_root: Path) -> None:
         raise RuntimeError("src-tauri not found. Please complete Tauri migration Phase 3/4 first.")
     if not (project_root / "node_modules").exists():
         raise RuntimeError("node_modules not found. Please run npm install in the repository root.")
-    if not (project_root / "frontend" / "node_modules").exists():
-        raise RuntimeError(
-            "frontend/node_modules not found. Please run npm install in the repository root "
-            "or frontend directory."
-        )
 
 
 def find_npm() -> str:

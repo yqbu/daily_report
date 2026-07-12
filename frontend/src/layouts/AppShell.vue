@@ -41,6 +41,8 @@ function toggleSidebar(): void {
 }
 
 .app-main {
+  position: relative;
+  z-index: 0;
   min-width: 0;
   height: 100vh;
   min-height: 0;

@@ -253,6 +253,8 @@ function resetDismissedCollapsedPopover(name: string): void {
 
 <style scoped>
 .sidebar {
+  position: relative;
+  z-index: 100;
   min-height: 100vh;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);

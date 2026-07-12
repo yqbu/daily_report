@@ -1,6 +1,9 @@
 use std::process::Child;
 use std::sync::Mutex;
 
+#[cfg(windows)]
+use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RuntimeConfig {
     pub api_base_url: String,
@@ -26,6 +29,8 @@ pub struct StopResult {
 pub struct PythonApiProcess {
     pub child: Option<Child>,
     pub started_by_tauri: bool,
+    #[cfg(windows)]
+    pub job_handle: Option<isize>,
 }
 
 pub struct AppState {
@@ -46,6 +51,8 @@ impl AppState {
             python_api: Mutex::new(PythonApiProcess {
                 child: None,
                 started_by_tauri: false,
+                #[cfg(windows)]
+                job_handle: None,
             }),
         }
     }
@@ -76,13 +83,26 @@ impl AppState {
 impl Drop for AppState {
     fn drop(&mut self) {
         if let Ok(mut process) = self.python_api.lock() {
-            if process.started_by_tauri {
-                if let Some(mut child) = process.child.take() {
-                    let _ = child.kill();
-                    let _ = child.wait();
+            #[cfg(windows)]
+            let closed_job = if let Some(job_handle) = process.job_handle.take() {
+                unsafe {
+                    CloseHandle(job_handle as HANDLE);
                 }
-                process.started_by_tauri = false;
+                true
+            } else {
+                false
+            };
+
+            if let Some(mut child) = process.child.take() {
+                #[cfg(windows)]
+                if !closed_job {
+                    let _ = child.kill();
+                }
+                #[cfg(not(windows))]
+                let _ = child.kill();
+                let _ = child.wait();
             }
+            process.started_by_tauri = false;
         }
     }
 }
