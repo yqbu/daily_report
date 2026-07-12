@@ -3,7 +3,7 @@ import { computed, onMounted, shallowRef, useTemplateRef } from 'vue'
 import { ElDrawer, ElMessage } from 'element-plus'
 import { Check, Close, Download, Refresh } from '@element-plus/icons-vue'
 
-import { callTypedBridge } from '../api/bridge'
+import { callTypedDesktopApi } from '../api/desktop'
 import type {
   AppCategoryConfig,
   AppProfileListFilters,
@@ -104,7 +104,7 @@ async function loadAppProfileBootstrap(): Promise<void> {
   appProfileLoading.value = true
   appProfileError.value = ''
   try {
-    const profilesPayload = await callTypedBridge('listAppProfiles', {
+    const profilesPayload = await callTypedDesktopApi('listAppProfiles', {
       filters: normalizedCatalogFilters.value,
       page: 1,
       pageSize: appProfilePageSize.value,
@@ -135,7 +135,7 @@ async function extractAppProfilesFromForeground(): Promise<void> {
   appProfileLoading.value = true
   appProfileError.value = ''
   try {
-    const profilesPayload = await callTypedBridge('extractAppProfiles', {
+    const profilesPayload = await callTypedDesktopApi('extractAppProfiles', {
       filters: normalizedCatalogFilters.value,
       page: 1,
       pageSize: appProfilePageSize.value,
@@ -221,7 +221,7 @@ async function saveAppProfileDraft(payload: SaveAppProfilePayload): Promise<void
   savingAppKey.value = payload.app_key
   appProfileError.value = ''
   try {
-    await callTypedBridge('saveAppProfile', payload)
+    await callTypedDesktopApi('saveAppProfile', payload)
     operationMessage.value = ''
     ElMessage.success('应用配置已保存')
     await loadAppProfileBootstrap()
@@ -236,7 +236,7 @@ async function resetAppProfileDraft(appKey: string): Promise<void> {
   savingAppKey.value = appKey
   appProfileError.value = ''
   try {
-    await callTypedBridge('resetAppProfile', { app_key: appKey })
+    await callTypedDesktopApi('resetAppProfile', { app_key: appKey })
     operationMessage.value = ''
     ElMessage.success('已恢复默认配置')
     await loadAppProfileBootstrap()
@@ -251,7 +251,7 @@ async function deleteAppProfileRecords(appKey: string): Promise<void> {
   savingAppKey.value = appKey
   appProfileError.value = ''
   try {
-    const result = await callTypedBridge('deleteAppRecords', { app_key: appKey })
+    const result = await callTypedDesktopApi('deleteAppRecords', { app_key: appKey })
     operationMessage.value = ''
     ElMessage.success(`已移除 ${result.deleted_count} 条历史记录`)
     await loadAppProfileBootstrap()
@@ -274,7 +274,7 @@ async function saveAllAppProfileDrafts(): Promise<void> {
   try {
     for (const payload of payloads) {
       savingAppKey.value = payload.app_key
-      await callTypedBridge('saveAppProfile', payload)
+      await callTypedDesktopApi('saveAppProfile', payload)
     }
     operationMessage.value = ''
     ElMessage.success(`已保存 ${payloads.length} 项应用配置`)
@@ -308,7 +308,7 @@ async function saveAppCategoryDraft(payload: { name: string; color: string }): P
   categorySaving.value = true
   appProfileError.value = ''
   try {
-    await callTypedBridge('saveAppCategory', payload)
+    await callTypedDesktopApi('saveAppCategory', payload)
     operationMessage.value = ''
     ElMessage.success('分类已保存')
     await loadAppProfileBootstrap()
@@ -323,7 +323,7 @@ async function deleteAppCategoryDraft(name: string): Promise<void> {
   categorySaving.value = true
   appProfileError.value = ''
   try {
-    await callTypedBridge('deleteAppCategory', { name, fallback_category: '其他' })
+    await callTypedDesktopApi('deleteAppCategory', { name, fallback_category: '其他' })
     if (selectedCategory.value === name) {
       appProfileFilters.value = { ...appProfileFilters.value, category: '' }
     }

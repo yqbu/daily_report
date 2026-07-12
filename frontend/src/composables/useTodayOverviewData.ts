@@ -1,69 +1,64 @@
 import { computed, onMounted, shallowRef } from 'vue'
 
-import { callTypedBridge } from '../api/bridge'
+import { callTypedDesktopApi } from '../api/desktop'
 import type { AppProfileConfig, OverviewPayload, TimelineEvent } from '../api/types'
-import { datesBetween, startOfToday } from '../utils/date'
+import { addDays, eachDateInRange, startOfToday } from '../utils/date'
 
-export type DateRange = [Date, Date]
+type DateRange = [Date, Date]
 
 export function useTodayOverviewData() {
-  const dateRange = shallowRef<DateRange>([startOfToday(), startOfToday()])
+  const today = startOfToday()
+  const dateRange = shallowRef<DateRange>([today, today])
   const overviewDays = shallowRef<OverviewPayload[]>([])
   const recentEvents = shallowRef<TimelineEvent[]>([])
   const appProfiles = shallowRef<AppProfileConfig[]>([])
   const loading = shallowRef(false)
-  let loadRequestId = 0
+  let requestId = 0
 
-  const selectedDates = computed(() => datesBetween(dateRange.value[0], dateRange.value[1]))
+  const selectedDates = computed(() => eachDateInRange(dateRange.value[0], dateRange.value[1]))
 
   async function loadOverview(): Promise<void> {
-    const requestId = loadRequestId + 1
-    loadRequestId = requestId
+    const currentRequestId = requestId + 1
+    requestId = currentRequestId
     loading.value = true
 
     try {
       const dates = selectedDates.value
-      const [overviewPayloads, timelinePayloads, profilesPayload] = await Promise.all([
-        Promise.all(dates.map((date) => callTypedBridge('getOverview', { date }))),
-        Promise.all(
-          dates.map((date) =>
-            callTypedBridge('getTimeline', {
-              date,
-              filters: {
-                sort_order: 'desc',
-                limit: 8
-              }
-            })
-          )
-        ),
-        callTypedBridge('listAppProfiles', {
-          filters: {
-            classification: 'all',
-            keyword: '',
-            track_enabled: null,
-            sort_by: 'last_seen',
-            sort_direction: 'desc'
-          },
+      const [days, timeline, profiles] = await Promise.all([
+        Promise.all(dates.map((date) => callTypedDesktopApi('getOverview', { date }))),
+        callTypedDesktopApi('getTimeline', {
+          startDate: dates[0],
+          endDate: dates[dates.length - 1],
+          filters: {},
+          offset: 0,
+          limit: 20,
+          pageSize: 20
+        }),
+        callTypedDesktopApi('listAppProfiles', {
+          filters: {},
           page: 1,
           pageSize: 500,
-          include_unobserved: true
+          include_unobserved: true,
+          mode: 'saved',
+          extract_if_empty: true,
+          observed_scope: 'all'
         })
       ])
 
-      if (requestId !== loadRequestId) return
-      overviewDays.value = overviewPayloads
-      recentEvents.value = timelinePayloads.flatMap((payload) => payload.items)
-      appProfiles.value = profilesPayload.items
+      if (currentRequestId !== requestId) return
+      overviewDays.value = days
+      recentEvents.value = timeline.items
+      appProfiles.value = profiles.items
     } finally {
-      if (requestId === loadRequestId) {
+      if (currentRequestId === requestId) {
         loading.value = false
       }
     }
   }
 
-  function handleDateRangeChange(value: DateRange | null): void {
-    if (!value) {
-      dateRange.value = [startOfToday(), startOfToday()]
+  function handleDateRangeChange(value?: DateRange): void {
+    if (value) {
+      dateRange.value = normalizeRange(value)
     }
     void loadOverview()
   }
@@ -82,4 +77,10 @@ export function useTodayOverviewData() {
     loadOverview,
     handleDateRangeChange
   }
+}
+
+function normalizeRange(range: DateRange): DateRange {
+  const [start, end] = range
+  if (start <= end) return [start, end]
+  return [end, start]
 }

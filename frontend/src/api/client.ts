@@ -1,5 +1,5 @@
 import { ElMessage } from 'element-plus'
-import { fallbackRuntimeConfig, getCachedRuntimeConfig, getRuntimeConfig } from './runtime'
+import { getRuntimeConfig } from './runtime'
 
 export interface ApiResponse<T> {
   ok: boolean
@@ -27,22 +27,6 @@ const CONNECTION_ERROR_MESSAGE =
 let lastMessage = ''
 let lastMessageAt = 0
 
-export function apiMode(): 'mock' | 'http' | 'qwebchannel' | 'tauri' {
-  const mode = String(import.meta.env.VITE_API_MODE || 'http').toLowerCase()
-  if (mode === 'mock') return mode
-  if (mode === 'qwebchannel') return mode
-  if (hasQWebChannelBridge()) return 'qwebchannel'
-  if (mode === 'tauri') return mode
-  return 'http'
-}
-
-export function apiBaseUrl(): string {
-  if (apiMode() === 'tauri') {
-    return (getCachedRuntimeConfig() || fallbackRuntimeConfig()).api_base_url
-  }
-  return String(import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8765').replace(/\/+$/, '')
-}
-
 export async function apiGet<T>(url: string, params?: Record<string, unknown>): Promise<T> {
   return apiRequest<T>('GET', url, undefined, params)
 }
@@ -69,9 +53,10 @@ async function apiRequest<T>(
   const timer = window.setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS)
 
   try {
-    const response = await fetch(await buildUrl(url, params), {
+    const runtime = await getRuntimeConfig()
+    const response = await fetch(buildUrl(runtime.api_base_url, url, params), {
       method,
-      headers: await buildHeaders(body),
+      headers: buildHeaders(body, runtime.api_token),
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller.signal
     })
@@ -95,11 +80,8 @@ async function apiRequest<T>(
   }
 }
 
-async function buildUrl(url: string, params?: Record<string, unknown>): Promise<string> {
-  if (apiMode() === 'tauri') {
-    await getRuntimeConfig()
-  }
-  const absolute = `${apiBaseUrl()}${url.startsWith('/') ? url : `/${url}`}`
+function buildUrl(baseUrl: string, url: string, params?: Record<string, unknown>): string {
+  const absolute = `${baseUrl.replace(/\/+$/, '')}${url.startsWith('/') ? url : `/${url}`}`
   const target = new URL(absolute)
   for (const [key, value] of Object.entries(params || {})) {
     if (value === undefined || value === null || value === '') continue
@@ -108,11 +90,10 @@ async function buildUrl(url: string, params?: Record<string, unknown>): Promise<
   return target.toString()
 }
 
-async function buildHeaders(body: unknown): Promise<HeadersInit> {
+function buildHeaders(body: unknown, apiToken?: string | null): HeadersInit {
   const headers: Record<string, string> = {}
   if (body !== undefined) headers['Content-Type'] = 'application/json'
-  const runtime = apiMode() === 'tauri' ? await getRuntimeConfig() : null
-  const token = String(runtime?.api_token || import.meta.env.VITE_API_TOKEN || '').trim()
+  const token = String(apiToken || '').trim()
   if (token) headers.Authorization = `Bearer ${token}`
   return headers
 }
@@ -131,12 +112,4 @@ function showApiError(message: string): void {
   lastMessage = message
   lastMessageAt = now
   ElMessage.error(message)
-}
-
-function hasQWebChannelBridge(): boolean {
-  return Boolean(
-    typeof window !== 'undefined' &&
-      window.qt?.webChannelTransport &&
-      typeof window.QWebChannel === 'function'
-  )
 }

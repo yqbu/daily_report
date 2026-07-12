@@ -30,7 +30,7 @@ def _app_session_dict(row: sqlite3.Row) -> dict[str, Any]:
     return data
 
 
-class GuiDataProvider:
+class DataProvider:
     def __init__(self, db_path: str | Path | None = None):
         self.db_path = Path(db_path) if db_path is not None else default_db_path()
         self.ensure_database()

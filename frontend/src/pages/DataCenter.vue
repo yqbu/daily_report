@@ -12,7 +12,7 @@ import {
   Refresh
 } from '@element-plus/icons-vue'
 
-import { callTypedBridge } from '../api/bridge'
+import { callTypedDesktopApi } from '../api/desktop'
 import type { AnyRecord, DataCenterSummaryPayload, SourceType, TimelineEvent } from '../api/types'
 import DateRangePicker from '../components/DateRangePicker.vue'
 import DataCenterFilterBar from '../components/data-center/DataCenterFilterBar.vue'
@@ -66,7 +66,7 @@ const summaryItems = computed(() => [
   { key: 'clipboard', label: '剪贴板', suffix: '', value: summary.value.clipboard, icon: CopyDocument, tone: 'orange' }
 ])
 
-const bridgeFilters = computed(() => ({
+const apiFilters = computed(() => ({
   sourceTypes: filters.sourceTypes,
   sensitive: filters.sensitive === 'all' ? undefined : filters.sensitive === 'sensitive',
   categories: filters.categories,
@@ -98,9 +98,9 @@ async function loadSummary(): Promise<void> {
   summaryLoading.value = true
   try {
     const range = dateRangeToPayload(filters)
-    const response = await callTypedBridge('getDataCenterSummary', {
+    const response = await callTypedDesktopApi('getDataCenterSummary', {
       ...range,
-      filters: bridgeFilters.value
+      filters: apiFilters.value
     })
     if (requestId === summaryRequestId) {
       summary.value = response
@@ -130,10 +130,10 @@ async function loadMoreTimeline(requestId = timelineRequestId): Promise<void> {
   }
   timelineLoading.value = true
   try {
-    const response = await callTypedBridge('getTimeline', {
+    const response = await callTypedDesktopApi('getTimeline', {
       startDate: activeDay,
       endDate: activeDay,
-      filters: bridgeFilters.value,
+      filters: apiFilters.value,
       cursor: timelineCursor.value,
       pageSize: 28
     })
@@ -172,7 +172,7 @@ async function openDetail(sourceType: SourceType, id: number, ids?: number[], en
   await nextTick()
   await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
   try {
-    const detail = await callTypedBridge('getEntryDetail', { sourceType, id, ids, entryKey })
+    const detail = await callTypedDesktopApi('getEntryDetail', { sourceType, id, ids, entryKey })
     if (requestId === detailRequestId) {
       selectedRecord.value = detail
     }
@@ -188,7 +188,7 @@ function openTimelineDetail(item: TimelineEvent): void {
 }
 
 async function toggleSensitive(sourceType: SourceType, id: number, nextValue: boolean, ids?: number[], entryKey?: string | null): Promise<void> {
-  await callTypedBridge('updateEntrySensitive', {
+  await callTypedDesktopApi('updateEntrySensitive', {
     sourceType,
     id,
     ids,
@@ -213,7 +213,7 @@ async function deleteRecord(sourceType: SourceType, id: number, entryKey?: strin
     cancelButtonText: '取消',
     confirmButtonClass: 'el-button--danger'
   })
-  await callTypedBridge('markEntryDeleted', { sourceType, id, entryKey })
+  await callTypedDesktopApi('markEntryDeleted', { sourceType, id, entryKey })
   timelineItems.value = timelineItems.value.filter((item) => !(item.source_type === sourceType && item.source_id === id))
   if (selectedRecord.value && recordSource(selectedRecord.value) === sourceType && recordId(selectedRecord.value) === id) {
     drawerOpen.value = false
@@ -227,7 +227,7 @@ async function deleteRecord(sourceType: SourceType, id: number, entryKey?: strin
 async function saveDetail(payload: DetailSavePayload): Promise<void> {
   drawerSaving.value = true
   try {
-    await callTypedBridge('updateEntryAnnotation', {
+    await callTypedDesktopApi('updateEntryAnnotation', {
       sourceType: payload.sourceType,
       id: payload.id,
       entryKey: payload.entryKey,
@@ -238,14 +238,14 @@ async function saveDetail(payload: DetailSavePayload): Promise<void> {
         is_selected_override: payload.selected
       }
     })
-    await callTypedBridge('updateEntrySensitive', {
+    await callTypedDesktopApi('updateEntrySensitive', {
       sourceType: payload.sourceType,
       id: payload.id,
       entryKey: payload.entryKey,
       sensitive: payload.sensitive,
       reason: payload.sensitivityReason
     })
-    selectedRecord.value = await callTypedBridge('getEntryDetail', {
+    selectedRecord.value = await callTypedDesktopApi('getEntryDetail', {
       sourceType: payload.sourceType,
       id: payload.id,
       entryKey: payload.entryKey
@@ -271,9 +271,9 @@ function resetFilters(): void {
 
 async function exportData(): Promise<void> {
   const range = dateRangeToPayload(filters)
-  const response = await callTypedBridge('getTimeline', {
+  const response = await callTypedDesktopApi('getTimeline', {
     ...range,
-    filters: bridgeFilters.value,
+    filters: apiFilters.value,
     offset: 0,
     limit: 5000
   })

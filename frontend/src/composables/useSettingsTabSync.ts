@@ -1,32 +1,19 @@
-import { shallowRef, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 
-import { normalizeSettingsTab, type SettingsTab } from '../utils/settings'
+type SettingsTab = 'collector' | 'privacy' | 'model' | 'system'
+
+const tabs = new Set<SettingsTab>(['collector', 'privacy', 'model', 'system'])
 
 export function useSettingsTabSync() {
   const route = useRoute()
-  const router = useRouter()
-  const activeSettingsTab = shallowRef<SettingsTab>('collector')
-
-  watch(
-    () => route.query.tab,
-    (tab) => {
-      const normalizedTab = normalizeSettingsTab(tab)
-      if (activeSettingsTab.value !== normalizedTab) {
-        activeSettingsTab.value = normalizedTab
-      }
-    },
-    { immediate: true }
-  )
-
-  watch(activeSettingsTab, (tab) => {
-    const currentTab = normalizeSettingsTab(route.query.tab)
-    if (tab !== currentTab) {
-      void router.replace({ query: { ...route.query, tab } })
-    }
+  const activeSettingsTab = computed<SettingsTab>(() => {
+    const tab = String(route.query.tab || 'collector') as SettingsTab
+    return tabs.has(tab) ? tab : 'collector'
   })
 
   return {
     activeSettingsTab
   }
 }
+

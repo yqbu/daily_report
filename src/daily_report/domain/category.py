@@ -1,91 +1,71 @@
 from __future__ import annotations
 
-CATEGORIES = (
-    '开发编码',
-    '问题排查',
-    '资料调研',
-    'AI 辅助',
-    '文档整理',
-    '沟通协作',
-    '系统配置',
-    '其他',
+from urllib.parse import urlparse
+
+DEV_CATEGORY = "\u5f00\u53d1\u7f16\u7801"
+DEBUG_CATEGORY = "\u95ee\u9898\u6392\u67e5"
+RESEARCH_CATEGORY = "\u8d44\u6599\u8c03\u7814"
+AI_CATEGORY = "AI \u8f85\u52a9"
+DOC_CATEGORY = "\u6587\u6863\u6574\u7406"
+COMM_CATEGORY = "\u6c9f\u901a\u534f\u4f5c"
+SYSTEM_CATEGORY = "\u7cfb\u7edf\u914d\u7f6e"
+DEFAULT_CATEGORY = "\u5176\u4ed6"
+
+CATEGORIES: tuple[str, ...] = (
+    DEV_CATEGORY,
+    DEBUG_CATEGORY,
+    RESEARCH_CATEGORY,
+    AI_CATEGORY,
+    DOC_CATEGORY,
+    COMM_CATEGORY,
+    SYSTEM_CATEGORY,
+    DEFAULT_CATEGORY,
 )
 
-DEBUG_KEYWORDS = ('error', 'exception', 'bug', '报错', '问题', '修复', 'debug')
-CONFIG_KEYWORDS = ('config', '配置', '环境', '安装')
-DEV_KEYWORDS = (
-    'pycharm',
-    'vscode',
-    'visual studio code',
-    'cursor',
-    'python',
-    'terminal',
-    'powershell',
-    'cmd.exe',
-    'windows terminal',
-    '代码',
-    '开发',
-)
-DOC_KEYWORDS = ('markdown', 'readme', '文档', '日报', '笔记')
-COMM_KEYWORDS = ('wechat', 'weixin', 'dingtalk', 'feishu', 'teams', 'slack', '微信', '钉钉', '飞书')
+
+def infer_category_for_app(process_name: str | None, window_title: str | None = None) -> str:
+    text = f"{process_name or ''} {window_title or ''}".lower()
+    if any(token in text for token in ("pycharm", "code", "cursor", "git", "terminal", "powershell", "python")):
+        return DEV_CATEGORY
+    if any(token in text for token in ("error", "exception", "traceback", "debug", "log")):
+        return DEBUG_CATEGORY
+    if any(token in text for token in ("edge", "chrome", "firefox", "browser", "docs", "search")):
+        return RESEARCH_CATEGORY
+    if any(token in text for token in ("chatgpt", "deepseek", "claude", "gemini", "copilot")):
+        return AI_CATEGORY
+    if any(token in text for token in ("word", "excel", "powerpoint", "notepad", "typora", "markdown")):
+        return DOC_CATEGORY
+    if any(token in text for token in ("wechat", "weixin", "qq", "teams", "slack", "discord", "mail")):
+        return COMM_CATEGORY
+    if any(token in text for token in ("settings", "control", "taskmgr", "explorer")):
+        return SYSTEM_CATEGORY
+    return DEFAULT_CATEGORY
 
 
-def infer_category_for_app(process_name: str | None, window_title: str | None) -> str:
-    text = _join(process_name, window_title)
-    if _contains(text, DEBUG_KEYWORDS):
-        return '问题排查'
-    if _contains(text, CONFIG_KEYWORDS):
-        return '系统配置'
-    if _contains(text, DEV_KEYWORDS):
-        return '开发编码'
-    if _contains(text, DOC_KEYWORDS):
-        return '文档整理'
-    if _contains(text, COMM_KEYWORDS):
-        return '沟通协作'
-    return '其他'
+def infer_category_for_browser(url: str | None, title: str | None = None) -> str:
+    text = f"{url or ''} {title or ''}".lower()
+    try:
+        host = urlparse(url or "").hostname or ""
+    except ValueError:
+        host = ""
+
+    if any(token in text for token in ("chatgpt", "deepseek", "claude", "gemini", "openai")):
+        return AI_CATEGORY
+    if any(token in host for token in ("github", "stackoverflow", "developer", "docs", "readthedocs")):
+        return DEV_CATEGORY
+    if any(token in text for token in ("search", "google", "bing", "baidu", "wiki")):
+        return RESEARCH_CATEGORY
+    return RESEARCH_CATEGORY
 
 
-def infer_category_for_browser(
-    title: str | None,
-    url: str | None,
-    is_search: bool | int | None,
-    search_query: str | None,
-) -> str:
-    text = _join(title, url, search_query)
-    if _contains(text, DEBUG_KEYWORDS):
-        return '问题排查'
-    if _contains(text, CONFIG_KEYWORDS):
-        return '系统配置'
-    if _contains(text, DEV_KEYWORDS):
-        return '开发编码'
-    return '资料调研' if is_search or text else '其他'
+def infer_category_for_clipboard(content: str | None) -> str:
+    text = (content or "").lower()
+    if any(token in text for token in ("def ", "class ", "function ", "import ", "select *", "```")):
+        return DEV_CATEGORY
+    if any(token in text for token in ("http://", "https://", "www.")):
+        return RESEARCH_CATEGORY
+    return DOC_CATEGORY if text.strip() else DEFAULT_CATEGORY
 
 
-def infer_category_for_clipboard(content_preview: str | None) -> str:
-    text = _join(content_preview)
-    if _contains(text, DEBUG_KEYWORDS):
-        return '问题排查'
-    if _contains(text, CONFIG_KEYWORDS):
-        return '系统配置'
-    if _contains(text, DEV_KEYWORDS):
-        return '开发编码'
-    if _contains(text, DOC_KEYWORDS):
-        return '文档整理'
-    return '其他'
-
-
-def infer_category_for_ai_prompt(prompt_preview: str | None) -> str:
-    text = _join(prompt_preview)
-    if _contains(text, DEBUG_KEYWORDS):
-        return '问题排查'
-    if _contains(text, CONFIG_KEYWORDS):
-        return '系统配置'
-    return 'AI 辅助'
-
-
-def _join(*values: str | None) -> str:
-    return ' '.join(str(value or '') for value in values).lower()
-
-
-def _contains(text: str, keywords: tuple[str, ...]) -> bool:
-    return any(keyword.lower() in text for keyword in keywords)
+def infer_category_for_ai_prompt(prompt_text: str | None, platform: str | None = None) -> str:
+    return AI_CATEGORY

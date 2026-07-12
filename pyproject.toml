@@ -13,10 +13,9 @@ dependencies = [
     "openai>=1.0.0",
     "psutil>=5.9.0",
     "pywin32>=306; sys_platform == 'win32'",
-    "PySide6>=6.9,<6.12",
     "uvicorn>=0.29"
 ]
-keywords = ["daily-report", "productivity", "windows", "sqlite", "pyside6", "vue"]
+keywords = ["daily-report", "productivity", "windows", "sqlite", "tauri", "vue"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Win32 (MS Windows)",

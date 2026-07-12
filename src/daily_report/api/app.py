@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from daily_report.api.deps import verify_token
 from daily_report.api.response import ApiError, error_response
-from daily_report.api.routes import browser_events, entries, gui, health, overview, reports, runtime, settings, timeline
+from daily_report.api.routes import browser_events, desktop, entries, health, overview, reports, runtime, settings, timeline
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def create_app(api_token: str | None = None) -> FastAPI:
         reports.router,
         runtime.router,
         settings.router,
-        gui.router,
+        desktop.router,
         browser_events.protected_router,
     ]
     for router in protected:

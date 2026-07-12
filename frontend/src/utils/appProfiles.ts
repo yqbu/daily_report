@@ -6,23 +6,92 @@ import type {
   AppProfileListPayload
 } from '../api/types'
 
-const appProfileCollator = new Intl.Collator('zh-CN', {
-  numeric: true,
-  sensitivity: 'base'
-})
-
 export function emptyAppProfileList(): AppProfileListPayload {
   return {
     items: [],
     total: 0,
     page: 1,
     page_size: 500,
-    counts: emptyAppProfileCounts(),
+    counts: emptyCounts(),
     categories: []
   }
 }
 
-export function emptyAppProfileCounts(): AppProfileCounts {
+export function normalizeClassification(value?: string | null): AppProfileClassificationFilter {
+  if (value === 'classified' || value === 'unclassified' || value === 'configured') return value
+  return 'all'
+}
+
+export function filterProfiles(
+  profiles: AppProfileConfig[],
+  filters: AppProfileListFilters
+): AppProfileConfig[] {
+  const keyword = filters.keyword?.trim().toLowerCase() ?? ''
+  const category = filters.category?.trim() ?? ''
+  const classification = normalizeClassification(filters.classification)
+
+  return profiles.filter((profile) => {
+    if (keyword && !profileMatchesKeyword(profile, keyword)) return false
+    if (category && profile.category !== category) return false
+    if (filters.track_enabled !== null && filters.track_enabled !== undefined) {
+      if (profile.track_enabled !== filters.track_enabled) return false
+    }
+    if (classification === 'classified' && !profile.is_classified) return false
+    if (classification === 'unclassified' && profile.is_classified) return false
+    if (classification === 'configured' && !profile.is_configured) return false
+    return true
+  })
+}
+
+export function sortProfiles(
+  profiles: AppProfileConfig[],
+  filters: AppProfileListFilters
+): AppProfileConfig[] {
+  const direction = filters.sort_direction === 'asc' ? 1 : -1
+  const sortBy = filters.sort_by ?? 'last_seen'
+
+  return [...profiles].sort((left, right) => {
+    let result = 0
+    if (sortBy === 'name') {
+      result = displayName(left).localeCompare(displayName(right), 'zh-CN')
+    } else if (sortBy === 'duration') {
+      result = Number(left.total_active_duration_sec || 0) - Number(right.total_active_duration_sec || 0)
+    } else if (sortBy === 'session_count') {
+      result = Number(left.session_count || 0) - Number(right.session_count || 0)
+    } else {
+      result = timestampValue(left.last_seen_at) - timestampValue(right.last_seen_at)
+    }
+
+    if (result === 0) {
+      result = displayName(left).localeCompare(displayName(right), 'zh-CN')
+    }
+    return result * direction
+  })
+}
+
+export function paginateProfiles(
+  profiles: AppProfileConfig[],
+  page: number,
+  pageSize: number
+): AppProfileConfig[] {
+  const safePage = Math.max(1, Math.floor(page || 1))
+  const safePageSize = Math.max(1, Math.floor(pageSize || 500))
+  const start = (safePage - 1) * safePageSize
+  return profiles.slice(start, start + safePageSize)
+}
+
+export function countProfiles(profiles: AppProfileConfig[]): AppProfileCounts {
+  return profiles.reduce((counts, profile) => {
+    counts.all += 1
+    if (profile.is_classified) counts.classified += 1
+    if (!profile.is_classified) counts.unclassified += 1
+    if (profile.is_configured) counts.configured += 1
+    if (!profile.track_enabled) counts.excluded += 1
+    return counts
+  }, emptyCounts())
+}
+
+function emptyCounts(): AppProfileCounts {
   return {
     all: 0,
     classified: 0,
@@ -32,116 +101,25 @@ export function emptyAppProfileCounts(): AppProfileCounts {
   }
 }
 
-export function filterProfiles(
-  profiles: readonly AppProfileConfig[],
-  filters: AppProfileListFilters
-): AppProfileConfig[] {
-  const keyword = filters.keyword?.trim().toLocaleLowerCase() ?? ''
-  const category = filters.category?.trim() ?? ''
-  const classification = filters.classification ?? 'all'
-  const trackEnabled = filters.track_enabled ?? null
-
-  return profiles.filter((profile) => {
-    if (keyword && !profileMatchesKeyword(profile, keyword)) return false
-    if (category && profile.category !== category) return false
-    if (classification === 'classified' && !profile.is_classified) return false
-    if (classification === 'unclassified' && profile.is_classified) return false
-    if (classification === 'configured' && !profile.is_configured) return false
-    if (trackEnabled !== null && profile.track_enabled !== trackEnabled) return false
-    return true
-  })
-}
-
-export function sortProfiles(
-  profiles: readonly AppProfileConfig[],
-  filters: AppProfileListFilters
-): AppProfileConfig[] {
-  const sortBy = filters.sort_by ?? 'last_seen'
-  const sortDirection = filters.sort_direction ?? (sortBy === 'name' ? 'asc' : 'desc')
-  const direction = sortDirection === 'asc' ? 1 : -1
-
-  return [...profiles].sort((left, right) => {
-    const primary = compareProfiles(left, right, sortBy)
-    if (primary !== 0) return primary * direction
-    return compareProfileNames(left, right) || appProfileCollator.compare(left.app_key, right.app_key)
-  })
-}
-
-export function paginateProfiles(
-  profiles: readonly AppProfileConfig[],
-  page: number,
-  pageSize: number
-): AppProfileConfig[] {
-  const safePage = Math.max(1, page)
-  const safePageSize = Math.max(1, pageSize)
-  const start = (safePage - 1) * safePageSize
-  return profiles.slice(start, start + safePageSize)
-}
-
-export function countProfiles(profiles: readonly AppProfileConfig[]): AppProfileCounts {
-  const counts = emptyAppProfileCounts()
-  counts.all = profiles.length
-
-  for (const profile of profiles) {
-    if (profile.is_classified) {
-      counts.classified += 1
-    } else {
-      counts.unclassified += 1
-    }
-
-    if (profile.is_configured) counts.configured += 1
-    if (!profile.track_enabled) counts.excluded += 1
-  }
-
-  return counts
-}
-
-export function normalizeClassification(
-  value: AppProfileClassificationFilter | undefined
-): AppProfileClassificationFilter {
-  return value ?? 'all'
-}
-
 function profileMatchesKeyword(profile: AppProfileConfig, keyword: string): boolean {
-  const haystack = [
+  return [
     profile.app_key,
     profile.process_name,
+    profile.exe_path,
+    profile.default_display_name,
     profile.display_name,
     profile.effective_display_name,
-    profile.default_display_name,
-    profile.category
-  ]
-    .filter((value): value is string => typeof value === 'string' && value.length > 0)
-    .join(' ')
-    .toLocaleLowerCase()
-
-  return haystack.includes(keyword)
+    profile.sample_window_title
+  ].some((value) => String(value || '').toLowerCase().includes(keyword))
 }
 
-function compareProfiles(
-  left: AppProfileConfig,
-  right: AppProfileConfig,
-  sortBy: NonNullable<AppProfileListFilters['sort_by']>
-): number {
-  if (sortBy === 'name') {
-    return compareProfileNames(left, right)
-  }
-
-  if (sortBy === 'duration') {
-    return left.total_active_duration_sec - right.total_active_duration_sec
-  }
-
-  if (sortBy === 'session_count') {
-    return left.session_count - right.session_count
-  }
-
-  return String(left.last_seen_at ?? '').localeCompare(String(right.last_seen_at ?? ''))
-}
-
-function compareProfileNames(left: AppProfileConfig, right: AppProfileConfig): number {
-  return appProfileCollator.compare(profileDisplayName(left), profileDisplayName(right))
-}
-
-function profileDisplayName(profile: AppProfileConfig): string {
+function displayName(profile: AppProfileConfig): string {
   return profile.effective_display_name || profile.display_name || profile.default_display_name || profile.process_name
 }
+
+function timestampValue(value?: string | null): number {
+  if (!value) return 0
+  const timestamp = new Date(value).getTime()
+  return Number.isFinite(timestamp) ? timestamp : 0
+}
+

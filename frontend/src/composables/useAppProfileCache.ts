@@ -1,27 +1,44 @@
 import type { AppProfileListPayload } from '../api/types'
 
-let appProfileCache: AppProfileListPayload | null = null
-let appProfileCacheUpdatedAt = 0
-const APP_PROFILE_CACHE_TTL_MS = 60_000
+interface CachedAppProfiles {
+  savedAt: number
+  payload: AppProfileListPayload
+}
+
+const CACHE_KEY = 'daily-report:app-profiles'
+const CACHE_TTL_MS = 2 * 60 * 1000
 
 export function useAppProfileCache() {
-  function readAppProfileCache(): { payload: AppProfileListPayload; fresh: boolean } | null {
-    if (!appProfileCache) return null
+  function readAppProfileCache(): (CachedAppProfiles & { fresh: boolean }) | null {
+    try {
+      const raw = window.localStorage.getItem(CACHE_KEY)
+      if (!raw) return null
 
-    return {
-      payload: appProfileCache,
-      fresh: Date.now() - appProfileCacheUpdatedAt < APP_PROFILE_CACHE_TTL_MS
+      const cached = JSON.parse(raw) as CachedAppProfiles
+      if (!cached?.payload || !Array.isArray(cached.payload.items)) return null
+
+      return {
+        ...cached,
+        fresh: Date.now() - Number(cached.savedAt || 0) < CACHE_TTL_MS
+      }
+    } catch {
+      clearAppProfileCache()
+      return null
     }
   }
 
   function writeAppProfileCache(payload: AppProfileListPayload): void {
-    appProfileCache = payload
-    appProfileCacheUpdatedAt = Date.now()
+    window.localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({
+        savedAt: Date.now(),
+        payload
+      } satisfies CachedAppProfiles)
+    )
   }
 
   function clearAppProfileCache(): void {
-    appProfileCache = null
-    appProfileCacheUpdatedAt = 0
+    window.localStorage.removeItem(CACHE_KEY)
   }
 
   return {
@@ -30,3 +47,4 @@ export function useAppProfileCache() {
     clearAppProfileCache
   }
 }
+

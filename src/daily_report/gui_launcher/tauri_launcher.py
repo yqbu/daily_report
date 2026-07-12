@@ -15,8 +15,7 @@ PROJECT_ROOT_ERROR = (
 TAURI_FAILURE_HINT = """Tauri GUI failed to start. You can try:
 1. Confirm Node.js, npm, Rust, and the Visual Studio C++ build tools are installed.
 2. Run npm install in the repository root.
-3. Run npm run tauri:dev:sidecar manually.
-4. Or use the legacy GUI: daily-report gui-pyside"""
+3. Run npm run tauri:dev:sidecar manually."""
 
 
 def launch_tauri_gui(project_root: Path | None = None, *, manual_api: bool = False) -> int:
@@ -85,4 +84,3 @@ def find_npm() -> str:
 
 def is_project_root(path: Path) -> bool:
     return (path / "package.json").exists() and (path / "src-tauri").exists()
-

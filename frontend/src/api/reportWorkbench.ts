@@ -1,4 +1,4 @@
-import { callBridge, callBridgeJob } from './bridge'
+import { callDesktopApi } from './desktop'
 import type { AnyRecord } from './types'
 import type {
   BuildPromptPayload,
@@ -16,7 +16,7 @@ import type {
 } from '../types/reportWorkbench'
 
 export async function getReportMaterials(payload: ReportMaterialsPayload): Promise<ReportMaterialsResult> {
-  const response = await callBridge<Partial<ReportMaterialsResult> & { items?: unknown[]; total?: number }>('getReportMaterials', payload)
+  const response = await callDesktopApi<Partial<ReportMaterialsResult> & { items?: unknown[]; total?: number }>('getReportMaterials', payload)
   return {
     summary: {
       total_count: Number(response.summary?.total_count ?? response.total ?? response.items?.length ?? 0),
@@ -31,15 +31,15 @@ export async function getReportMaterials(payload: ReportMaterialsPayload): Promi
 }
 
 export async function updateEntrySelection(payload: MaterialIdentity & { selected: boolean; ids?: number[] }): Promise<void> {
-  await callBridge('updateEntrySelection', payload)
+  await callDesktopApi('updateEntrySelection', payload)
 }
 
 export async function batchUpdateEntrySelection(payload: { items: MaterialIdentity[]; selected: boolean }): Promise<void> {
-  await callBridge('batchUpdateEntrySelection', payload)
+  await callDesktopApi('batchUpdateEntrySelection', payload)
 }
 
 export async function getEntryDetail(payload: MaterialIdentity): Promise<AnyRecord | null> {
-  return callBridge<AnyRecord | null>('getEntryDetail', payload)
+  return callDesktopApi<AnyRecord | null>('getEntryDetail', payload)
 }
 
 export async function updateEntryAnnotation(payload: {
@@ -48,7 +48,7 @@ export async function updateEntryAnnotation(payload: {
   entryKey?: string | null
   payload: Record<string, unknown>
 }): Promise<void> {
-  await callBridge('updateEntryAnnotation', payload)
+  await callDesktopApi('updateEntryAnnotation', payload)
 }
 
 export async function updateEntrySensitive(payload: {
@@ -58,11 +58,11 @@ export async function updateEntrySensitive(payload: {
   sensitive: boolean
   reason?: string | null
 }): Promise<void> {
-  await callBridge('updateEntrySensitive', payload)
+  await callDesktopApi('updateEntrySensitive', payload)
 }
 
 export async function buildPrompt(payload: BuildPromptPayload): Promise<BuildPromptResult> {
-  const response = await callBridge<Partial<BuildPromptResult> & { prompt?: string; template_name?: string }>('buildPrompt', payload)
+  const response = await callDesktopApi<Partial<BuildPromptResult> & { prompt?: string; template_name?: string }>('buildPrompt', payload)
   const promptText = String(response.prompt_text ?? response.prompt ?? '')
   return {
     prompt_text: promptText,
@@ -73,16 +73,16 @@ export async function buildPrompt(payload: BuildPromptPayload): Promise<BuildPro
 }
 
 export async function generateReport(payload: GenerateReportPayload): Promise<GenerateReportResult> {
-  const response = await callBridgeJob<Partial<GenerateReportResult> & { report_id?: number }>('generateReport', payload, 180000)
+  const response = await callDesktopApi<Partial<GenerateReportResult> & { report_id?: number }>('generateReport', payload)
   return normalizeGenerateResult(response)
 }
 
 export async function saveReport(payload: SaveReportPayload): Promise<SaveReportResult> {
-  return callBridge<SaveReportResult>('saveReport', payload)
+  return callDesktopApi<SaveReportResult>('saveReport', payload)
 }
 
 export async function listReports(payload: ListReportsPayload): Promise<ListReportsResult> {
-  const response = await callBridge<Partial<ListReportsResult> & { items?: unknown[]; total?: number }>('listReports', payload)
+  const response = await callDesktopApi<Partial<ListReportsResult> & { items?: unknown[]; total?: number }>('listReports', payload)
   return {
     items: Array.isArray(response.items) ? response.items as ListReportsResult['items'] : [],
     total: Number(response.total ?? response.items?.length ?? 0)
@@ -90,11 +90,11 @@ export async function listReports(payload: ListReportsPayload): Promise<ListRepo
 }
 
 export async function getReportDetail(id: number): Promise<ReportDetail | null> {
-  return callBridge<ReportDetail | null>('getReportDetail', { id })
+  return callDesktopApi<ReportDetail | null>('getReportDetail', { id })
 }
 
 export async function deleteReport(id: number): Promise<void> {
-  await callBridge('deleteReport', { id })
+  await callDesktopApi('deleteReport', { id })
 }
 
 function normalizeGenerateResult(response: Partial<GenerateReportResult>): GenerateReportResult {

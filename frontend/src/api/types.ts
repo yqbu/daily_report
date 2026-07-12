@@ -1,16 +1,9 @@
 /**
  * Frontend/backend data contracts.
  *
- * 这个文件只描述 QWebChannel 后端接口返回的数据形态，不承载页面布局。
+ * 这个文件只描述桌面 API 返回的数据形态，不承载页面布局。
  * 后续实现页面时，优先从这里取类型，避免在组件里散落重复的字段定义。
  */
-
-export interface BridgeResponse<T> {
-  ok: boolean
-  data?: T
-  error?: string
-  code?: string
-}
 
 export interface ApiResponse<T> {
   ok: boolean
@@ -401,12 +394,12 @@ export interface TimelineListPayload {
 }
 
 /**
- * QWebChannel 方法契约。
+ * 桌面 API 方法契约。
  *
  * 页面骨架中保留这些调用点；具体 UI 完成时只需要把状态渲染出来，
- * 不需要重新确认 Python bridge 方法名和 payload 结构。
+ * 不需要重新确认桌面 API 方法名和 payload 结构。
  */
-export interface BridgeMethodPayloadMap {
+export interface DesktopMethodPayloadMap {
   getOverview: { date?: string | null }
   getTimeline: {
     date?: string | null
@@ -476,7 +469,7 @@ export interface BridgeMethodPayloadMap {
   getHealth: Record<string, never>
 }
 
-export interface BridgeMethodResultMap {
+export interface DesktopMethodResultMap {
   getOverview: OverviewPayload
   getTimeline: TimelineListPayload
   listEntries: PageResult<AnyRecord>

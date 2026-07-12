@@ -1,2 +1,2 @@
-"""Domain-level helpers with no dependency on application service layers."""
+from __future__ import annotations
 
