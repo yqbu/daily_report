@@ -13,7 +13,9 @@ pub fn run() {
             commands::get_runtime_config,
             commands::check_api_health,
             commands::start_python_api,
-            commands::stop_python_api
+            commands::stop_python_api,
+            commands::select_directory,
+            commands::select_json_file
         ])
         .setup(|app| {
             let state = app.state::<AppState>();

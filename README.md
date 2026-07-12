@@ -10,21 +10,12 @@ history, lightweight browser behavior events, and AI prompt records. The desktop
 materials before generating a Markdown daily report with a DeepSeek-compatible
 chat model.
 
-## Migration Status
+## Desktop Architecture
 
-Current migration phase:
-
-1. Phase 1: Python FastAPI API boundary.
-2. Phase 2: Vue frontend reads data through HTTP APIs.
-3. Phase 3: Create the Tauri shell without bundling Python.
-4. Phase 4: Tauri starts the local Python FastAPI process in development.
-5. Phase 5: Tauri is the primary GUI entry, replacing PySide6 for daily use without bundling Python.
-6. Phase 6: Package the Python sidecar.
-7. Phase 7: Remove or downgrade the PySide6 GUI.
-
-This repository is currently in Phase 5. Python is not bundled, Tauri does not
-use `externalBin`, and the app still depends on the local source checkout and
-Python environment.
+Tauri v2 is the only desktop shell. Vue talks to the local Python FastAPI
+sidecar over HTTP, using the runtime URL and bearer token supplied by Tauri.
+Python is not bundled yet, so development still depends on the local source
+checkout and Python environment.
 
 ## Recommended GUI Entry
 
@@ -44,25 +35,11 @@ It starts the Tauri shell and lets Tauri start the local Python FastAPI process
 on `127.0.0.1`. Vue reads the runtime API URL and bearer token from Tauri, then
 uses HTTP APIs to talk to Python.
 
-Explicit Tauri entry:
+Explicit desktop entry:
 
 ```powershell
 daily-report gui-tauri
 ```
-
-Legacy PySide6 fallback:
-
-```powershell
-daily-report gui-pyside
-```
-
-`daily-report gui --backend pyside` is also accepted as a compatibility path,
-but `daily-report gui-pyside` is the clearer legacy command.
-
-PySide6 GUI is kept as a legacy fallback during the Tauri migration. New UI
-development should target the Vue + Tauri frontend. PySide6 GUI is temporarily
-kept for compatibility; new screens and features should be implemented in
-Vue + Tauri first.
 
 Manual API mode is still available:
 
@@ -78,7 +55,7 @@ daily-report api --host 127.0.0.1 --port 8765
 npm run tauri:dev
 ```
 
-Current Phase 5 limits:
+Current development limits:
 
 - Python is not bundled.
 - The app depends on the local Python environment, usually `.venv`.
@@ -88,8 +65,7 @@ Current Phase 5 limits:
 
 ## Local API
 
-The Tauri migration uses a local FastAPI boundary without removing the existing
-CLI or legacy PySide6 GUI.
+The desktop app uses a local FastAPI boundary and keeps the existing CLI.
 
 Start the API:
 
@@ -204,19 +180,17 @@ daily-report runtime repair
 daily-report runtime cleanup-orphans --dry-run
 ```
 
-## Vue API Mode
+## Vue API Client
 
 The Vue frontend uses a unified API client. Copy `frontend/.env.example` when you
 need local overrides:
 
 ```env
-# mock | http | qwebchannel | tauri
-VITE_API_MODE=tauri
 VITE_API_BASE_URL=http://127.0.0.1:8765
 VITE_API_TOKEN=
 ```
 
-Browser-only development can still use HTTP mode:
+Browser-only development uses the same HTTP client with a manually started API:
 
 ```powershell
 daily-report api --host 127.0.0.1 --port 8765
@@ -224,10 +198,7 @@ cd frontend
 npm run dev
 ```
 
-Set `VITE_API_MODE=http` for normal browser development with a manually started
-Python API. Set `VITE_API_MODE=mock` to work on the UI without the Python API.
-Set `VITE_API_MODE=qwebchannel` when running through the existing PySide6
-QWebChannel path.
+Inside Tauri, runtime configuration takes precedence over these fallback values.
 
 ## SourceAdapter Boundary
 
@@ -346,7 +317,7 @@ from Tauri runtime config, falling back to `VITE_API_BASE_URL`.
 npm run tauri:dev:sidecar
 ```
 
-This mode sets `VITE_API_MODE=tauri` and `DAILY_REPORT_TAURI_START_API=1`.
+This mode sets `DAILY_REPORT_TAURI_START_API=1`.
 During Tauri startup, Rust starts a local Python FastAPI process on
 `127.0.0.1`, selects a free port unless `DAILY_REPORT_API_PORT` is set,
 generates an in-memory bearer token, waits for `/api/health`, and exposes the
@@ -355,7 +326,6 @@ runtime API config to Vue.
 For Tauri runtime config, use:
 
 ```env
-VITE_API_MODE=tauri
 VITE_API_BASE_URL=http://127.0.0.1:8765
 VITE_API_TOKEN=
 ```
@@ -368,7 +338,6 @@ Relevant development environment variables:
 - `DAILY_REPORT_API_COMMAND=`: override the full Python API command template.
   The template may use `{host}`, `{port}`, and `{token}`.
 - `DAILY_REPORT_API_PORT=`: force a port; unset to auto-select a free local port.
-- `VITE_API_MODE=tauri`: ask Vue to read API config from Tauri commands.
 
 Tauri exposes these commands to the frontend:
 
@@ -376,6 +345,8 @@ Tauri exposes these commands to the frontend:
 - `check_api_health`
 - `start_python_api`
 - `stop_python_api`
+- `select_directory`
+- `select_json_file`
 
 This phase intentionally does not configure `bundle.externalBin`, PyInstaller,
 Nuitka, cx_Freeze, installers, or auto-update. Packaging the Python sidecar is

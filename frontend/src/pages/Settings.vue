@@ -25,7 +25,9 @@ import {
   Refresh
 } from '@element-plus/icons-vue'
 
-import { callBridge, callBridgeJob, callTypedBridge } from '../api/bridge'
+import { callDesktopApi } from '../api/desktop'
+import { selectDirectory, selectJsonFile } from '../api/runtime'
+import { getSettings as getSettingsApi, saveSettings as saveSettingsApi } from '../api/settings'
 import { useSettingsTabSync } from '../composables/useSettingsTabSync'
 import SettingsField from '../components/settings/SettingsField.vue'
 import SettingsSection from '../components/settings/SettingsSection.vue'
@@ -35,7 +37,7 @@ import {
   joinPath,
   normalizeSettings,
   stableSettingsJson,
-  toBridgeSettings,
+  toApiSettings,
   type SettingsDraft
 } from '../utils/settings'
 
@@ -123,7 +125,7 @@ async function loadSettings(): Promise<void> {
   settingsError.value = ''
 
   try {
-    const payload = await callTypedBridge('getSettings', {})
+    const payload = await getSettingsApi()
     if (requestId !== settingsLoadRequestId.value) return
     const normalized = normalizeSettings(payload)
     savedSettings.value = cloneSettings(normalized)
@@ -146,7 +148,7 @@ async function saveSettings(): Promise<void> {
   settingsError.value = ''
 
   try {
-    const payload = await callTypedBridge('saveSettings', toBridgeSettings(draftSettings.value))
+    const payload = await saveSettingsApi(toApiSettings(draftSettings.value))
     const normalized = normalizeSettings(payload)
     savedSettings.value = cloneSettings(normalized)
     draftSettings.value = cloneSettings(normalized)
@@ -173,7 +175,7 @@ async function testModelConnection(): Promise<void> {
   await nextTick()
 
   try {
-    const result = await callBridgeJob<{ message?: string }>('test_model_connection', toBridgeSettings(draftSettings.value))
+    const result = await callDesktopApi<{ message?: string }>('test_model_connection', toApiSettings(draftSettings.value))
     ElMessage.success(result.message || '模型连接测试通过')
   } catch (error) {
     showSettingsError(error)
@@ -204,26 +206,26 @@ async function selectYasbStatusDirectory(): Promise<void> {
   if (!draftSettings.value) return
 
   const currentDirectory = directoryFromPath(draftSettings.value.yasb.status_json_path)
-  const result = await callBridge<{ path?: string }>('select_directory', {
+  const path = await selectDirectory({
     title: '选择 YASB 状态文件存放目录',
     currentPath: currentDirectory
   })
-  if (!result.path) return
+  if (!path) return
 
-  draftSettings.value.yasb.status_json_path = joinPath(result.path, 'status.json')
+  draftSettings.value.yasb.status_json_path = joinPath(path, 'status.json')
 }
 
 async function selectSettingsJsonFile(): Promise<void> {
   if (!draftSettings.value) return
 
-  const result = await callBridge<{ path?: string }>('select_json_file', {
+  const path = await selectJsonFile({
     title: '选择配置 JSON 保存位置',
     currentPath: draftSettings.value.settings_path || '',
     defaultFileName: 'local_settings.json'
   })
-  if (!result.path) return
+  if (!path) return
 
-  draftSettings.value.settings_path = result.path
+  draftSettings.value.settings_path = path
 }
 
 function flashOperationMessage(message: string): void {

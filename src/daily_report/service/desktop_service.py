@@ -21,7 +21,7 @@ from daily_report.config.local_settings import (
     load_local_settings,
     save_local_settings,
 )
-from daily_report.gui.data_provider import GuiDataProvider
+from daily_report.service.data_provider import DataProvider
 from daily_report.reporter.deepseek_client import DeepSeekClient
 from daily_report.service.app_profile_service import AppProfileService
 from daily_report.domain.category import infer_category_for_app
@@ -35,15 +35,11 @@ from daily_report.storage.database import create_connection, init_database
 from daily_report.storage.repositories.annotation_repository import AnnotationRepository
 
 
-class GuiService:
-    """Stable JSON-friendly facade for the Vue Web UI.
+class DesktopService:
+    """JSON-friendly application service used by the local desktop API."""
 
-    The Web UI should depend on this class instead of reaching into storage
-    modules or legacy QWidget pages directly.
-    """
-
-    def __init__(self, provider: GuiDataProvider | None = None):
-        self.provider = provider or GuiDataProvider()
+    def __init__(self, provider: DataProvider | None = None):
+        self.provider = provider or DataProvider()
         self.report_service = ReportService(self.provider.db_path)
         self.timeline_service = TimelineService(self.provider.db_path)
         self.material_service = MaterialService(self.provider.db_path)

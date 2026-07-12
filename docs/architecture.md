@@ -1,16 +1,14 @@
 # Daily Report Architecture
 
-## Current Phase
-
-The project is in migration Phase 5:
+## Desktop Stack
 
 - Tauri v2 is the primary desktop shell.
 - Vue 3 is the primary UI.
 - Python FastAPI is the local sidecar API boundary.
 - SQLite is the local storage layer.
 - Python collector, service, reporter, and storage modules remain the business core.
-- PySide6 is kept only as a legacy fallback.
-- Python is not bundled yet. Phase 6 is reserved for sidecar packaging.
+- Tauri is the only desktop shell.
+- Python is not bundled yet; sidecar packaging remains future work.
 
 ## Runtime Chain
 

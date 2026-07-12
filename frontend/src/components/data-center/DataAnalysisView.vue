@@ -2,7 +2,7 @@
 import { computed, shallowReactive, watch } from 'vue'
 
 import type { EChartsOption } from 'echarts'
-import { callTypedBridge } from '../../api/bridge'
+import { callTypedDesktopApi } from '../../api/desktop'
 import LazyChartCard from './LazyChartCard.vue'
 import type { DataCenterFilters } from './types'
 import { dateRangeToPayload } from './types'
@@ -51,9 +51,9 @@ async function loadChart(chartType: string): Promise<void> {
   loadingCharts[chartType] = true
   try {
     const range = dateRangeToPayload(props.filters)
-    const response = await callTypedBridge('getDataCenterAnalytics', {
+    const response = await callTypedDesktopApi('getDataCenterAnalytics', {
       ...range,
-      filters: bridgeFilters(),
+      filters: apiFilters(),
       chartTypes: [chartType]
     })
     if (chartRequestIds[chartType] === requestId) {
@@ -66,7 +66,7 @@ async function loadChart(chartType: string): Promise<void> {
   }
 }
 
-function bridgeFilters() {
+function apiFilters() {
   return {
     sourceTypes: props.filters.sourceTypes,
     sensitive: props.filters.sensitive === 'all' ? undefined : props.filters.sensitive === 'sensitive',

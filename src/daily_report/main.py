@@ -110,10 +110,6 @@ def run_latest_report(args: argparse.Namespace) -> None:
 
 
 def run_gui_cmd(args: argparse.Namespace) -> None:
-    if getattr(args, "backend", "tauri") == "pyside":
-        run_pyside_gui_cmd(args)
-        return
-
     from daily_report.gui_launcher.tauri_launcher import launch_tauri_gui
 
     try:
@@ -127,39 +123,11 @@ def run_gui_cmd(args: argparse.Namespace) -> None:
             "Tauri GUI failed to start. You can try:\n"
             "1. Confirm Node.js and npm are installed.\n"
             "2. Run npm install in the repository root.\n"
-            "3. Run npm run tauri:dev:sidecar manually.\n"
-            "4. Or use the legacy GUI: daily-report gui-pyside",
+            "3. Run npm run tauri:dev:sidecar manually.",
             file=sys.stderr,
         )
         raise SystemExit(1) from exc
     raise SystemExit(exit_code)
-
-
-def run_pyside_gui_cmd(args: argparse.Namespace) -> None:
-    from daily_report.gui_launcher.pyside_launcher import launch_pyside_gui
-
-    remote_debugging_port = None
-    if getattr(args, "remote_debugging", False):
-        remote_debugging_port = args.remote_debugging_port
-    try:
-        exit_code = launch_pyside_gui(
-            dev=getattr(args, "dev", False),
-            dev_port=getattr(args, "dev_port", 5173),
-            remote_debugging_port=remote_debugging_port,
-            manage_api=not getattr(args, "no_api", False),
-            api_host=getattr(args, "api_host", "127.0.0.1"),
-            api_port=getattr(args, "api_port", 8765),
-        )
-    except Exception as exc:
-        print(
-            "PySide6 GUI failed to start. The recommended GUI is now Tauri: daily-report gui",
-            file=sys.stderr,
-        )
-        print(f"Underlying error: {exc}", file=sys.stderr)
-        raise SystemExit(1) from exc
-    raise SystemExit(exit_code)
-
-
 def run_api_cmd(args: argparse.Namespace) -> None:
     from daily_report.api.server import run_api_server
 
@@ -321,12 +289,6 @@ def build_parser() -> argparse.ArgumentParser:
         help='Do not ask Tauri to start Python API; equivalent to npm run tauri:dev',
     )
     gui_parser.add_argument('--no-sidecar', action='store_true', help='Alias for --manual-api')
-    gui_parser.add_argument(
-        '--backend',
-        choices=['tauri', 'pyside'],
-        default='tauri',
-        help='GUI backend to launch. Defaults to tauri.',
-    )
     gui_parser.set_defaults(func=run_gui_cmd)
 
     gui_tauri_parser = subparsers.add_parser('gui-tauri', help='Open the Tauri desktop GUI')
@@ -337,21 +299,7 @@ def build_parser() -> argparse.ArgumentParser:
         help='Do not ask Tauri to start Python API; equivalent to npm run tauri:dev',
     )
     gui_tauri_parser.add_argument('--no-sidecar', action='store_true', help='Alias for --manual-api')
-    gui_tauri_parser.set_defaults(func=run_gui_cmd, backend='tauri')
-
-    gui_pyside_parser = subparsers.add_parser('gui-pyside', help='Open the legacy PySide6 GUI fallback')
-    gui_pyside_parser.add_argument('--dev', action='store_true', help='Start Vite dev server and load it in QWebEngine')
-    gui_pyside_parser.add_argument('--dev-port', type=int, default=5173, help='Vite dev server port, default: 5173')
-    gui_pyside_parser.add_argument('--api-host', default='127.0.0.1', help='Managed API host, default: 127.0.0.1')
-    gui_pyside_parser.add_argument('--api-port', type=int, default=8765, help='Managed API port, default: 8765')
-    gui_pyside_parser.add_argument('--no-api', action='store_true', help='Do not auto-start the local FastAPI sidecar')
-    gui_pyside_parser.add_argument(
-        '--remote-debugging',
-        action='store_true',
-        help='Enable QWebEngine remote debugging, default port: 9223',
-    )
-    gui_pyside_parser.add_argument('--remote-debugging-port', type=int, default=9223)
-    gui_pyside_parser.set_defaults(func=run_pyside_gui_cmd)
+    gui_tauri_parser.set_defaults(func=run_gui_cmd)
 
     api_parser = subparsers.add_parser('api', help='Run local FastAPI sidecar API')
     api_parser.add_argument('--host', default='127.0.0.1', help='Bind host, default: 127.0.0.1')

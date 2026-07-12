@@ -6,6 +6,15 @@ export interface RuntimeConfig {
   last_error?: string | null
 }
 
+export interface DirectoryDialogOptions {
+  title?: string
+  currentPath?: string
+}
+
+export interface JsonFileDialogOptions extends DirectoryDialogOptions {
+  defaultFileName?: string
+}
+
 type TauriInvoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>
 
 declare global {
@@ -72,6 +81,14 @@ export async function checkRuntimeApiHealth(): Promise<boolean> {
   }
 }
 
+export async function selectDirectory(options: DirectoryDialogOptions): Promise<string | null> {
+  return invokeTauri<string | null>('select_directory', { options })
+}
+
+export async function selectJsonFile(options: JsonFileDialogOptions): Promise<string | null> {
+  return invokeTauri<string | null>('select_json_file', { options })
+}
+
 function normalizeRuntimeConfig(config: RuntimeConfig): RuntimeConfig {
   const fallback = fallbackRuntimeConfig()
   return {
@@ -85,4 +102,12 @@ function normalizeRuntimeConfig(config: RuntimeConfig): RuntimeConfig {
 
 function getTauriInvoke(): TauriInvoke | null {
   return window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke || null
+}
+
+async function invokeTauri<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  const invoke = getTauriInvoke()
+  if (!invoke) {
+    throw new Error('This action is only available in the Tauri desktop app.')
+  }
+  return invoke<T>(command, args)
 }

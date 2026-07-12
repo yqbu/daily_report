@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     This script creates a clean virtual environment, installs the project
-    from pyproject.toml, and verifies that PySide6 can be imported.
+    from pyproject.toml, and verifies that the FastAPI application can be imported.
 
     Recommended usage:
         .\scripts\bootstrap.ps1
@@ -24,7 +24,7 @@
 
     Not recommended:
         Microsoft WindowsApps python.exe placeholder
-        conda-forge Python 3.13 for PySide6 GUI
+        Python versions outside the range declared in pyproject.toml
 #>
 
 param(
@@ -34,13 +34,13 @@ param(
     # Remove and recreate the virtual environment even if it already exists.
     [switch]$Force,
 
-    # Skip PySide6 import test.
+    # Skip the application import smoke test.
     [switch]$NoTest,
 
     # Install project in non-editable mode: python -m pip install .
     [switch]$NoEditable,
 
-    # Allow conda Python. Not recommended for PySide6 GUI, but useful if you know what you are doing.
+    # Allow conda Python when explicitly requested.
     [switch]$AllowConda,
 
     # Explicit Python executable path. This has the highest priority.
@@ -327,11 +327,11 @@ try {
     }
 
     if (!$NoTest) {
-        Invoke-Step "Testing PySide6 import" {
-            & $venvPython -c "from PySide6.QtCore import Qt; from PySide6.QtWidgets import QApplication; print('PySide6 OK')"
+        Invoke-Step "Testing Daily Report API import" {
+            & $venvPython -c "from daily_report.api.app import create_app; print(create_app().title)"
         }
     } else {
-        Write-Warn "Skip PySide6 import test because -NoTest was specified."
+        Write-Warn "Skip application import test because -NoTest was specified."
     }
 
     Write-Host ""

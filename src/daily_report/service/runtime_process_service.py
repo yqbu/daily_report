@@ -577,7 +577,7 @@ class RuntimeProcessService:
             return 'api'
         if ((has_daily_module or has_daily_script) and ('run' in tokens or ' run ' in f' {joined} ')) or 'collector' in tokens:
             return 'collector'
-        if ((has_daily_module or has_daily_script) and 'gui' in tokens) or 'pyside' in joined:
+        if (has_daily_module or has_daily_script) and 'gui' in tokens:
             return 'gui'
         if 'tauri' in joined or 'src-tauri' in cwd_value or 'daily_report.exe' in name:
             return 'tauri'

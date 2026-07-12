@@ -15,7 +15,7 @@ import {
   updateEntrySelection,
   updateEntrySensitive
 } from '../api/reportWorkbench'
-import { callTypedBridge } from '../api/bridge'
+import { callTypedDesktopApi } from '../api/desktop'
 import type { AnyRecord, DataCenterSummaryPayload, SourceType } from '../api/types'
 import type {
   BuildPromptPayload,
@@ -371,7 +371,7 @@ export const useReportWorkbenchStore = defineStore('reportWorkbench', () => {
     if (reportSourceTotalsDate.value === date) {
       return
     }
-    const summary = await callTypedBridge('getDataCenterSummary', {
+    const summary = await callTypedDesktopApi('getDataCenterSummary', {
       startDate: date,
       endDate: date,
       filters: {
