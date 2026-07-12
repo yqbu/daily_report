@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
-from daily_report.service.sensitivity import make_preview
+from daily_report.domain.sensitivity import make_preview
 
 
 class BrowserEventRepository:

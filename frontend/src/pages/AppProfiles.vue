@@ -1,11 +1,3 @@
-<script lang="ts">
-import type { AppProfileListPayload as CachedAppProfileListPayload } from '../api/types'
-
-let appProfileCache: CachedAppProfileListPayload | null = null
-let appProfileCacheUpdatedAt = 0
-const APP_PROFILE_CACHE_TTL_MS = 60_000
-</script>
-
 <script setup lang="ts">
 import { computed, onMounted, shallowRef, useTemplateRef } from 'vue'
 import { ElDrawer, ElMessage } from 'element-plus'
@@ -14,26 +6,28 @@ import { Check, Close, Download, Refresh } from '@element-plus/icons-vue'
 import { callTypedBridge } from '../api/bridge'
 import type {
   AppCategoryConfig,
-  AppProfileClassificationFilter,
-  AppProfileConfig,
-  AppProfileCounts,
   AppProfileListFilters,
   AppProfileListPayload,
   SaveAppProfilePayload
 } from '../api/types'
+import { useAppProfileCache } from '../composables/useAppProfileCache'
 import AppCategoryPanel from '../components/app-profiles/AppCategoryPanel.vue'
 import AppProfileListPanel from '../components/app-profiles/AppProfileListPanel.vue'
 import AppProfileOverview from '../components/app-profiles/AppProfileOverview.vue'
+import {
+  countProfiles,
+  emptyAppProfileList,
+  filterProfiles,
+  normalizeClassification,
+  paginateProfiles,
+  sortProfiles
+} from '../utils/appProfiles'
 
 type FilterPatch = Partial<AppProfileListFilters>
 type AppProfileListPanelInstance = InstanceType<typeof AppProfileListPanel>
 
-const appProfileCollator = new Intl.Collator('zh-CN', {
-  numeric: true,
-  sensitivity: 'base'
-})
-
 const profileListPanel = useTemplateRef<AppProfileListPanelInstance>('profileListPanel')
+const { readAppProfileCache, writeAppProfileCache, clearAppProfileCache } = useAppProfileCache()
 const appProfileFilters = shallowRef<AppProfileListFilters>({
   classification: 'all',
   keyword: '',
@@ -123,8 +117,7 @@ async function loadAppProfileBootstrap(): Promise<void> {
     appProfiles.value = profilesPayload
     appCategories.value = profilesPayload.categories
     extractedPreviewActive.value = profilesPayload.items.some((profile) => profile.requires_save && !profile.is_configured)
-    appProfileCache = profilesPayload
-    appProfileCacheUpdatedAt = Date.now()
+    writeAppProfileCache(profilesPayload)
   } catch (error) {
     if (requestId !== appProfileLoadRequestId) return
     appProfileError.value = error instanceof Error ? error.message : String(error)
@@ -153,8 +146,7 @@ async function extractAppProfilesFromForeground(): Promise<void> {
     appProfiles.value = profilesPayload
     appCategories.value = profilesPayload.categories
     extractedPreviewActive.value = true
-    appProfileCache = null
-    appProfileCacheUpdatedAt = 0
+    clearAppProfileCache()
     if (profilesPayload.items.length === 0) {
       flashOperationMessage('未提取到前台应用数据')
     } else {
@@ -216,12 +208,13 @@ function clearCategoryFilter(): void {
 }
 
 function hydrateAppProfileCache(): boolean {
-  if (!appProfileCache) return false
+  const cached = readAppProfileCache()
+  if (!cached) return false
 
-  appProfiles.value = appProfileCache
-  appCategories.value = appProfileCache.categories
-  extractedPreviewActive.value = appProfileCache.items.some((profile) => profile.requires_save && !profile.is_configured)
-  return Date.now() - appProfileCacheUpdatedAt < APP_PROFILE_CACHE_TTL_MS
+  appProfiles.value = cached.payload
+  appCategories.value = cached.payload.categories
+  extractedPreviewActive.value = cached.payload.items.some((profile) => profile.requires_save && !profile.is_configured)
+  return cached.fresh
 }
 
 async function saveAppProfileDraft(payload: SaveAppProfilePayload): Promise<void> {
@@ -359,12 +352,6 @@ function flashOperationMessage(message: string): void {
   }, 2600)
 }
 
-function normalizeClassification(
-  value: AppProfileClassificationFilter | undefined
-): AppProfileClassificationFilter {
-  return value ?? 'all'
-}
-
 defineExpose({
   loadAppProfileBootstrap,
   saveAppProfileDraft,
@@ -384,135 +371,6 @@ onMounted(() => {
   appProfileLoading.value = false
 })
 const saveStatusClass = computed(() => `save-status--${saveStatus.value.tone}`)
-
-function emptyAppProfileList(): AppProfileListPayload {
-  return {
-    items: [],
-    total: 0,
-    page: 1,
-    page_size: 500,
-    counts: emptyAppProfileCounts(),
-    categories: []
-  }
-}
-
-function emptyAppProfileCounts(): AppProfileCounts {
-  return {
-    all: 0,
-    classified: 0,
-    unclassified: 0,
-    configured: 0,
-    excluded: 0
-  }
-}
-
-function filterProfiles(
-  profiles: readonly AppProfileConfig[],
-  filters: AppProfileListFilters
-): AppProfileConfig[] {
-  const keyword = filters.keyword?.trim().toLocaleLowerCase() ?? ''
-  const category = filters.category?.trim() ?? ''
-  const classification = filters.classification ?? 'all'
-  const trackEnabled = filters.track_enabled ?? null
-
-  return profiles.filter((profile) => {
-    if (keyword && !profileMatchesKeyword(profile, keyword)) return false
-    if (category && profile.category !== category) return false
-    if (classification === 'classified' && !profile.is_classified) return false
-    if (classification === 'unclassified' && profile.is_classified) return false
-    if (classification === 'configured' && !profile.is_configured) return false
-    if (trackEnabled !== null && profile.track_enabled !== trackEnabled) return false
-    return true
-  })
-}
-
-function sortProfiles(
-  profiles: readonly AppProfileConfig[],
-  filters: AppProfileListFilters
-): AppProfileConfig[] {
-  const sortBy = filters.sort_by ?? 'last_seen'
-  const sortDirection = filters.sort_direction ?? (sortBy === 'name' ? 'asc' : 'desc')
-  const direction = sortDirection === 'asc' ? 1 : -1
-
-  return [...profiles].sort((left, right) => {
-    const primary = compareProfiles(left, right, sortBy)
-    if (primary !== 0) return primary * direction
-    return compareProfileNames(left, right) || appProfileCollator.compare(left.app_key, right.app_key)
-  })
-}
-
-function paginateProfiles(
-  profiles: readonly AppProfileConfig[],
-  page: number,
-  pageSize: number
-): AppProfileConfig[] {
-  const safePage = Math.max(1, page)
-  const safePageSize = Math.max(1, pageSize)
-  const start = (safePage - 1) * safePageSize
-  return profiles.slice(start, start + safePageSize)
-}
-
-function countProfiles(profiles: readonly AppProfileConfig[]): AppProfileCounts {
-  const counts = emptyAppProfileCounts()
-  counts.all = profiles.length
-
-  for (const profile of profiles) {
-    if (profile.is_classified) {
-      counts.classified += 1
-    } else {
-      counts.unclassified += 1
-    }
-
-    if (profile.is_configured) counts.configured += 1
-    if (!profile.track_enabled) counts.excluded += 1
-  }
-
-  return counts
-}
-
-function profileMatchesKeyword(profile: AppProfileConfig, keyword: string): boolean {
-  const haystack = [
-    profile.app_key,
-    profile.process_name,
-    profile.display_name,
-    profile.effective_display_name,
-    profile.default_display_name,
-    profile.category
-  ]
-    .filter((value): value is string => typeof value === 'string' && value.length > 0)
-    .join(' ')
-    .toLocaleLowerCase()
-
-  return haystack.includes(keyword)
-}
-
-function compareProfiles(
-  left: AppProfileConfig,
-  right: AppProfileConfig,
-  sortBy: NonNullable<AppProfileListFilters['sort_by']>
-): number {
-  if (sortBy === 'name') {
-    return compareProfileNames(left, right)
-  }
-
-  if (sortBy === 'duration') {
-    return left.total_active_duration_sec - right.total_active_duration_sec
-  }
-
-  if (sortBy === 'session_count') {
-    return left.session_count - right.session_count
-  }
-
-  return String(left.last_seen_at ?? '').localeCompare(String(right.last_seen_at ?? ''))
-}
-
-function compareProfileNames(left: AppProfileConfig, right: AppProfileConfig): number {
-  return appProfileCollator.compare(profileDisplayName(left), profileDisplayName(right))
-}
-
-function profileDisplayName(profile: AppProfileConfig): string {
-  return profile.effective_display_name || profile.display_name || profile.default_display_name || profile.process_name
-}
 </script>
 
 <template>

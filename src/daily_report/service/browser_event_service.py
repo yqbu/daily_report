@@ -11,7 +11,7 @@ from daily_report.collector.ai_prompt_receiver import (
     normalize_prompt,
     parse_client_timestamp,
 )
-from daily_report.service.sensitivity import detect_sensitive_text, hash_text, make_preview
+from daily_report.domain.sensitivity import detect_sensitive_text, hash_text, make_preview
 from daily_report.storage.database import create_connection, default_db_path, init_database
 from daily_report.storage.repositories.ai_prompt_repository import AiPromptEntryRepository
 from daily_report.storage.repositories.browser_event_repository import BrowserEventRepository

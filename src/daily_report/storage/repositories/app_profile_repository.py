@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from daily_report.config.paths import get_runtime_paths
-from daily_report.service.category import infer_category_for_app
+from daily_report.domain.category import infer_category_for_app
 
 
 DEFAULT_APP_CATEGORY_COLORS: tuple[tuple[str, str, int], ...] = (

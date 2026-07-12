@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, shallowRef, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, nextTick, onMounted, ref, shallowRef } from 'vue'
 import {
   ElButton,
   ElIcon,
@@ -27,21 +26,18 @@ import {
 } from '@element-plus/icons-vue'
 
 import { callBridge, callBridgeJob, callTypedBridge } from '../api/bridge'
-import type { LocalSettingsPayload } from '../api/types'
+import { useSettingsTabSync } from '../composables/useSettingsTabSync'
 import SettingsField from '../components/settings/SettingsField.vue'
 import SettingsSection from '../components/settings/SettingsSection.vue'
-
-type LoggingLevel = 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR'
-type SettingsTab = 'collector' | 'privacy' | 'model' | 'system'
-
-interface YasbSettingsDraft {
-  status_cli_command: string
-  status_json_path: string
-}
-
-interface SettingsDraft extends Omit<LocalSettingsPayload, 'yasb'> {
-  yasb: YasbSettingsDraft
-}
+import {
+  cloneSettings,
+  directoryFromPath,
+  joinPath,
+  normalizeSettings,
+  stableSettingsJson,
+  toBridgeSettings,
+  type SettingsDraft
+} from '../utils/settings'
 
 const savedSettings = ref<SettingsDraft | null>(null)
 const draftSettings = ref<SettingsDraft | null>(null)
@@ -52,9 +48,7 @@ const settingsError = shallowRef('')
 const operationMessage = shallowRef('')
 const keywordInput = shallowRef('')
 const settingsLoadRequestId = shallowRef(0)
-const activeSettingsTab = shallowRef<SettingsTab>('collector')
-const route = useRoute()
-const router = useRouter()
+const { activeSettingsTab } = useSettingsTabSync()
 
 const collectorCards = computed(() => {
   const settings = draftSettings.value
@@ -246,123 +240,6 @@ function showSettingsError(error: unknown): void {
   settingsError.value = message
   ElMessage.error(message)
 }
-
-function normalizeSettings(payload: LocalSettingsPayload): SettingsDraft {
-  return {
-    settings_path: payload.settings_path ?? payload.settingsPath,
-    model: {
-      provider: payload.model?.provider || 'deepseek',
-      model_name: payload.model?.model_name || 'deepseek-chat',
-      base_url: payload.model?.base_url || 'https://api.deepseek.com',
-      api_key: payload.model?.api_key || '',
-      max_prompt_chars: clampNumber(payload.model?.max_prompt_chars, 1000, 200000, 12000),
-      timeout_seconds: clampNumber(payload.model?.timeout_seconds, 5, 300, 60),
-      temperature: clampNumber(payload.model?.temperature, 0, 2, 0.3)
-    },
-    collector: {
-      foreground_enabled: Boolean(payload.collector?.foreground_enabled ?? true),
-      clipboard_enabled: Boolean(payload.collector?.clipboard_enabled ?? true),
-      edge_history_enabled: Boolean(payload.collector?.edge_history_enabled ?? true),
-      ai_prompt_enabled: Boolean(payload.collector?.ai_prompt_enabled ?? true),
-      foreground_poll_interval_sec: clampNumber(payload.collector?.foreground_poll_interval_sec, 1, 60, 2),
-      edge_sync_interval_min: clampNumber(payload.collector?.edge_sync_interval_min, 1, 120, 3)
-    },
-    privacy: {
-      hide_sensitive_by_default: Boolean(payload.privacy?.hide_sensitive_by_default ?? true),
-      sensitive_unselected_by_default: Boolean(payload.privacy?.sensitive_unselected_by_default ?? true),
-      require_manual_confirm_before_llm: Boolean(payload.privacy?.require_manual_confirm_before_llm ?? true),
-      clipboard_preview_only: Boolean(payload.privacy?.clipboard_preview_only ?? true),
-      sensitive_keywords: Array.isArray(payload.privacy?.sensitive_keywords)
-        ? payload.privacy.sensitive_keywords.map(String)
-        : []
-    },
-    yasb: {
-      status_cli_command: String(payload.yasb?.status_cli_command ?? 'daily-report status --json'),
-      status_json_path: String(payload.yasb?.status_json_path ?? '')
-    },
-    logging: {
-      level: normalizeLoggingLevel(payload.logging?.level),
-      retention_days: clampNumber(payload.logging?.retention_days, 1, 3650, 30)
-    }
-  }
-}
-
-function cloneSettings(settings: SettingsDraft): SettingsDraft {
-  if (typeof structuredClone === 'function') {
-    return structuredClone(settings)
-  }
-
-  return JSON.parse(JSON.stringify(settings)) as SettingsDraft
-}
-
-function toBridgeSettings(settings: SettingsDraft): LocalSettingsPayload {
-  return {
-    settings_path: settings.settings_path,
-    model: { ...settings.model },
-    collector: { ...settings.collector },
-    privacy: {
-      ...settings.privacy,
-      sensitive_keywords: [...settings.privacy.sensitive_keywords]
-    },
-    yasb: { ...settings.yasb },
-    logging: { ...settings.logging }
-  }
-}
-
-function stableSettingsJson(settings: SettingsDraft): string {
-  return JSON.stringify(toBridgeSettings(settings))
-}
-
-function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
-  const number = Number(value)
-  if (!Number.isFinite(number)) return fallback
-  return Math.min(max, Math.max(min, number))
-}
-
-function normalizeLoggingLevel(value: unknown): LoggingLevel {
-  const level = String(value || 'INFO').toUpperCase()
-  return ['DEBUG', 'INFO', 'WARNING', 'ERROR'].includes(level) ? (level as LoggingLevel) : 'INFO'
-}
-
-function directoryFromPath(path: string | undefined): string {
-  const value = path?.trim()
-  if (!value) return ''
-  const slashIndex = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'))
-  return slashIndex > 0 ? value.slice(0, slashIndex) : value
-}
-
-function joinPath(directory: string, fileName: string): string {
-  const trimmed = directory.trim()
-  if (!trimmed) return fileName
-  const separator = trimmed.includes('\\') ? '\\' : '/'
-  return trimmed.endsWith('/') || trimmed.endsWith('\\') ? `${trimmed}${fileName}` : `${trimmed}${separator}${fileName}`
-}
-
-function normalizeSettingsTab(value: unknown): SettingsTab {
-  if (value === 'privacy' || value === 'model' || value === 'system') {
-    return value
-  }
-
-  return 'collector'
-}
-
-watch(
-  () => route.query.tab,
-  (tab) => {
-    const normalizedTab = normalizeSettingsTab(tab)
-    if (activeSettingsTab.value !== normalizedTab) {
-      activeSettingsTab.value = normalizedTab
-    }
-  },
-  { immediate: true }
-)
-
-watch(activeSettingsTab, (tab) => {
-  const currentTab = normalizeSettingsTab(route.query.tab)
-  if (tab !== currentTab) {
-    void router.replace({ query: { ...route.query, tab } })
-  }
-})
 
 onMounted(() => {
   void loadSettings()

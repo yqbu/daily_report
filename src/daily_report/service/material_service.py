@@ -8,13 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from daily_report.reporter.material_card import MaterialCard
-from daily_report.service.category import (
+from daily_report.domain.category import (
     infer_category_for_ai_prompt,
     infer_category_for_app,
     infer_category_for_browser,
     infer_category_for_clipboard,
 )
-from daily_report.service.sensitivity import make_preview
+from daily_report.domain.sensitivity import make_preview
 from daily_report.storage.database import create_connection, default_db_path, init_database
 from daily_report.storage.repositories.annotation_repository import AnnotationRepository
 from daily_report.sources.registry import SourceRegistry, create_default_source_registry

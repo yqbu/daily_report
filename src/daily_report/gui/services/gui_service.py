@@ -24,8 +24,8 @@ from daily_report.config.local_settings import (
 from daily_report.gui.data_provider import GuiDataProvider
 from daily_report.reporter.deepseek_client import DeepSeekClient
 from daily_report.service.app_profile_service import AppProfileService
-from daily_report.service.category import infer_category_for_app
-from daily_report.service.category import infer_category_for_browser
+from daily_report.domain.category import infer_category_for_app
+from daily_report.domain.category import infer_category_for_browser
 from daily_report.service.material_service import MaterialService
 from daily_report.service.overview_service import OverviewService
 from daily_report.service.report_service import ReportService

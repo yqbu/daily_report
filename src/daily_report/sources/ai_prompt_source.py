@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import Any
 
 from daily_report.reporter.material_card import MaterialCard
-from daily_report.service.category import infer_category_for_ai_prompt
-from daily_report.service.sensitivity import make_preview
+from daily_report.domain.category import infer_category_for_ai_prompt
+from daily_report.domain.sensitivity import make_preview
 from daily_report.sources.base import RawEvent, SourceAdapter, TimelineEvent, hhmm, limit_clause, table_exists, with_limit
 from daily_report.storage.repositories.annotation_repository import AnnotationRepository
 

@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 from daily_report.reporter.material_card import MaterialCard
-from daily_report.service.sensitivity import make_preview
+from daily_report.domain.sensitivity import make_preview
 from daily_report.sources.base import RawEvent, SourceAdapter, TimelineEvent, format_seconds, hhmm, limit_clause, table_exists, with_limit
 from daily_report.storage.repositories.annotation_repository import AnnotationRepository
 from daily_report.storage.repositories.browser_event_repository import BrowserEventRepository

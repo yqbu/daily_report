@@ -10,7 +10,7 @@ from typing import Callable, Optional, Protocol
 import win32clipboard
 import win32con
 
-from daily_report.service.sensitivity import (
+from daily_report.domain.sensitivity import (
     detect_sensitive_text,
     hash_text,
     make_preview as make_text_preview,

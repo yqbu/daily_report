@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from daily_report.reporter.material_card import MaterialCard
-from daily_report.service.category import infer_category_for_app
+from daily_report.domain.category import infer_category_for_app
 from daily_report.sources.base import (
     RawEvent,
     SourceAdapter,

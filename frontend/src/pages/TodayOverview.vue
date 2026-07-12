@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, shallowRef } from 'vue'
+import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import {
   Calendar,
@@ -11,11 +11,13 @@ import {
   Stopwatch
 } from '@element-plus/icons-vue'
 
-import { callTypedBridge } from '../api/bridge'
-import type { AppProfileConfig, OverviewPayload, SourceType, TimelineEvent } from '../api/types'
+import type { OverviewPayload, SourceType } from '../api/types'
+import { useTodayOverviewData } from '../composables/useTodayOverviewData'
 import DateRangePicker from '../components/DateRangePicker.vue'
+import { formatMonthDay, parseIsoDate } from '../utils/date'
+import { formatDuration, formatTime, getPercent } from '../utils/format'
+import { buildDonutBackground, iconSource } from '../utils/todayOverview'
 
-type DateRange = [Date, Date]
 type Tone = 'blue' | 'green' | 'orange' | 'purple' | 'slate'
 
 interface MetricItem {
@@ -80,14 +82,17 @@ const sourceMeta: Record<SourceType, { label: string; color: string; tone: Tone 
 
 const categoryPalette = ['#2563eb', '#10b981', '#f59e0b', '#7c3aed', '#6366f1', '#98a2b3']
 const expectedCategories = ['开发编程', '资料调研', 'AI 能力', '文档撰写', '沟通协作', '其他']
-const dateRange = shallowRef<DateRange>([startOfToday(), startOfToday()])
-const overviewDays = shallowRef<OverviewPayload[]>([])
-const recentEvents = shallowRef<TimelineEvent[]>([])
-const appProfiles = shallowRef<AppProfileConfig[]>([])
-const loading = shallowRef(false)
-let loadRequestId = 0
+const {
+  dateRange,
+  overviewDays,
+  recentEvents,
+  appProfiles,
+  loading,
+  selectedDates,
+  loadOverview,
+  handleDateRangeChange
+} = useTodayOverviewData()
 
-const selectedDates = computed(() => datesBetween(dateRange.value[0], dateRange.value[1]))
 const rangeLabel = computed(() => {
   const [start, end] = dateRange.value
   return `${formatMonthDay(start)} - ${formatMonthDay(end)}`
@@ -237,58 +242,6 @@ const recentActivities = computed<RecentActivityItem[]>(() =>
     }))
 )
 
-async function loadOverview(): Promise<void> {
-  const requestId = loadRequestId + 1
-  loadRequestId = requestId
-  loading.value = true
-
-  try {
-    const dates = selectedDates.value
-    const [overviewPayloads, timelinePayloads, profilesPayload] = await Promise.all([
-      Promise.all(dates.map((date) => callTypedBridge('getOverview', { date }))),
-      Promise.all(
-        dates.map((date) =>
-          callTypedBridge('getTimeline', {
-            date,
-            filters: {
-              sort_order: 'desc',
-              limit: 8
-            }
-          })
-        )
-      ),
-      callTypedBridge('listAppProfiles', {
-        filters: {
-          classification: 'all',
-          keyword: '',
-          track_enabled: null,
-          sort_by: 'last_seen',
-          sort_direction: 'desc'
-        },
-        page: 1,
-        pageSize: 500,
-        include_unobserved: true
-      })
-    ])
-
-    if (requestId !== loadRequestId) return
-    overviewDays.value = overviewPayloads
-    recentEvents.value = timelinePayloads.flatMap((payload) => payload.items)
-    appProfiles.value = profilesPayload.items
-  } finally {
-    if (requestId === loadRequestId) {
-      loading.value = false
-    }
-  }
-}
-
-function handleDateRangeChange(value: DateRange | null): void {
-  if (!value) {
-    dateRange.value = [startOfToday(), startOfToday()]
-  }
-  void loadOverview()
-}
-
 function aggregateOverview(days: OverviewPayload[]) {
   const profileIconByKey = new Map(appProfiles.value.map((profile) => [profile.app_key, iconSource(profile)]))
   const appMap = new Map<
@@ -384,101 +337,6 @@ function sourceIcon(sourceType: SourceType): unknown {
   return Monitor
 }
 
-function iconSource(profile: AppProfileConfig): string {
-  if (profile.icon_url) return profile.icon_url
-
-  const icon = profile.icon_base64?.trim()
-  if (!icon) return ''
-  return icon.startsWith('data:') ? icon : `data:image/png;base64,${icon}`
-}
-
-function startOfToday(): Date {
-  const date = new Date()
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
-}
-
-function addDays(date: Date, offset: number): Date {
-  const next = new Date(date)
-  next.setDate(next.getDate() + offset)
-  return next
-}
-
-function datesBetween(start: Date, end: Date): string[] {
-  const normalizedStart = start <= end ? start : end
-  const normalizedEnd = start <= end ? end : start
-  const dates: string[] = []
-  let cursor = new Date(normalizedStart.getFullYear(), normalizedStart.getMonth(), normalizedStart.getDate())
-
-  while (cursor <= normalizedEnd) {
-    dates.push(formatIsoDate(cursor))
-    cursor = addDays(cursor, 1)
-  }
-
-  return dates
-}
-
-function formatIsoDate(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function parseIsoDate(value: string): Date {
-  const [year, month, day] = value.split('-').map((part) => Number.parseInt(part, 10))
-  if (!year || !month || !day) return startOfToday()
-  return new Date(year, month - 1, day)
-}
-
-function formatMonthDay(date: Date): string {
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit'
-  }).format(date)
-}
-
-function formatDuration(seconds: number): string {
-  const total = Math.max(0, Math.round(seconds))
-  const hours = Math.floor(total / 3600)
-  const minutes = Math.floor((total % 3600) / 60)
-  if (hours > 0) return `${hours}h ${minutes}m`
-  return `${minutes}m`
-}
-
-function formatTime(value: string): string {
-  const match = value.match(/T?(\d{2}):(\d{2})(?::\d{2})?/)
-  if (match) return `${match[1]}:${match[2]}`
-  return value || '--:--'
-}
-
-function getPercent(value: number, total: number): number {
-  if (total <= 0) return 0
-  return Math.round((value / total) * 1000) / 10
-}
-
-function buildDonutBackground(items: DistributionItem[]): string {
-  let cursor = 0
-  const segments = items
-    .filter((item) => item.value > 0)
-    .map((item) => {
-      const start = cursor
-      const end = Math.min(100, cursor + item.percent)
-      cursor = end
-      return `${item.color} ${start}% ${end}%`
-    })
-
-  if (segments.length === 0) {
-    segments.push('#edf1f7 0% 100%')
-  } else if (cursor < 100) {
-    segments.push(`#edf1f7 ${cursor}% 100%`)
-  }
-
-  return `radial-gradient(circle at center, #fff 0 48%, transparent 49%), conic-gradient(${segments.join(', ')})`
-}
-
-onMounted(() => {
-  void loadOverview()
-})
 </script>
 
 <template>

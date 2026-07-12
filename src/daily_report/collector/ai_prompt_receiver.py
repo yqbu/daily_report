@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Callable, Protocol
 from urllib.parse import urlparse
 
-from daily_report.service.sensitivity import detect_sensitive_text, hash_text, make_preview
+from daily_report.domain.sensitivity import detect_sensitive_text, hash_text, make_preview
 from daily_report.storage.database import (
     SqliteConnectionFactory,
     create_connection,
