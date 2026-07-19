@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import sys
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -222,11 +223,25 @@ def test_start_collector_does_not_trust_a_reused_lock_owner_pid(tmp_path, monkey
         "_wait_for_collector_start",
         lambda process: {"started": True, "status": "running", "pid": process.pid, "launcher_pid": process.pid},
     )
-    monkeypatch.setattr("daily_report.service.runtime_process_service.subprocess.Popen", lambda *args, **kwargs: popen_calls.append(args) or FakeProcess())
+    monkeypatch.setattr(
+        "daily_report.service.runtime_process_service._collector_python_executable",
+        lambda: "pythonw.exe",
+    )
+    monkeypatch.setattr(
+        "daily_report.service.runtime_process_service.subprocess.Popen",
+        lambda command, **kwargs: popen_calls.append((command, kwargs)) or FakeProcess(),
+    )
 
     result = service.start_collector_if_not_running()
 
     assert len(popen_calls) == 1
+    command, kwargs = popen_calls[0]
+    assert command == ["pythonw.exe", "-m", "daily_report.main", "run"]
+    if sys.platform == "win32":
+        assert kwargs["creationflags"] & subprocess.DETACHED_PROCESS
+        assert kwargs["creationflags"] & subprocess.CREATE_NO_WINDOW
+        assert kwargs["startupinfo"].dwFlags & subprocess.STARTF_USESHOWWINDOW
+        assert kwargs["startupinfo"].wShowWindow == subprocess.SW_HIDE
     assert result["started"] is True
     assert result["pid"] == 5678
 

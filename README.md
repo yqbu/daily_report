@@ -251,9 +251,10 @@ report material.
 
 Additional notes:
 
-- [Browser data source design](docs/browser_data_source.md)
-- [Data governance model](docs/data_governance.md)
-- [Phase 2/3 unified browser implementation report](docs/phase2_phase3_unified_browser_report.md)
+- [Documentation index](docs/README.md)
+- [Browser data source design](docs/architecture/browser-data-source.md)
+- [Data governance model](docs/architecture/data-governance.md)
+- [Phase 2/3 unified browser implementation report](docs/reports/phase-2-3/unified-browser-implementation.md)
 
 This phase intentionally does not add Bilibili/video collection, screenshots or
 OCR, Git/mail/calendar collection, WebSocket push, cookie sync, page-body or form

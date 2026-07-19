@@ -573,7 +573,7 @@ class RuntimeProcessService:
         if status.get('status') == 'running':
             return {'already_running': True, **status}
         self.repair_runtime_state()
-        command = [sys.executable, '-m', 'daily_report.main', 'run']
+        command = [_collector_python_executable(), '-m', 'daily_report.main', 'run']
         log_path = get_runtime_paths().log_dir / 'collector-runtime.log'
         log_path.parent.mkdir(parents=True, exist_ok=True)
         env = os.environ.copy()
@@ -587,6 +587,10 @@ class RuntimeProcessService:
             'env': env,
         }
         if os.name == 'nt':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+            kwargs['startupinfo'] = startupinfo
             kwargs['creationflags'] = (
                 subprocess.CREATE_NEW_PROCESS_GROUP
                 | subprocess.DETACHED_PROCESS
@@ -955,6 +959,15 @@ def _first_pid_by_role(processes: list[RuntimeProcessInfo], role: str) -> int | 
         if process.role == role:
             return process.pid
     return None
+
+
+def _collector_python_executable() -> str:
+    executable = Path(sys.executable)
+    if os.name == 'nt':
+        pythonw = executable.with_name('pythonw.exe')
+        if pythonw.is_file():
+            return str(pythonw)
+    return str(executable)
 
 
 def _preview_cmdline(cmdline: list[str]) -> str:

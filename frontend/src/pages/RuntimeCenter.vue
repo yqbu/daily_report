@@ -234,14 +234,14 @@ function handleLoading(active: boolean, text: string): void {
   cursor: pointer;
 }
 
-.top-button:hover {
+.top-button:not(:disabled):hover {
   color: #409eff;
   border-color: #c9dcff;
   background: #eff6ff;
 }
 
 .top-button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.65;
 }
 
@@ -251,7 +251,7 @@ function handleLoading(active: boolean, text: string): void {
   background: #2563eb;
 }
 
-.top-button--primary:hover {
+.top-button--primary:not(:disabled):hover {
   color: #fff;
   border-color: #1d4ed8;
   background: #1d4ed8;
@@ -263,7 +263,7 @@ function handleLoading(active: boolean, text: string): void {
   background: #fff8e5;
 }
 
-.top-button--warning:hover {
+.top-button--warning:not(:disabled):hover {
   color: #7a4d00;
   border-color: #e6a23c;
   background: #fff3d0;
