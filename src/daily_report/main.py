@@ -3,8 +3,28 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from pathlib import Path
+
+
+INTEGRATION_FAULT_PROFILES = (
+    "normal",
+    "unsupported-schema",
+    "redirect",
+    "oversized-response",
+    "delayed-response",
+    "status-400",
+    "status-401",
+    "status-403",
+    "status-404",
+    "status-409",
+    "status-422",
+    "status-408",
+    "status-425",
+    "status-429",
+    "status-500",
+)
 
 def setup_logging(level: str = 'INFO') -> None:
     logging.basicConfig(
@@ -139,6 +159,56 @@ def run_api_cmd(args: argparse.Namespace) -> None:
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         raise SystemExit(1) from exc
+
+
+def run_integration_serve(args: argparse.Namespace) -> None:
+    if getattr(args, "enabled", None) is not True:
+        return
+
+    from daily_report.integration_v1.server import run_production_provider
+
+    secret = os.getenv(args.secret_env)
+    if not secret:
+        print("Integration V1 unavailable: secret_unavailable", file=sys.stderr)
+        raise SystemExit(1)
+    try:
+        run_production_provider(
+            host=args.host,
+            port=args.port,
+            bearer_token=secret,
+            db_path=args.db_path,
+        )
+    except Exception as exc:
+        print("Integration V1 unavailable: startup_failed", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+
+def run_integration_live_test(args: argparse.Namespace) -> None:
+    if not args.test_only:
+        print("Integration V1 live test requires --test-only.", file=sys.stderr)
+        raise SystemExit(2)
+
+    from daily_report.integration_v1.server import run_live_test_provider
+
+    try:
+        run_live_test_provider(
+            host=args.host,
+            port=args.port,
+            runtime_dir=args.runtime_dir,
+            profile=args.profile,
+        )
+    except Exception as exc:
+        print("Integration V1 live test unavailable: startup_failed", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+
+def _explicit_bool(value: str) -> bool:
+    normalized = value.strip().lower()
+    if normalized in {"true", "1"}:
+        return True
+    if normalized in {"false", "0"}:
+        return False
+    raise argparse.ArgumentTypeError("expected true or false")
 
 
 def run_runtime_status(args: argparse.Namespace) -> None:
@@ -306,6 +376,42 @@ def build_parser() -> argparse.ArgumentParser:
     api_parser.add_argument('--port', type=int, default=8765, help='Bind port, default: 8765; 0 uses a free port')
     api_parser.add_argument('--token', default=None, help='Optional bearer token required by protected APIs')
     api_parser.set_defaults(func=run_api_cmd)
+
+    integration_parser = subparsers.add_parser(
+        "integration",
+        help="Run the optional read-only Workbench V1 provider",
+    )
+    integration_subparsers = integration_parser.add_subparsers(dest="integration_command")
+
+    integration_serve_parser = integration_subparsers.add_parser(
+        "serve",
+        help="Run the production read-only provider when explicitly enabled",
+    )
+    integration_serve_parser.add_argument("--enabled", type=_explicit_bool, default=None)
+    integration_serve_parser.add_argument("--host", default="127.0.0.1")
+    integration_serve_parser.add_argument("--port", type=int, default=8766)
+    integration_serve_parser.add_argument(
+        "--secret-env",
+        default="DAILY_REPORT_INTEGRATION_TOKEN",
+        help="Environment variable name containing the bearer secret",
+    )
+    integration_serve_parser.add_argument("--db-path", default=None)
+    integration_serve_parser.set_defaults(func=run_integration_serve)
+
+    integration_live_parser = integration_subparsers.add_parser(
+        "live-test",
+        help="Run the disposable synthetic Workbench V1 provider",
+    )
+    integration_live_parser.add_argument("--test-only", action="store_true")
+    integration_live_parser.add_argument("--host", default="127.0.0.1")
+    integration_live_parser.add_argument("--port", type=int, default=0)
+    integration_live_parser.add_argument("--runtime-dir", required=True)
+    integration_live_parser.add_argument(
+        "--profile",
+        default="normal",
+        choices=INTEGRATION_FAULT_PROFILES,
+    )
+    integration_live_parser.set_defaults(func=run_integration_live_test)
 
     runtime_parser = subparsers.add_parser('runtime', help='Inspect and manage Daily Report runtime processes')
     runtime_subparsers = runtime_parser.add_subparsers(dest='runtime_command')

@@ -1,5 +1,7 @@
 # Daily Report
 
+Workbench 等本机消费者应使用独立、版本化、默认关闭的只读边界. 契约、激活方式、鉴权和缓存语义见 [Workbench Integration API V1](docs/integration-api-v1.md). Desktop RPC 不是公共集成 API.
+
 Daily Report is a Windows desktop tool for automatically collecting local computer
 usage traces, helping users select work-related items, and generating structured
 daily reports.
