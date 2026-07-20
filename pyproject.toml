@@ -1,21 +1,30 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=68", "wheel==0.47.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "daily-report"
 version = "0.1.0"
-description = "Local Windows activity timeline collector and AI Markdown daily report generator."
+description = "Local-first Windows desktop tool for collecting work activity, reviewing report materials, and generating structured Markdown daily reports."
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "fastapi>=0.110",
     "openai>=1.0.0",
+    "pydantic>=2.0",
     "psutil>=5.9.0",
     "pywin32>=306; sys_platform == 'win32'",
-    "uvicorn>=0.29"
+    "uvicorn>=0.29",
 ]
-keywords = ["daily-report", "productivity", "windows", "sqlite", "tauri", "vue"]
+keywords = [
+    "activity-tracking",
+    "ai",
+    "daily-report",
+    "local-first",
+    "markdown",
+    "productivity",
+    "windows",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Win32 (MS Windows)",
@@ -35,6 +44,7 @@ Issues = "https://github.com/yqbu/daily_report/issues"
 [project.optional-dependencies]
 dev = [
     "build>=1.2",
+    "httpx>=0.27",
     "pytest>=8.0",
     "ruff>=0.8",
 ]
